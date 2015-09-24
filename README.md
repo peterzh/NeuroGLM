@@ -1,4 +1,4 @@
-# snowcrash
+# NeuroGLM
 
 This will be a MATLAB toolbox for the analysis of behavioural data under a decision making task. The toolbox will also incorporate models to quantify to what extent recorded neural spiking activity relates to external and internal variables of decision.
 
