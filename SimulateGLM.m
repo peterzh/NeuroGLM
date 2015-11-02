@@ -26,3 +26,34 @@ for m = 1:length(models)
     disp('done');
 end
 
+%% Plot models' goodness of fit
+BitsperTrial = [];
+BaselineEntropy = [];
+ModelID = [];
+for m = 1:length(models)
+    p_hat=[];
+    load(fullfile(saveDir,[g.expRef '_' models{m} '_crossvalidated.mat']));
+    p_hat = g.p_hat;
+    nanIdx = find(isnan(p_hat));
+    p_hat(nanIdx)=[]; %remove failed predictions
+    
+    bpt = -sum(log2(p_hat))/length(p_hat);
+    BitsperTrial(m,1) = bpt;
+    
+    %Calculate baseline, if the model was guessing based only on the
+    %fact that the mouse has a certain total ratio of L:R:NG
+    tab = tabulate(g.data.response);
+    tab = tab(:,3)/100;
+    BaselineEntropy(m,1) = -sum(tab.*log2(tab));
+    
+end
+figure;
+subplot(1,2,1);
+bar(BitsperTrial,'grouped','EdgeColor','none');
+ylabel('Bits per trial');
+set(gca,'XTickLabel',modelLabels);
+subplot(1,2,2);
+bar(BitsperTrial,'stacked','EdgeColor','none');
+ylabel('Sum of (bits per trial) over all sessions');
+set(gca,'XTickLabel',modelLabels);
+

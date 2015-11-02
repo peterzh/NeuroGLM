@@ -137,11 +137,11 @@ classdef GLM
         
         function obj = fit(obj,cv_flag)   
             if isempty(obj.ZL)
-                error('Please set a model first using g.setModel(...)');
+                error('Please set a model first using method setModel(...)');
             end
             
             %Remove trials with repeats
-            obj.data = getrow(obj.data,obj.data.repeatNum==1);
+            obj.data = obj.getrow(obj.data,obj.data.repeatNum==1);
             options = optimoptions('fmincon','UseParallel',0,'MaxFunEvals',10000,'MaxIter',2000);
             
             if strcmp(cv_flag,'crossval')
@@ -187,7 +187,7 @@ classdef GLM
                     uniqueC1D = unique(contrast1D);
                     prop=[];
                     for c = 1:length(uniqueC1D)
-                        D = getrow(obj.data,contrast1D == uniqueC1D(c));
+                        D = obj.getrow(obj.data,contrast1D == uniqueC1D(c));
                         p=sum([D.response==1 D.response==2 D.response==3])/length(D.response);
                         prop=[prop;p];
                     end
@@ -205,7 +205,7 @@ classdef GLM
                     
                     for cl = 1:length(uniqueCL)
                         for cr = 1:length(uniqueCR)
-                            E = getrow(obj.data,obj.data.contrast_cond(:,1) == uniqueCL(cl) & obj.data.contrast_cond(:,2) == uniqueCR(cr));
+                            E = obj.getrow(obj.data,obj.data.contrast_cond(:,1) == uniqueCL(cl) & obj.data.contrast_cond(:,2) == uniqueCR(cr));
                             for i=1:3
                                 prop(cl,cr,i) = sum(E.response==i)/length(E.response);
                             end
@@ -302,7 +302,7 @@ classdef GLM
         end
     end
     
-    methods (Access=public)
+    methods (Access=private)
         function phat = calculatePhat(obj,testParams,contrast_cond)
             cl = contrast_cond(:,1);
             cr = contrast_cond(:,2);
@@ -318,6 +318,28 @@ classdef GLM
         function logLik = calculateLogLik(obj,testParams, contrast_conds, responses)
             phat=obj.calculatePhat(testParams, contrast_conds);
             logLik = -sum(log( phat(sub2ind(size(phat), [1:length(responses)]', responses)) ));
+        end
+        
+        function ROW = getrow(~,D,numrow)
+            % Version 1.0 9/18/03
+            % by Joern Diedrichsen
+            % http://www.icn.ucl.ac.uk/motorcontrol/toolboxes/toolbox_util.htm
+            
+            if (~isstruct(D))
+                error('D must be a struct');
+            end;
+            
+            field=fieldnames(D);
+            ROW=[];
+            for f=1:length(field)
+                F=getfield(D,field{f});
+                if iscell(F)
+                    ROW=setfield(ROW,field{f},F(numrow,:));
+                else
+                    ROW=setfield(ROW,field{f},F(numrow,:));
+                end
+            end
+            
         end
     end
 end
