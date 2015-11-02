@@ -28,7 +28,7 @@ classdef GLM
                 D.response(t,1) = trials(t).responseMadeID';
                 D.repeatNum(t,1) = trials(t).condition.repeatNum;
             end
-
+            
             obj.data = D;
             
             if any(min(D.contrast_cond,[],2)>0)
@@ -125,7 +125,7 @@ classdef GLM
                 case 'ifC'
                     obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R'};
                     obj.parameterBounds = [-inf -inf -inf -inf;
-                                           +inf +inf +inf +inf];
+                        +inf +inf +inf +inf];
                     obj.ZL = @(P,CL,CR)(P(1) + P(2)*(CL>0));
                     obj.ZR = @(P,CL,CR)(P(3) + P(4)*(CR>0));
                     
@@ -135,7 +135,7 @@ classdef GLM
             end
         end
         
-        function obj = fit(obj,cv_flag)   
+        function obj = fit(obj,cv_flag)
             if isempty(obj.ZL)
                 error('Please set a model first using method setModel(...)');
             end
@@ -147,7 +147,7 @@ classdef GLM
             if strcmp(cv_flag,'crossval')
                 C = cvpartition(length(obj.data.response),'LeaveOut');
                 obj.parameterFits = nan(C.NumTestSets,length(obj.parameterLabels));
-
+                
                 for f=1:C.NumTestSets
                     disp(['Model: ' obj.modelString '. Fold: ' num2str(f) '/' num2str(C.NumTestSets)]);
                     trainIdx = find(C.training(f)==1);
@@ -301,8 +301,8 @@ classdef GLM
             end
         end
     end
-    
-    methods (Access=private)
+        
+    methods (Access= {?GLM})
         function phat = calculatePhat(obj,testParams,contrast_cond)
             cl = contrast_cond(:,1);
             cr = contrast_cond(:,2);
@@ -320,7 +320,7 @@ classdef GLM
             logLik = -sum(log( phat(sub2ind(size(phat), [1:length(responses)]', responses)) ));
         end
         
-        function ROW = getrow(~,D,numrow)
+        function row = getrow(~,D,numrow)
             % Version 1.0 9/18/03
             % by Joern Diedrichsen
             % http://www.icn.ucl.ac.uk/motorcontrol/toolboxes/toolbox_util.htm
@@ -330,13 +330,13 @@ classdef GLM
             end;
             
             field=fieldnames(D);
-            ROW=[];
+            row=[];
             for f=1:length(field)
                 F=getfield(D,field{f});
                 if iscell(F)
-                    ROW=setfield(ROW,field{f},F(numrow,:));
+                    row=setfield(row,field{f},F(numrow,:));
                 else
-                    ROW=setfield(ROW,field{f},F(numrow,:));
+                    row=setfield(row,field{f},F(numrow,:));
                 end
             end
             

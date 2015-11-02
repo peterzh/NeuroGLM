@@ -10,7 +10,7 @@ classdef laserGLM < GLM
         end
         
         function obj = fit(obj,cv_flag)
-            obj.data = getrow(obj.data,isnan(obj.data.laser(:,1)));
+            obj.data = obj.getrow(obj.data,isnan(obj.data.laser(:,1)));
             obj=fit@GLM(obj,cv_flag);
         end
         
