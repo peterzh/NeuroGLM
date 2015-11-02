@@ -13,5 +13,6 @@ classdef laserGLM < GLM
             obj.data = getrow(obj.data,isnan(obj.data.laser(:,1)));
             obj=fit@GLM(obj,cv_flag);
         end
+        
     end
 end

@@ -1,5 +1,5 @@
 %% Load model
-expRef =  '2015-10-07_1_Hopkins';
+expRef =  '2015-10-30_1_Hopkins';
 saveDir = '\\basket.cortexlab.net\homes\peterzh\NeuroGLM\ModelFiles';
 g = GLM(expRef);
 
@@ -8,7 +8,7 @@ models = {'ifC','Supersaturation-subset','fullContrasts','fullContrasts-subset',
 %% Fit several models to a single dataset and plot their different fits. 
 % Note this only works with 1D contrast sessions
 for m = 1:length(models)
-    g = g.setModel(models{m}).fit;
+    g = g.setModel(models{m}).fit([]);
     
     subplot(2,length(models),m);
     g.plotFit;
@@ -47,14 +47,14 @@ end
 % expRefs = {'2015-09-21_1_Hopkins','2015-09-21_2_Eijkman'};
 expRefs = {'2015-10-30_1_Hopkins'};
 
-models = {'C^N','C^N-subset','C^NL^NR','C^NL^NR-subset','C50','C50-subset','Supersaturation-subset'};
+models = {'Offset','ifC','C^N','C^N-subset','C^NL^NR','C^NL^NR-subset','C50','C50-subset','Supersaturation-subset'};
 
 saveDir = '\\basket.cortexlab.net\homes\peterzh\NeuroGLM\ModelFiles';
 
 for b = 1:length(expRefs)
     disp(['File: ' expRefs{b}]);
-    g = GLM(expRefs{b});
-%     g = laserGLM(expRefs{b});
+%     g = GLM(expRefs{b});
+    g = laserGLM(expRefs{b});
     for m = 1:length(models)
         g = g.setModel(models{m});
         g = g.fit('crossval');
@@ -64,6 +64,8 @@ for b = 1:length(expRefs)
 end
 
 %% Plot multiple session performances (bits per trial)
+saveDir = '\\basket.cortexlab.net\homes\peterzh\NeuroGLM\ModelFiles';
+
 % expRefs = {'2015-05-28_1_Laveran',...
 %            '2015-05-29_1_Laveran',...
 %            '2015-05-30_1_Laveran',...
@@ -85,8 +87,8 @@ expRefs = {'2015-10-30_1_Hopkins'};
 % models = {'Offset','ifC','fullContrasts','fullContrasts-subset','C^N','C^N-subset','C^NL^NR','C^NL^NR-subset','C50','C50-subset','Supersaturation-subset'};
 % modelLabels = {'offset','ifC','full','full sub','C^N','C^N sub','C^{NL,NR}','C^{NL,NR} sub','C50','C50 sub','Sup sub'};
 
-models = {'C^N','C^N-subset','C^NL^NR','C^NL^NR-subset','C50','C50-subset','Supersaturation-subset'};
-modelLabels = {'C^N','C^N sub','C^{NL,NR}','C^{NL,NR} sub','C50','C50 sub','Sup sub'};
+models = {'Offset','C^N','C^N-subset','C^NL^NR','C^NL^NR-subset','C50','C50-subset','Supersaturation-subset'};
+modelLabels = {'Offset','C^N','C^N sub','C^{NL,NR}','C^{NL,NR} sub','C50','C50 sub','Sup sub'};
 
 
 BitsperTrial = [];

@@ -302,7 +302,7 @@ classdef GLM
         end
     end
     
-    methods (Access=private)
+    methods (Access=public)
         function phat = calculatePhat(obj,testParams,contrast_cond)
             cl = contrast_cond(:,1);
             cr = contrast_cond(:,2);
