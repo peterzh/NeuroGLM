@@ -18,7 +18,20 @@ classdef GLM
     
     methods
         
-        function obj = GLM(expRef)
+        function obj = GLM(varargin)
+            
+            if nargin==1
+                obj = obj.expRefConstructor(varargin{1});
+            elseif nargin==3
+                obj = obj.directConstructor(varargin{1}, varargin{2}, varargin{3});
+            else
+                error('GLM:constructorFail', 'Must pass either an expRef or contrasts/responses/repeatNums to GLM constructor');
+            end
+            
+        end
+        
+        
+        function obj = expRefConstructor(obj, expRef)
             obj.expRef = expRef;
             block = dat.loadBlock(expRef);
             trials = block.trial;
@@ -38,6 +51,33 @@ classdef GLM
                 obj.ContrastDimensions = 1;
             end
         end
+        
+        function obj = directConstructor(obj, contrast_cond, response, repeatNum)
+            % alternate constructor if you want to pass the contrasts,
+            % responses, and repeat numbers directly, e.g. if you have
+            % compiled several sessions together
+            %
+            % contrast_cond is T x 2 where T is number of trials. First
+            % column is left, second column is right contrast.
+            % response is T x 1
+            % repeatNum is T x 1
+            
+            obj.expRef = 'none';            
+            
+            D = struct;
+            D.contrast_cond = contrast_cond;
+            D.response = response;
+            D.repeatNum = repeatNum;
+            
+            obj.data = D;
+            
+            if any(min(D.contrast_cond,[],2)>0)
+                obj.ContrastDimensions = 2;
+            else
+                obj.ContrastDimensions = 1;
+            end
+        end
+        
         
         function obj = setModel(obj,modelString)
             obj.modelString = modelString;
@@ -158,7 +198,7 @@ classdef GLM
             if ~any(exitflag == [1,2])
                 obj.parameterFits = nan(1,length(obj.parameterLabels));
             end
-
+            
         end
         
         function obj = fitCV(obj)
@@ -317,7 +357,7 @@ classdef GLM
             end
         end
     end
-        
+    
     methods (Access= {?GLM})
         function phat = calculatePhat(obj,testParams,contrast_cond)
             cl = contrast_cond(:,1);
