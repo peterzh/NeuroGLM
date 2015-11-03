@@ -141,7 +141,9 @@ classdef GLM
             end
         end
         
-        function obj = fit(obj,cv_flag)
+        function obj = fit(obj)
+            %Non crossvalidated fitting
+            
             if isempty(obj.ZL)
                 error('Please set a model first using method setModel(...)');
             end
@@ -150,39 +152,47 @@ classdef GLM
             obj.data = obj.getrow(obj.data,obj.data.repeatNum==1);
             options = optimoptions('fmincon','UseParallel',0,'MaxFunEvals',10000,'MaxIter',2000);
             
-            if strcmp(cv_flag,'crossval')
-                C = cvpartition(length(obj.data.response),'LeaveOut');
-                obj.parameterFits = nan(C.NumTestSets,length(obj.parameterLabels));
+            contrasts = obj.data.contrast_cond;
+            responses = obj.data.response;
+            [obj.parameterFits,~,exitflag] = fmincon(@(b) obj.calculateLogLik(b, contrasts, responses), obj.parameterStart, [], [], [], [], obj.parameterBounds(1,:), obj.parameterBounds(2,:), [], options);
+            if ~any(exitflag == [1,2])
+                obj.parameterFits = nan(1,length(obj.parameterLabels));
+            end
+
+        end
+        
+        function obj = fitCV(obj)
+            %Crossvalidated fitting
+            
+            if isempty(obj.ZL)
+                error('Please set a model first using method setModel(...)');
+            end
+            
+            %Remove trials with repeats
+            obj.data = obj.getrow(obj.data,obj.data.repeatNum==1);
+            options = optimoptions('fmincon','UseParallel',0,'MaxFunEvals',10000,'MaxIter',2000);
+            
+            C = cvpartition(length(obj.data.response),'LeaveOut');
+            obj.parameterFits = nan(C.NumTestSets,length(obj.parameterLabels));
+            for f=1:C.NumTestSets
+                disp(['Model: ' obj.modelString '. Fold: ' num2str(f) '/' num2str(C.NumTestSets)]);
+                trainIdx = find(C.training(f)==1);
+                testIdx = find(C.test(f)==1);
                 
-                for f=1:C.NumTestSets
-                    disp(['Model: ' obj.modelString '. Fold: ' num2str(f) '/' num2str(C.NumTestSets)]);
-                    trainIdx = find(C.training(f)==1);
-                    testIdx = find(C.test(f)==1);
-                    
-                    trainContrasts = obj.data.contrast_cond(trainIdx,:);
-                    trainResponses = obj.data.response(trainIdx);
-                    testContrast = obj.data.contrast_cond(testIdx,:);
-                    testResponse = obj.data.response(testIdx);
-                    
-                    [obj.parameterFits(f,:),~,exitflag] = fmincon(@(b) obj.calculateLogLik(b, trainContrasts, trainResponses), obj.parameterStart, [], [], [], [], obj.parameterBounds(1,:), obj.parameterBounds(2,:), [], options);
-                    
-                    if ~any(exitflag == [1,2])
-                        obj.parameterFits(f,:) = nan(1,length(obj.parameterLabels));
-                    end
-                    
-                    phat = obj.calculatePhat(obj.parameterFits(f,:), testContrast);
-                    
-                    obj.p_hat(testIdx,1)=phat(testResponse);
-                end
-            else
-                contrasts = obj.data.contrast_cond;
-                responses = obj.data.response;
-                [obj.parameterFits,~,exitflag] = fmincon(@(b) obj.calculateLogLik(b, contrasts, responses), zeros(1,length(obj.parameterLabels)), [], [], [], [], obj.parameterBounds(1,:), obj.parameterBounds(2,:), [], options);
+                trainContrasts = obj.data.contrast_cond(trainIdx,:);
+                trainResponses = obj.data.response(trainIdx);
+                testContrast = obj.data.contrast_cond(testIdx,:);
+                testResponse = obj.data.response(testIdx);
+                
+                [obj.parameterFits(f,:),~,exitflag] = fmincon(@(b) obj.calculateLogLik(b, trainContrasts, trainResponses), obj.parameterStart, [], [], [], [], obj.parameterBounds(1,:), obj.parameterBounds(2,:), [], options);
+                
                 if ~any(exitflag == [1,2])
-                    obj.parameterFits = nan(1,length(obj.parameterLabels));
+                    obj.parameterFits(f,:) = nan(1,length(obj.parameterLabels));
                 end
                 
+                phat = obj.calculatePhat(obj.parameterFits(f,:), testContrast);
                 
+                obj.p_hat(testIdx,1)=phat(testResponse);
             end
         end
         

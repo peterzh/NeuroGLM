@@ -13,7 +13,7 @@ classdef simulateGLM < GLM
     methods
         function obj = simulateGLM(expRef,trueModelString,trueModelParams)
             obj@GLM(expRef);
-            obj=obj.setModel(trueModelString);
+            obj = obj.setModel(trueModelString);
             obj.trueModel = trueModelString;
             obj.trueParameters = trueModelParams;
             
