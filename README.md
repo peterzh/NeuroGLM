@@ -127,7 +127,7 @@ classdef subclass < GLM
     end
     
     methods
-        function obj = laserGLM(expRef)
+        function obj = subclass(expRef)
             obj@GLM(expRef);
             % EXTRA CODE HERE FOR THE CONSTRUCTOR
         end
