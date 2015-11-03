@@ -123,7 +123,51 @@ bar(BitsperTrial,'stacked','EdgeColor','none');
 ylabel('Sum of (bits per trial) over all sessions');
 set(gca,'XTickLabel',modelLabels);
 
+%% Simulation from a given model
+expRef = '2015-10-30_1_Hopkins'; %Used for getting input contrasts from only
+g = simulateGLM(expRef,'CL+CR-subset',[0 10 0 10]);
 
+%% Run CV and save results
+saveDir = '\\basket.cortexlab.net\homes\peterzh\NeuroGLM\ModelFiles';
+models = {'Offset','ifC','CL+CR','CL+CR-subset','C^N','C^N-subset','C^NL^NR','C^NL^NR-subset','C50','C50-subset','Supersaturation-subset'};
+
+for m = 1:length(models)
+    g = g.setModel(models{m});
+    g = g.fit('crossval');
+    save(fullfile(saveDir,[g.expRef '_' g.modelString '_crossvalidated.mat']),'g');
+    disp('done');
+end
+
+%% Plot the crossvalidated results of model fitting
+BitsperTrial = [];
+BaselineEntropy = [];
+ModelID = [];
+for m = 1:length(models)
+    p_hat=[];
+    load(fullfile(saveDir,['2015-11-02_1_SIMULATION' '_' models{m} '_crossvalidated.mat']));
+    p_hat = g.p_hat;
+    nanIdx = find(isnan(p_hat));
+    p_hat(nanIdx)=[]; %remove failed predictions
+    
+    bpt = -sum(log2(p_hat))/length(p_hat);
+    BitsperTrial(m,1) = bpt;
+    
+    %Calculate baseline, if the model was guessing based only on the
+    %fact that the mouse has a certain total ratio of L:R:NG
+    tab = tabulate(g.data.response);
+    tab = tab(:,3)/100;
+    BaselineEntropy(m,1) = -sum(tab.*log2(tab));
+    
+end
+figure;
+subplot(1,2,1);
+bar(BitsperTrial,'grouped','EdgeColor','none');
+ylabel('Bits per trial');
+set(gca,'XTickLabel',modelLabels);
+subplot(1,2,2);
+bar(BitsperTrial,'stacked','EdgeColor','none');
+ylabel('Sum of (bits per trial) over all sessions');
+set(gca,'XTickLabel',modelLabels);
 
 
 

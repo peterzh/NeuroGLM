@@ -5,6 +5,7 @@ classdef GLM
         parameterLabels;
         parameterFits;
         parameterBounds;
+        parameterStart;
         ZL;
         ZR;
         data;
@@ -41,6 +42,7 @@ classdef GLM
         function obj = setModel(obj,modelString)
             obj.modelString = modelString;
             obj.parameterFits = [];
+            obj.parameterStart = [];
             
             switch(modelString)
                 case 'Offset' %Model guesses based on the proportion of responses in the data
@@ -133,6 +135,10 @@ classdef GLM
                     error('Model does not exist');
                     
             end
+            
+            if isempty(obj.parameterStart)
+                obj.parameterStart = zeros(1,length(obj.parameterLabels));
+            end
         end
         
         function obj = fit(obj,cv_flag)
@@ -158,7 +164,7 @@ classdef GLM
                     testContrast = obj.data.contrast_cond(testIdx,:);
                     testResponse = obj.data.response(testIdx);
                     
-                    [obj.parameterFits(f,:),~,exitflag] = fmincon(@(b) obj.calculateLogLik(b, trainContrasts, trainResponses), zeros(1,length(obj.parameterLabels)), [], [], [], [], obj.parameterBounds(1,:), obj.parameterBounds(2,:), [], options);
+                    [obj.parameterFits(f,:),~,exitflag] = fmincon(@(b) obj.calculateLogLik(b, trainContrasts, trainResponses), obj.parameterStart, [], [], [], [], obj.parameterBounds(1,:), obj.parameterBounds(2,:), [], options);
                     
                     if ~any(exitflag == [1,2])
                         obj.parameterFits(f,:) = nan(1,length(obj.parameterLabels));
