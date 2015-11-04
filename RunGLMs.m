@@ -139,8 +139,18 @@ expRef = '2015-10-30_1_Hopkins'; %Used for getting input contrasts from only
 trueModel = 'C^N-subset';
 trueModelParams = [-0.3 5.8 -1.3 6.1 0.5];
 g = simulateGLM(expRef,trueModel,trueModelParams);
+simexpRef = ['Simulation_' trueModel];
+g.expRef = simexpRef;
 g.parameterFits = g.trueParameters;
 g.plotFit;
+
+%% Run complete fit many times to see whether parameter fits are settling into the true value.
+g.parameterStart = @()(2*randn(1,length(g.parameterLabels)));
+params = [];
+for i = 1:100
+    g = g.fit;
+    params(i,:) = g.parameterFits;
+end
 
 %% Run CV and save results
 saveDir = '\\basket.cortexlab.net\homes\peterzh\NeuroGLM\ModelFiles';
@@ -149,7 +159,7 @@ modelLabels = {'Offset','ifC','CL+CR','CL+CR sub','C^N','C^N sub','C^{NL,NR}','C
 
 for m = 1:length(models)
     g = g.setModel(models{m});
-    g = g.fitCV(400);
+    g = g.fitCV(755);
     save(fullfile(saveDir,[g.expRef '_' g.modelString '_crossvalidated.mat']),'g');
     disp('done');
 end
@@ -160,7 +170,7 @@ BaselineEntropy = [];
 ModelID = [];
 for m = 1:length(models)
     p_hat=[];
-    load(fullfile(saveDir,['Simulation2_' trueModel '_' models{m} '_crossvalidated.mat']));
+    load(fullfile(saveDir,['Simulation_' trueModel '_' models{m} '_crossvalidated.mat']));
     p_hat = g.p_hat;
     nanIdx = find(isnan(p_hat));
     p_hat(nanIdx)=[]; %remove failed predictions
