@@ -136,15 +136,20 @@ set(gca,'XTickLabel',modelLabels);
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 expRef = '2015-10-30_1_Hopkins'; %Used for getting input contrasts from only
-g = simulateGLM(expRef,'CL+CR-subset',[0 10 0 10]);
+trueModel = 'C^N-subset';
+trueModelParams = [-0.3 5.8 -1.3 6.1 0.5];
+g = simulateGLM(expRef,trueModel,trueModelParams);
+g.parameterFits = g.trueParameters;
+g.plotFit;
 
 %% Run CV and save results
 saveDir = '\\basket.cortexlab.net\homes\peterzh\NeuroGLM\ModelFiles';
 models = {'Offset','ifC','CL+CR','CL+CR-subset','C^N','C^N-subset','C^NL^NR','C^NL^NR-subset','C50','C50-subset','Supersaturation-subset'};
+modelLabels = {'Offset','ifC','CL+CR','CL+CR sub','C^N','C^N sub','C^{NL,NR}','C^{NL,NR} sub','C50','C50 sub','Sup sub'};
 
 for m = 1:length(models)
     g = g.setModel(models{m});
-    g = g.fitCV;
+    g = g.fitCV(400);
     save(fullfile(saveDir,[g.expRef '_' g.modelString '_crossvalidated.mat']),'g');
     disp('done');
 end
@@ -155,7 +160,7 @@ BaselineEntropy = [];
 ModelID = [];
 for m = 1:length(models)
     p_hat=[];
-    load(fullfile(saveDir,['2015-11-02_1_SIMULATION' '_' models{m} '_crossvalidated.mat']));
+    load(fullfile(saveDir,['Simulation2_' trueModel '_' models{m} '_crossvalidated.mat']));
     p_hat = g.p_hat;
     nanIdx = find(isnan(p_hat));
     p_hat(nanIdx)=[]; %remove failed predictions
@@ -171,14 +176,10 @@ for m = 1:length(models)
     
 end
 figure;
-subplot(1,2,1);
 bar(BitsperTrial,'grouped','EdgeColor','none');
 ylabel('Bits per trial');
 set(gca,'XTickLabel',modelLabels);
-subplot(1,2,2);
-bar(BitsperTrial,'stacked','EdgeColor','none');
-ylabel('Sum of (bits per trial) over all sessions');
-set(gca,'XTickLabel',modelLabels);
+%ylim([0.9 1]);
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
