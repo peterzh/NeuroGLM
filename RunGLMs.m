@@ -7,17 +7,14 @@ expRef =  '2015-10-30_1_Hopkins';
 saveDir = '\\basket.cortexlab.net\homes\peterzh\NeuroGLM\ModelFiles';
 g = GLM(expRef);
 
-models = {'ifC','Supersaturation-subset','fullContrasts','fullContrasts-subset','CL+CR','CL+CR-subset','C^N','C^N-subset','C50','C50-subset','C^NL^NR','C^NL^NR-subset'};
+models = {'ifC','Supersaturation-subset','fullContrasts-subset','CL+CR-subset','C^N-subset'};
 
 %% Fit several models to a single dataset and plot their different fits.
 % Note this only works with 1D contrast sessions
 for m = 1:length(models)
-    g = g.setModel(models{m}).fit([]);
-    
-    subplot(2,length(models),m);
+    figure;
+    g = g.setModel(models{m}).fit;
     g.plotFit;
-    subplot(2,length(models),m+length(models));
-    g.plotParams;
 end
 
 %% Leave-1-out fitting over all the models
@@ -138,19 +135,24 @@ set(gca,'XTickLabel',modelLabels);
 expRef = '2015-10-30_1_Hopkins'; %Used for getting input contrasts from only
 trueModel = 'C^N-subset';
 trueModelParams = [-0.3 5.8 -1.3 6.1 0.5];
-g = simulateGLM(expRef,trueModel,trueModelParams);
+g = simulateGLM(expRef,trueModel,trueModelParams,1);
 simexpRef = ['Simulation_' trueModel];
 g.expRef = simexpRef;
 g.parameterFits = g.trueParameters;
 g.plotFit;
 
-%% Run complete fit many times to see whether parameter fits are settling into the true value.
+%% Run simulation sampling + fit many times to see whether parameter fits are settling into the true value.
+% g.parameterStart = @()(2*randn(1,length(g.parameterLabels)));
+reSampling = 1000;
+params = nan(reSampling,length(g.parameterLabels));
 g.parameterStart = @()(2*randn(1,length(g.parameterLabels)));
-params = [];
-for i = 1:100
-    g = g.fit;
+
+for i = 1:reSampling
+    disp(i);
+    g = g.resample.fit;
     params(i,:) = g.parameterFits;
 end
+
 
 %% Run CV and save results
 saveDir = '\\basket.cortexlab.net\homes\peterzh\NeuroGLM\ModelFiles';

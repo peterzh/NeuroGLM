@@ -167,7 +167,7 @@ classdef GLM
             
             contrasts = obj.data.contrast_cond;
             responses = obj.data.response;
-            [obj.parameterFits,~,exitflag] = fmincon(@(b) obj.calculateLogLik(b, contrasts, responses), obj.parameterStart, [], [], [], [], obj.parameterBounds(1,:), obj.parameterBounds(2,:), [], options);
+            [obj.parameterFits,~,exitflag] = fmincon(@(b) obj.calculateLogLik(b, contrasts, responses), obj.parameterStart(), [], [], [], [], obj.parameterBounds(1,:), obj.parameterBounds(2,:), [], options);
             if ~any(exitflag == [1,2])
                 obj.parameterFits = nan(1,length(obj.parameterLabels));
             end
@@ -197,7 +197,7 @@ classdef GLM
                 testContrast = obj.data.contrast_cond(testIdx,:);
                 testResponse = obj.data.response(testIdx);
                 
-                [obj.parameterFits(f,:),~,exitflag] = fmincon(@(b) obj.calculateLogLik(b, trainContrasts, trainResponses), obj.parameterStart, [], [], [], [], obj.parameterBounds(1,:), obj.parameterBounds(2,:), [], options);
+                [obj.parameterFits(f,:),~,exitflag] = fmincon(@(b) obj.calculateLogLik(b, trainContrasts, trainResponses), obj.parameterStart(), [], [], [], [], obj.parameterBounds(1,:), obj.parameterBounds(2,:), [], options);
                 
                 if ~any(exitflag == [1,2])
                     obj.parameterFits(f,:) = nan(1,length(obj.parameterLabels));
