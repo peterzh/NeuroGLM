@@ -11,13 +11,13 @@ classdef simulateGLM < GLM
     end
     
     methods
-        function obj = simulateGLM(expRef,trueModelString,trueModelParams)
+        function obj = simulateGLM(expRef,trueModelString,trueModelParams,multiplydata)
             obj@GLM(expRef);
             obj = obj.setModel(trueModelString);
             obj.trueModel = trueModelString;
             obj.trueParameters = trueModelParams;
             
-            obj.data.contrast_cond = repmat(obj.data.contrast_cond,100,1); %multiply dataset by 100
+            obj.data.contrast_cond = repmat(obj.data.contrast_cond,multiplydata,1);
             
             sim_phat = obj.calculatePhat(obj.trueParameters, obj.data.contrast_cond);
             
@@ -27,6 +27,14 @@ classdef simulateGLM < GLM
             end
             
             obj.data.repeatNum = ones(length(sim_phat),1);
+        end
+        
+        function obj = resample(obj)
+            sim_phat = obj.calculatePhat(obj.trueParameters, obj.data.contrast_cond);
+            choice = @(phat)(sum(rand>[0,cumsum(phat(1:2))]));
+            for i = 1:length(sim_phat)
+                obj.data.response(i,1) = choice(sim_phat(i,:));
+            end
         end
         
         function obj = fitCV(obj,folds)
