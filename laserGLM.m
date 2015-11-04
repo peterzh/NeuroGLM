@@ -8,10 +8,13 @@ classdef laserGLM < GLM
     end
     
     methods
-        function obj = laserGLM(expRef)
-            obj@GLM(expRef);
-            L=load(dat.expFilePath(expRef, 'laserManip', 'm'));
-            obj.data.laser = L.laserCoordByTrial;
+        function obj = laserGLM(inputData)
+            obj@GLM(inputData);
+            
+            if isa(inputData,'char')
+                L=load(dat.expFilePath(inputData, 'laserManip', 'm'));
+                obj.data.laser = L.laserCoordByTrial;
+            end
         end
         
         function obj = fit(obj)

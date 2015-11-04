@@ -6,7 +6,7 @@ Classical approaches rely on Signal Detection Theory to quantify latent features
 
 ## How to use
 ### Loading GLM object
-The GLM object is created using a data block provided by *expRef*
+The GLM object is created either using a session string provided by *expRef*, or by inputting the data struct directly. The data struct must contain at a minimum fields **contrast_cond**, **response**, and **repeatNum**.
 ```
 >> g = GLM(expRef)
 ```
