@@ -30,9 +30,6 @@ classdef GLM
                 %if expRef, then load using the dat package
                 obj.expRef = inputData;
                 block = dat.loadBlock(obj.expRef);
-                
-                assert(~isempty(block),'Block file does not exist');
-                
                 trials = block.trial;
                 D = struct;
                 
@@ -40,7 +37,6 @@ classdef GLM
                     D.contrast_cond(t,:) = trials(t).condition.visCueContrast';
                     D.response(t,1) = trials(t).responseMadeID';
                     D.repeatNum(t,1) = trials(t).condition.repeatNum;
-                    D.reactionTime(t,1) = trials(t).responseMadeTime - trials(t).interactiveStartedTime;
                 end
                 
                 obj.data = D;
@@ -154,7 +150,7 @@ classdef GLM
             end
             
             if isempty(obj.parameterStart)
-                obj.parameterStart = @()(zeros(1,length(obj.parameterLabels)));
+                obj.parameterStart = zeros(1,length(obj.parameterLabels));
             end
         end
         
@@ -171,7 +167,7 @@ classdef GLM
             
             contrasts = obj.data.contrast_cond;
             responses = obj.data.response;
-            [obj.parameterFits,~,exitflag] = fmincon(@(b) obj.calculateLogLik(b, contrasts, responses), obj.parameterStart(), [], [], [], [], obj.parameterBounds(1,:), obj.parameterBounds(2,:), [], options);
+            [obj.parameterFits,~,exitflag] = fmincon(@(b) obj.calculateLogLik(b, contrasts, responses), obj.parameterStart, [], [], [], [], obj.parameterBounds(1,:), obj.parameterBounds(2,:), [], options);
             if ~any(exitflag == [1,2])
                 obj.parameterFits = nan(1,length(obj.parameterLabels));
             end
@@ -201,7 +197,7 @@ classdef GLM
                 testContrast = obj.data.contrast_cond(testIdx,:);
                 testResponse = obj.data.response(testIdx);
                 
-                [obj.parameterFits(f,:),~,exitflag] = fmincon(@(b) obj.calculateLogLik(b, trainContrasts, trainResponses), obj.parameterStart(), [], [], [], [], obj.parameterBounds(1,:), obj.parameterBounds(2,:), [], options);
+                [obj.parameterFits(f,:),~,exitflag] = fmincon(@(b) obj.calculateLogLik(b, trainContrasts, trainResponses), obj.parameterStart, [], [], [], [], obj.parameterBounds(1,:), obj.parameterBounds(2,:), [], options);
                 
                 if ~any(exitflag == [1,2])
                     obj.parameterFits(f,:) = nan(1,length(obj.parameterLabels));
@@ -213,7 +209,7 @@ classdef GLM
             end
         end
         
-        function h = plotData(obj)
+        function h=plotData(obj)
             switch(obj.ContrastDimensions)
                 case 1
                     contrast1D = obj.data.contrast_cond(:,2) - obj.data.contrast_cond(:,1);
@@ -225,22 +221,16 @@ classdef GLM
                         prop = [prop;p];
                     end
                     
-                    h=subplot(1,2,1);
                     plot(uniqueC1D,prop,'.','MarkerSize',20);
                     xlabel('Contrast1D');
                     ylabel('% choice');
                     
-                    subplot(1,2,2);
-                    plot(contrast1D, obj.data.reactionTime,'.');
-                    xlabel('Contrast');
-                    ylabel('Reaction time (sec)');
-                    xlim([-0.05 max(contrast1D)+0.05]);
+                    h=gca;
                     
                 case 2
                     uniqueCL = unique(obj.data.contrast_cond(:,1));
                     uniqueCR = unique(obj.data.contrast_cond(:,2));
                     prop=nan(length(uniqueCL),length(uniqueCR),3);
-                    RTs=nan(length(uniqueCL),length(uniqueCR),1);
                     
                     for cl = 1:length(uniqueCL)
                         for cr = 1:length(uniqueCR)
@@ -248,13 +238,12 @@ classdef GLM
                             for i=1:3
                                 prop(cl,cr,i) = sum(E.response==i)/length(E.response);
                             end
-                            RTs(cl,cr) = mean(E.reactionTime);
                         end
                     end
                     
                     titles = {'%L','%R','%NG'};
                     for i=1:3
-                        h(i)=subplot(2,4,i);
+                        h(i)=subplot(2,3,i);
                         imagesc(uniqueCR,uniqueCL,prop(:,:,i),[0 1]);
                         set(gca,'YDir','normal');
                         
@@ -262,29 +251,17 @@ classdef GLM
                         ylabel('C Left');
                         title(titles{i});
                         axis square;
-                        colorbar;
                     end
-                    
-                    h(4)=subplot(2,4,4);
-                    imagesc(uniqueCR,uniqueCL,RTs);
-                    set(gca,'YDir','normal');
-                    
-                    xlabel('C Right');
-                    ylabel('C Left');
-                    title('Reaction Time (sec)');
-                    axis square;
-                    colormap(h(4),'gray');
-                    colorbar;
             end
         end
         
-        function fig = plotFit(obj)
+        function fig=plotFit(obj)
             if size(obj.parameterFits,1)==1
                 h=obj.plotData();
                 
                 switch (obj.ContrastDimensions)
                     case 1
-                        hold(h);
+                        hold on;
                         
                         if ~(strcmp(obj.modelString,'fullContrasts') || strcmp(obj.modelString,'fullContrasts-subset'))
                             maxC = max(max(obj.data.contrast_cond));
@@ -292,7 +269,7 @@ classdef GLM
                                 zeros(100,1), linspace(0,maxC,100)'];
                             evalC1d = evalC(:,2) - evalC(:,1);
                             phat = obj.calculatePhat(obj.parameterFits,evalC);
-                            set(h, 'ColorOrderIndex', 1);
+                            set(gca, 'ColorOrderIndex', 1);
                             plot(h, evalC1d,phat);
                             title(obj.modelString);
                             hold off;
@@ -327,16 +304,15 @@ classdef GLM
                         end
                         
                         figure(fig);
-                        titles = {'Predicted %L','Predicted %R','Predicted %NG'};
+                        titles = {'Pred %L','Pred %R','Pred %NG'};
                         for i=1:3
-                            subplot(2,4,i+4);
+                            subplot(2,3,i+3);
                             imagesc(evalCR,evalCL,prop(:,:,i),[0 1]);
                             set(gca,'YDir','normal');
                             xlabel('C Right');
                             ylabel('C Left');
                             title(titles{i});
                             axis square;
-                            colorbar;
                         end
                         
                 end
@@ -345,7 +321,7 @@ classdef GLM
             end
         end
         
-        function h = plotParams(obj)
+        function h=plotParams(obj)
             if size(obj.parameterFits,1)==1
                 bar(obj.parameterFits);
                 set(gca,'XTickLabel',obj.parameterLabels,'XTick',1:numel(obj.parameterLabels));
