@@ -1,5 +1,5 @@
 classdef GLM
-    properties
+    properties (Access=public)
         expRef;
         modelString;
         parameterLabels;
@@ -17,26 +17,39 @@ classdef GLM
     end
     
     methods
-        
-        function obj = GLM(expRef)
-            obj.expRef = expRef;
-            block = dat.loadBlock(expRef);
-            trials = block.trial;
-            D = struct;
-            
-            for t=1:block.numCompletedTrials
-                D.contrast_cond(t,:) = trials(t).condition.visCueContrast';
-                D.response(t,1) = trials(t).responseMadeID';
-                D.repeatNum(t,1) = trials(t).condition.repeatNum;
+        function obj = GLM(inputData)
+            if isa(inputData,'struct')
+                %If input is a struct containing AT MINIMUM the fields:
+                %                 -contrast_cond
+                %                 -response
+                %                 -repeatNum
+                obj.data = inputData;
+                obj.expRef = 'none';
+                
+            elseif isa(inputData,'char')
+                %if expRef, then load using the dat package
+                obj.expRef = inputData;
+                block = dat.loadBlock(obj.expRef);
+                trials = block.trial;
+                D = struct;
+                
+                for t=1:block.numCompletedTrials
+                    D.contrast_cond(t,:) = trials(t).condition.visCueContrast';
+                    D.response(t,1) = trials(t).responseMadeID';
+                    D.repeatNum(t,1) = trials(t).condition.repeatNum;
+                end
+                
+                obj.data = D;
+            else
+                error('GLM:constructorFail', 'Must pass either an expRef or data struct to GLM constructor');
             end
             
-            obj.data = D;
-            
-            if any(min(D.contrast_cond,[],2)>0)
+            if any(min(obj.data.contrast_cond,[],2)>0)
                 obj.ContrastDimensions = 2;
             else
                 obj.ContrastDimensions = 1;
             end
+            
         end
         
         function obj = setModel(obj,modelString)
@@ -158,7 +171,7 @@ classdef GLM
             if ~any(exitflag == [1,2])
                 obj.parameterFits = nan(1,length(obj.parameterLabels));
             end
-
+            
         end
         
         function obj = fitCV(obj)
@@ -192,7 +205,7 @@ classdef GLM
                 
                 phat = obj.calculatePhat(obj.parameterFits(f,:), testContrast);
                 
-                obj.p_hat(testIdx,1)=phat(testResponse);
+                obj.p_hat(testIdx,1) = phat(testResponse);
             end
         end
         
@@ -204,8 +217,8 @@ classdef GLM
                     prop=[];
                     for c = 1:length(uniqueC1D)
                         D = obj.getrow(obj.data,contrast1D == uniqueC1D(c));
-                        p=sum([D.response==1 D.response==2 D.response==3])/length(D.response);
-                        prop=[prop;p];
+                        p = sum([D.response==1 D.response==2 D.response==3])/length(D.response);
+                        prop = [prop;p];
                     end
                     
                     plot(uniqueC1D,prop,'.','MarkerSize',20);
@@ -283,7 +296,7 @@ classdef GLM
                         
                         for cl = 1:length(evalCL)
                             for cr = 1:length(evalCR)
-                                p= obj.calculatePhat(obj.parameterFits,[evalCL(cl) evalCR(cr)]);
+                                p = obj.calculatePhat(obj.parameterFits,[evalCL(cl) evalCR(cr)]);
                                 for i=1:3
                                     prop(cl,cr,i) = p(i);
                                 end
@@ -317,7 +330,7 @@ classdef GLM
             end
         end
     end
-        
+    
     methods (Access= {?GLM})
         function phat = calculatePhat(obj,testParams,contrast_cond)
             cl = contrast_cond(:,1);
@@ -332,7 +345,7 @@ classdef GLM
         end
         
         function logLik = calculateLogLik(obj,testParams, contrast_conds, responses)
-            phat=obj.calculatePhat(testParams, contrast_conds);
+            phat = obj.calculatePhat(testParams, contrast_conds);
             logLik = -sum(log( phat(sub2ind(size(phat), [1:length(responses)]', responses)) ));
         end
         
@@ -345,14 +358,14 @@ classdef GLM
                 error('D must be a struct');
             end;
             
-            field=fieldnames(D);
+            field = fieldnames(D);
             row=[];
             for f=1:length(field)
-                F=getfield(D,field{f});
+                F = getfield(D,field{f});
                 if iscell(F)
-                    row=setfield(row,field{f},F(numrow,:));
+                    row = setfield(row,field{f},F(numrow,:));
                 else
-                    row=setfield(row,field{f},F(numrow,:));
+                    row = setfield(row,field{f},F(numrow,:));
                 end
             end
             
