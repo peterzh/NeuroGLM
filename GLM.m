@@ -143,6 +143,10 @@ classdef GLM
                         +inf +inf +inf +inf];
                     obj.ZL = @(P,CL,CR)(P(1) + P(2)*(CL>0));
                     obj.ZR = @(P,CL,CR)(P(3) + P(4)*(CR>0));
+                case 'AFC'
+                    obj.parameterLabels = {'Offset','ScaleL','ScaleR'};
+                    obj.parameterBounds = [-inf -inf -inf; +inf +inf +inf];
+                    obj.ZL = @(P,CL,CR)(P(1) + P(2)*CL + P(3)*CR);
                     
                 otherwise
                     error('Model does not exist');
@@ -337,13 +341,22 @@ classdef GLM
             
             cl = contrast_cond(:,1);
             cr = contrast_cond(:,2);
-            zl = obj.ZL(testParams,cl,cr);
-            zr = obj.ZR(testParams,cl,cr);
-            pL = exp(zl)./(1+exp(zl)+exp(zr));
-            pR = exp(zr)./(1+exp(zl)+exp(zr));
-            pNG = 1 - pL - pR;
             
-            phat = [pL pR pNG];
+            if isempty(obj.ZR) %if a AFC task then no ZR is defined, only pL vs pR
+                zl = obj.ZL(testParams,cl,cr);
+                pL = exp(zl)./(1+exp(zl));
+                pR = 1 - pL;
+                N = length(pL);
+                phat = [pL pR zeros(N,1)];
+            else %if ADC task then ZL and ZR are defined to produce pL vs pNG and pR vs pNG
+                zl = obj.ZL(testParams,cl,cr);
+                zr = obj.ZR(testParams,cl,cr);
+                pL = exp(zl)./(1+exp(zl)+exp(zr));
+                pR = exp(zr)./(1+exp(zl)+exp(zr));
+                pNG = 1 - pL - pR;
+                
+                phat = [pL pR pNG];
+            end
         end
     end
     
