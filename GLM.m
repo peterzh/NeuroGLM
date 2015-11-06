@@ -329,10 +329,12 @@ classdef GLM
                 h=gca;
             end
         end
-    end
-    
-    methods (Access= {?GLM})
+        
         function phat = calculatePhat(obj,testParams,contrast_cond)
+        	if isempty(obj.ZL)
+                error('Please set a model first using method setModel(...)');
+            end
+            
             cl = contrast_cond(:,1);
             cr = contrast_cond(:,2);
             zl = obj.ZL(testParams,cl,cr);
@@ -343,7 +345,9 @@ classdef GLM
             
             phat = [pL pR pNG];
         end
-        
+    end
+    
+    methods (Access= {?GLM})        
         function logLik = calculateLogLik(obj,testParams, contrast_conds, responses)
             phat = obj.calculatePhat(testParams, contrast_conds);
             logLik = -sum(log( phat(sub2ind(size(phat), [1:length(responses)]', responses)) ));
