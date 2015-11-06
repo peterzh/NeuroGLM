@@ -1,4 +1,4 @@
-function out = fullContrast_subset_Zfcns(choice,P,CL,CR,uniqueC)
+function out = fullContrast_subset(choice,P,CL,CR,uniqueC)
 %ZL and ZR functions for the full contrast model
 
 uniqueCL = unique(uniqueC(:,1));

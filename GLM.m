@@ -66,16 +66,16 @@ classdef GLM
                     obj.ZR = @(P,CL,CR)(P(2)*ones(length(CR),1));
                 case 'fullContrasts'
                     uniqueC = unique(obj.data.contrast_cond,'rows');
-                    obj.parameterLabels = fullContrastZfcns('paramLabels',[],[],[],uniqueC);
-                    obj.parameterBounds = fullContrastZfcns('paramBounds',[],[],[],uniqueC);
-                    obj.ZL = @(P,CL,CR)(fullContrastZfcns('L',P,CL,CR,uniqueC));
-                    obj.ZR = @(P,CL,CR)(fullContrastZfcns('R',P,CL,CR,uniqueC));
+                    obj.parameterLabels = models.fullContrast('paramLabels',[],[],[],uniqueC);
+                    obj.parameterBounds = models.fullContrast('paramBounds',[],[],[],uniqueC);
+                    obj.ZL = @(P,CL,CR)(models.fullContrast('L',P,CL,CR,uniqueC));
+                    obj.ZR = @(P,CL,CR)(models.fullContrast('R',P,CL,CR,uniqueC));
                 case 'fullContrasts-subset'
                     uniqueC = unique(obj.data.contrast_cond,'rows');
-                    obj.parameterLabels = fullContrast_subset_Zfcns('paramLabels',[],[],[],uniqueC);
-                    obj.parameterBounds = fullContrast_subset_Zfcns('paramBounds',[],[],[],uniqueC);
-                    obj.ZL = @(P,CL,CR)(fullContrast_subset_Zfcns('L',P,CL,CR,uniqueC));
-                    obj.ZR = @(P,CL,CR)(fullContrast_subset_Zfcns('R',P,CL,CR,uniqueC));
+                    obj.parameterLabels = models.fullContrast_subset('paramLabels',[],[],[],uniqueC);
+                    obj.parameterBounds = models.fullContrast_subset('paramBounds',[],[],[],uniqueC);
+                    obj.ZL = @(P,CL,CR)(models.fullContrast_subset('L',P,CL,CR,uniqueC));
+                    obj.ZR = @(P,CL,CR)(models.fullContrast_subset('R',P,CL,CR,uniqueC));
                 case 'CL+CR'
                     obj.parameterLabels = {'Offset_L','ScaleL_L','ScaleR_L','Offset_R','ScaleL_R','ScaleR_R'};
                     obj.parameterBounds = [-inf -inf -inf -inf -inf -inf;
@@ -209,7 +209,7 @@ classdef GLM
             end
         end
         
-        function h=plotData(obj)
+        function h = plotData(obj)
             switch(obj.ContrastDimensions)
                 case 1
                     contrast1D = obj.data.contrast_cond(:,2) - obj.data.contrast_cond(:,1);
@@ -255,7 +255,7 @@ classdef GLM
             end
         end
         
-        function fig=plotFit(obj)
+        function fig = plotFit(obj)
             if size(obj.parameterFits,1)==1
                 h=obj.plotData();
                 
@@ -321,7 +321,7 @@ classdef GLM
             end
         end
         
-        function h=plotParams(obj)
+        function h = plotParams(obj)
             if size(obj.parameterFits,1)==1
                 bar(obj.parameterFits);
                 set(gca,'XTickLabel',obj.parameterLabels,'XTick',1:numel(obj.parameterLabels));
