@@ -331,7 +331,7 @@ classdef GLM
         end
         
         function phat = calculatePhat(obj,testParams,contrast_cond)
-        	if isempty(obj.ZL)
+            if isempty(obj.ZL)
                 error('Please set a model first using method setModel(...)');
             end
             
