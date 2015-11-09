@@ -124,11 +124,11 @@ classdef GLM
                         +inf +inf +inf +inf +inf +inf];
                     obj.ZL = @(P,CL,CR)(P(1) + P(2).*(CL.^P(5))./(CL.^P(5) + P(6)^P(5)));
                     obj.ZR = @(P,CL,CR)(P(3) + P(4).*(CR.^P(5))./(CR.^P(5) + P(6)^P(5)));
-                case 'C50-subset(N=0.4)'
+                case 'C50-subset(N=1)'
                     obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','C50'};
                     obj.parameterBounds = [-inf -inf -inf -inf 0;
                         +inf +inf +inf +inf +inf];
-                    N = 0.4;
+                    N = 1;
                     obj.ZL = @(P,CL,CR)(P(1) + P(2).*(CL.^N)./(CL.^N + P(5)^N));
                     obj.ZR = @(P,CL,CR)(P(3) + P(4).*(CR.^N)./(CR.^N + P(5)^N));
                 case 'Supersaturation-subset'
@@ -147,7 +147,7 @@ classdef GLM
                     obj.parameterLabels = {'Offset','ScaleL','ScaleR'};
                     obj.parameterBounds = [-inf -inf -inf; +inf +inf +inf];
                     obj.ZL = @(P,CL,CR)(P(1) + P(2)*CL + P(3)*CR);
-                    
+                    obj.ZR = [];
                 otherwise
                     error('Model does not exist');
                     
