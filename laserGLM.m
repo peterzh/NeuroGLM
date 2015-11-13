@@ -5,7 +5,12 @@ classdef laserGLM < GLM
     % inactivation. Therefore trials must be split up accordingly.
     
     properties
-        ZINPUT
+        inactivationSite;
+        
+    end
+    
+    properties (Access=private)
+        ZINPUT;
     end
     
     methods
@@ -16,6 +21,15 @@ classdef laserGLM < GLM
                 L=load(dat.expFilePath(inputData, 'laserManip', 'm'));
                 obj.data.laser = L.laserCoordByTrial;
             end
+            sites = unique(obj.data.laser(~isnan(obj.data.laser(:,1)),:),'rows');
+            
+            obj.inactivationSite = sites;
+            obj.data.laserIdx = zeros(size(obj.data.laser,1),1);
+            for i = 1:size(sites,1)
+                idx=bsxfun(@(a,b)(a==b),sites(i,:),obj.data.laser);
+                idx = sum(idx,2)==2;
+                obj.data.laserIdx = obj.data.laserIdx + idx*i; 
+            end
         end
         
         function obj = setModel(obj,modelString)
@@ -24,32 +38,7 @@ classdef laserGLM < GLM
             obj.parameterStart = [];
             
             switch(modelString)
-                case 'Offset' %Model guesses based on the proportion of responses in the data
-                    %used as a baseline to compare other models
-                    obj.parameterLabels = {'Offset_L','Offset_R'};
-                    obj.parameterBounds = [-inf -inf; +inf +inf];
-                    obj.ZL = @(P,CL,CR)(P(1)*ones(length(CL),1));
-                    obj.ZR = @(P,CL,CR)(P(2)*ones(length(CR),1));
-                case 'fullContrasts'
-                    uniqueC = unique(obj.data.contrast_cond,'rows');
-                    obj.parameterLabels = models.fullContrast('paramLabels',[],[],[],uniqueC);
-                    obj.parameterBounds = models.fullContrast('paramBounds',[],[],[],uniqueC);
-                    obj.ZL = @(P,CL,CR)(models.fullContrast('L',P,CL,CR,uniqueC));
-                    obj.ZR = @(P,CL,CR)(models.fullContrast('R',P,CL,CR,uniqueC));
-                case 'fullContrasts-subset'
-                    uniqueC = unique(obj.data.contrast_cond,'rows');
-                    obj.parameterLabels = models.fullContrast_subset('paramLabels',[],[],[],uniqueC);
-                    obj.parameterBounds = models.fullContrast_subset('paramBounds',[],[],[],uniqueC);
-                    obj.ZL = @(P,CL,CR)(models.fullContrast_subset('L',P,CL,CR,uniqueC));
-                    obj.ZR = @(P,CL,CR)(models.fullContrast_subset('R',P,CL,CR,uniqueC));
-
-                case 'C^N-subset'
-                    obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','N'};
-                    obj.parameterBounds = [-inf -inf -inf -inf 0;
-                        +inf +inf +inf +inf +inf];
-                    obj.ZINPUT = @(data)([data.contrast_cond(:,1) data.contrast_cond(:,2)]);
-                    obj.ZL = @(P,INPUT)(P(1) + P(2).*INPUT(:,1).^P(5));
-                    obj.ZR = @(P,INPUT)(P(3) + P(4).*INPUT(:,2).^P(5));
+                
                 case 'C^N-subset-laser'
                     obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','laser-Offset_L','laser-ScaleL_L','laser-Offset_R','laser-ScaleR_R','N'};
                     obj.parameterBounds = [-inf(1,8) 0;
@@ -58,6 +47,20 @@ classdef laserGLM < GLM
                     obj.ZINPUT = @(data)([data.contrast_cond(:,1) data.contrast_cond(:,2) ~isnan(data.laser(:,1))]);
                     obj.ZL = @(P,INPUT)( (1-INPUT(:,3)).*(P(1) + P(2).*INPUT(:,1).^P(9)) + INPUT(:,3).*(P(5) + P(6).*INPUT(:,1).^P(9)) );
                     obj.ZR = @(P,INPUT)( (1-INPUT(:,3)).*(P(3) + P(4).*INPUT(:,2).^P(9)) + INPUT(:,3).*(P(7) + P(8).*INPUT(:,2).^P(9)) );
+                case 'C^N-subset-laser_Offset'
+                    obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','laser-Offset_L','laser-Offset_R','N'};
+                    obj.parameterBounds = [-inf(1,6) 0;
+                        +inf(1,6) inf];
+                    obj.ZINPUT = @(data)([data.contrast_cond(:,1) data.contrast_cond(:,2) ~isnan(data.laser(:,1))]);
+                    obj.ZL = @(P,INPUT)( (1-INPUT(:,3)).*P(1) + INPUT(:,3).*P(5) + P(2).*INPUT(:,1).^P(7) );
+                    obj.ZR = @(P,INPUT)( (1-INPUT(:,3)).*P(3) + INPUT(:,3).*P(6) + P(4).*INPUT(:,2).^P(7) );
+                case 'C^N-subset-laser_Scale'
+                    obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','laser-ScaleL_L','laser-ScaleR_R','N'};
+                    obj.parameterBounds = [-inf(1,6) 0;
+                        +inf(1,6) inf];
+                    obj.ZINPUT = @(data)([data.contrast_cond(:,1) data.contrast_cond(:,2) ~isnan(data.laser(:,1))]);
+                    obj.ZL = @(P,INPUT)( P(1) + (1-INPUT(:,3)).*(P(2).*INPUT(:,1).^P(7)) + INPUT(:,3).*(P(5).*INPUT(:,1).^P(7)) );
+                    obj.ZR = @(P,INPUT)( P(3) + (1-INPUT(:,3)).*(P(4).*INPUT(:,2).^P(7)) + INPUT(:,3).*(P(6).*INPUT(:,2).^P(7)) );
                 case 'Offset-laser'
                     obj.parameterLabels = {'Offset_L','Offset_R','laser-Offset_L','laser-Offset_R'};
                     obj.parameterBounds = [-inf -inf -inf -inf; +inf +inf +inf +inf];
@@ -73,10 +76,36 @@ classdef laserGLM < GLM
             end
         end
         
-        function obj = fit(obj)
+        function obj = getSubsetData(obj,siteID)
+            %gets subset of data corresponding to a particular inactivation
+            %site within a session. This is important as some sessions
+            %contain trials with different inactivation sites.
+            
+            if ~isempty(siteID)
+                obj.data = obj.getrow(obj.data,obj.data.laserIdx==siteID{1} | obj.data.laserIdx==0);
+                if siteID{1} == 0
+                    obj.inactivationSite = [NaN, NaN];
+                else
+                    obj.inactivationSite = obj.inactivationSite(siteID{1},:);
+                end
+                
+                if ~any(siteID{1} == obj.data.laserIdx)
+                    error('Inactivation site ID does not exist in this dataset');
+                end
+            end
+            
+        end
+        
+        function obj = fit(obj,varargin)
+            obj = obj.getSubsetData(varargin);
+            
+            if size(obj.inactivationSite,1) > 1
+                error('More than one inactivation site: please provide only subset corresponding to a single inactivation site');
+            end
             
             %Remove trials with repeats
             obj.data = obj.getrow(obj.data,obj.data.repeatNum==1);
+            
             options = optimoptions('fmincon','UseParallel',0,'MaxFunEvals',10000,'MaxIter',2000,'Display','off');
             
             inputs = obj.ZINPUT(obj.data);
@@ -89,7 +118,9 @@ classdef laserGLM < GLM
             
         end
         
-        function obj = fitCV(obj)
+        function obj = fitCV(obj,varargin)
+            obj = obj.getSubsetData(varargin);
+            
             if isempty(obj.ZL)
                 error('Please set a model first using method setModel(...)');
             end
@@ -122,51 +153,53 @@ classdef laserGLM < GLM
                 
                 obj.p_hat(testIdx,1) = phat(testResponse);
             end
-        end
-    
+        end   
         
-        function D = calculateLaserEffect(obj)
-            query_points = linspace(0,0.02,100);
-            
-            if isempty(obj.ZL)
-                error('Set model with setModel(...) method');
+        function h=plotData(obj,varargin)
+            if ~isempty(varargin)
+                obj.data = getrow(obj.data,obj.data.laserIdx == varargin{1});
             end
             
-            noLaser = obj.fit(0);
-            Laser = obj.fit(1);
-            
-            D = struct;
-            D.laser = [0;1];
-            D.parameterFits = [noLaser.parameterFits; Laser.parameterFits];
-            D.Offsets(1,:) = obj.calculatePhat(D.parameterFits(1,:),[0 0]);
-            D.Offsets(2,:) = obj.calculatePhat(D.parameterFits(2,:),[0 0]);
-            D.Offsets(:,3) = [];
-            
-            pc_R = nan(length(query_points),2);
-            
-            for laser=[1,2]
-                for leftright=[1,2]
-                    
-                    phat = [];
-                    for c = 1:length(query_points)
-                        contrast = [0 0];
-                        contrast(leftright) = query_points(c);
-                        phat = [phat; obj.calculatePhat(D.parameterFits(laser,:),contrast)];
-                    end
-                    
-                    phat = phat(:,leftright);
-                    
-                    if leftright==1
-                        phat = -phat;
-                    end
-                    
-                    D.Slopes(laser,leftright) = median(gradient(phat,query_points(2)));
-                end
-            end
-            
-            D.laserCoord = Laser.data.laser(1,:);
+            h=plotData@GLM(obj);
         end
         
+        function plotFit(obj)
+            %no laser
+            subplot(1,2,1);
+            h=obj.plotData(0);
+            hold on;
+            maxC = max(max(obj.data.contrast_cond));
+            D.contrast_cond = [linspace(maxC,0,100)', zeros(100,1);
+                zeros(100,1), linspace(0,maxC,100)'];
+            D.laser = nan(200,1);
+            evalC1d = D.contrast_cond(:,2) - D.contrast_cond(:,1);
+            phat = obj.calculatePhat(obj.parameterFits,obj.ZINPUT(D));
+
+            set(gca, 'ColorOrderIndex', 1);
+            plot(h, evalC1d,phat);
+            title('No laser');
+            hold off;
+            h=gca;
+            
+            hold off;
+            h=gca;
+            
+            subplot(1,2,2);
+            h=obj.plotData(max(obj.data.laserIdx));
+            
+            hold on;
+            D.laser = ones(200,1);
+            phat = obj.calculatePhat(obj.parameterFits,obj.ZINPUT(D));
+
+            set(gca, 'ColorOrderIndex', 1);
+            plot(h, evalC1d,phat);
+            title('Laser');
+            hold off;
+            h=gca;
+            
+            hold off;
+            h=gca;
+        end
         
         function phat = calculatePhat(obj,testParams,inputs)
             if isempty(obj.ZL)
