@@ -38,7 +38,14 @@ classdef laserGLM < GLM
             obj.parameterStart = [];
             
             switch(modelString)
-                
+                case 'C^N-subset-nolaser'
+                    obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','N'};
+                    obj.parameterBounds = [-inf(1,4) 0;
+                        +inf(1,4) inf];
+                    %Laser indicator variable included in ZL function
+                    obj.ZINPUT = @(data)([data.contrast_cond(:,1) data.contrast_cond(:,2)]);
+                    obj.ZL = @(P,INPUT)( P(1) + P(2).*INPUT(:,1).^P(5) );
+                    obj.ZR = @(P,INPUT)( P(3) + P(4).*INPUT(:,2).^P(5) );
                 case 'C^N-subset-laser'
                     obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','laser-Offset_L','laser-ScaleL_L','laser-Offset_R','laser-ScaleR_R','N'};
                     obj.parameterBounds = [-inf(1,8) 0;
@@ -61,12 +68,8 @@ classdef laserGLM < GLM
                     obj.ZINPUT = @(data)([data.contrast_cond(:,1) data.contrast_cond(:,2) ~isnan(data.laser(:,1))]);
                     obj.ZL = @(P,INPUT)( P(1) + (1-INPUT(:,3)).*(P(2).*INPUT(:,1).^P(7)) + INPUT(:,3).*(P(5).*INPUT(:,1).^P(7)) );
                     obj.ZR = @(P,INPUT)( P(3) + (1-INPUT(:,3)).*(P(4).*INPUT(:,2).^P(7)) + INPUT(:,3).*(P(6).*INPUT(:,2).^P(7)) );
-                case 'Offset-laser'
-                    obj.parameterLabels = {'Offset_L','Offset_R','laser-Offset_L','laser-Offset_R'};
-                    obj.parameterBounds = [-inf -inf -inf -inf; +inf +inf +inf +inf];
-                    obj.ZINPUT = @(data)(~isnan(data.laser(:,1)));
-                    obj.ZL = @(P,INPUT)((1-INPUT).*P(1) + INPUT*P(3));
-                    obj.ZR = @(P,INPUT)((1-INPUT).*P(2) + INPUT*P(4));
+              
+                    
                 otherwise
                     error('Model does not exist');
             end
