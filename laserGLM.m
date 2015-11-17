@@ -19,7 +19,7 @@ classdef laserGLM < GLM
             
             if isa(inputData,'char')
                 L=load(dat.expFilePath(inputData, 'laserManip', 'm'));
-                obj.data.laser = L.laserCoordByTrial;
+                obj.data.laser = L.laserCoordByTrial; 
             end
             sites = unique(obj.data.laser(~isnan(obj.data.laser(:,1)),:),'rows');
             
@@ -54,14 +54,14 @@ classdef laserGLM < GLM
                     obj.ZINPUT = @(data)([data.contrast_cond(:,1) data.contrast_cond(:,2) ~isnan(data.laser(:,1))]);
                     obj.ZL = @(P,INPUT)( (1-INPUT(:,3)).*(P(1) + P(2).*INPUT(:,1).^P(9)) + INPUT(:,3).*(P(5) + P(6).*INPUT(:,1).^P(9)) );
                     obj.ZR = @(P,INPUT)( (1-INPUT(:,3)).*(P(3) + P(4).*INPUT(:,2).^P(9)) + INPUT(:,3).*(P(7) + P(8).*INPUT(:,2).^P(9)) );
-                case 'C^N-subset-laser_Offset'
+                case 'C^N-subset-laser-offset'
                     obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','laser-Offset_L','laser-Offset_R','N'};
                     obj.parameterBounds = [-inf(1,6) 0;
                         +inf(1,6) inf];
                     obj.ZINPUT = @(data)([data.contrast_cond(:,1) data.contrast_cond(:,2) ~isnan(data.laser(:,1))]);
                     obj.ZL = @(P,INPUT)( (1-INPUT(:,3)).*P(1) + INPUT(:,3).*P(5) + P(2).*INPUT(:,1).^P(7) );
                     obj.ZR = @(P,INPUT)( (1-INPUT(:,3)).*P(3) + INPUT(:,3).*P(6) + P(4).*INPUT(:,2).^P(7) );
-                case 'C^N-subset-laser_Scale'
+                case 'C^N-subset-laser-scale'
                     obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','laser-ScaleL_L','laser-ScaleR_R','N'};
                     obj.parameterBounds = [-inf(1,6) 0;
                         +inf(1,6) inf];
@@ -106,6 +106,9 @@ classdef laserGLM < GLM
                 error('More than one inactivation site: please provide only subset corresponding to a single inactivation site');
             end
             
+            %Trim first 5 trials
+            obj.data = obj.getrow(obj.data,6:length(obj.data.response));
+            
             %Remove trials with repeats
             obj.data = obj.getrow(obj.data,obj.data.repeatNum==1);
             
@@ -127,6 +130,8 @@ classdef laserGLM < GLM
             if isempty(obj.ZL)
                 error('Please set a model first using method setModel(...)');
             end
+            %Trim first 5 trials
+            obj.data = obj.getrow(obj.data,6:length(obj.data.response));
             
             %Remove trials with repeats
             obj.data = obj.getrow(obj.data,obj.data.repeatNum==1);
