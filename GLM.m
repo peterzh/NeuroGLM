@@ -38,6 +38,7 @@ classdef GLM
                     D.contrast_cond(t,:) = trials(t).condition.visCueContrast';
                     D.response(t,1) = trials(t).responseMadeID';
                     D.repeatNum(t,1) = trials(t).condition.repeatNum;
+                    D.feedbackType(t,1) = trials(t).feedbackType;
                 end
 
                 obj.data = D;
@@ -80,6 +81,13 @@ classdef GLM
                     obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
                     obj.ZL = @(P,in)(P(1) + P(2).*in(:,1).^P(5));
                     obj.ZR = @(P,in)(P(3) + P(4).*in(:,2).^P(5));
+                case 'C^NL^NR-subset'
+                    obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','N_L','N_R'};
+                    obj.parameterBounds = [-inf -inf -inf -inf 0 0;
+                        +inf +inf +inf +inf +inf +inf];
+                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
+                    obj.ZL = @(P,in)(P(1) + P(2).*in(:,1).^P(5));
+                    obj.ZR = @(P,in)(P(3) + P(4).*in(:,2).^P(6));
                 case 'C50'
                     obj.parameterLabels = {'Offset_L','ScaleL_L','ScaleR_L','Offset_R','ScaleL_R','ScaleR_R','N','C50'};
                     obj.parameterBounds = [-inf -inf -inf -inf -inf -inf 0 0;
@@ -100,13 +108,27 @@ classdef GLM
                     obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
                     obj.ZL = @(P,in)(P(1) + P(2)*in(:,1) + P(3)*in(:,2));
                     obj.ZR = [];
-                case 'C^N-subset-hist'
+                case 'C^N-subset-hist-response'
                     obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','HistL_L','HistR_L','HistNG_L','HistL_R','HistR_R','HistNG_R','N'};
                     obj.parameterBounds = [-inf(1,10) 0;
                                           +inf(1,10) inf];
                     obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2) D.hist(:,1) D.hist(:,2) D.hist(:,3)]);
                     obj.ZL = @(P,in)( P(1) + P(2).*in(:,1).^P(11) + P(5).*in(:,3) + P(6).*in(:,4) + P(7).*in(:,5) );
-                    obj.ZR = @(P,in)( P(3) + P(4).*in(:,1).^P(11) + P(8).*in(:,3) + P(9).*in(:,4) + P(10).*in(:,5) );
+                    obj.ZR = @(P,in)( P(3) + P(4).*in(:,2).^P(11) + P(8).*in(:,3) + P(9).*in(:,4) + P(10).*in(:,5) );
+                case 'C^N-subset-hist-contrast'
+                    obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','HistL_L','HistR_L','HistNG_L','HistL_R','HistR_R','HistNG_R','N'};
+                    obj.parameterBounds = [-inf(1,10) 0;
+                                        +inf(1,10) inf];
+                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2) D.hist(:,1) D.hist(:,2) D.hist(:,3)]);
+                    obj.ZL = @(P,in)( P(1) + P(2).*in(:,1).^P(11) + P(5).*in(:,3) + P(6).*in(:,4) + P(7).*in(:,5) );
+                    obj.ZR = @(P,in)( P(3) + P(4).*in(:,2).^P(11) + P(8).*in(:,3) + P(9).*in(:,4) + P(10).*in(:,5) );
+                case 'C^N-subset-hist-success'
+                    obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','Hist_L','Hist_R','N'};
+                    obj.parameterBounds = [-inf(1,6) 0;
+                                        +inf(1,6) inf];
+                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2) D.hist]);
+                    obj.ZL = @(P,in)( P(1) + P(2).*in(:,1).^P(7) + P(5).*in(:,3) );
+                    obj.ZR = @(P,in)( P(3) + P(4).*in(:,2).^P(7) + P(6).*in(:,3) );
                 otherwise
                     error('Model does not exist');
                     
@@ -140,18 +162,27 @@ classdef GLM
             
         end
         
-        function obj = fitCV(obj)
+        function obj = fitCV(obj,varargin)
             %Crossvalidated fitting
             
             if isempty(obj.ZL)
                 error('Please set a model first using method setModel(...)');
             end
             
+            %Trim first 5 trials
+            obj.data = obj.getrow(obj.data,6:length(obj.data.response));
+            
             %Remove trials with repeats
             obj.data = obj.getrow(obj.data,obj.data.repeatNum==1);
+            
             options = optimoptions('fmincon','UseParallel',0,'MaxFunEvals',10000,'MaxIter',2000,'Display','off');
             
-            C = cvpartition(length(obj.data.response),'LeaveOut');
+            if isempty(varargin)
+                C = cvpartition(length(obj.data.response),'LeaveOut');
+            else
+                C = cvpartition(obj.data.response,'KFold',varargin{1});
+            end
+            
             obj.parameterFits = nan(C.NumTestSets,length(obj.parameterLabels));
             for f=1:C.NumTestSets
                 disp(['Model: ' obj.modelString '. Fold: ' num2str(f) '/' num2str(C.NumTestSets)]);
@@ -173,7 +204,9 @@ classdef GLM
                 
                 phat = obj.calculatePhat(obj.parameterFits(f,:), testInputs);
                 
-                obj.p_hat(testIdx,1) = phat(testResponse);
+                for i = 1:length(testResponse)
+                    obj.p_hat(testIdx(i),1) = phat(i,testResponse(i));
+                end
             end
         end
         
@@ -231,13 +264,23 @@ classdef GLM
                 switch (obj.ContrastDimensions)
                     case 1
                         hold on;
-                        
+                                                
                         if ~(strcmp(obj.modelString,'fullContrasts') || strcmp(obj.modelString,'fullContrasts-subset'))
                             maxC = max(max(obj.data.contrast_cond));
                             evalC = [linspace(maxC,0,100)', zeros(100,1);
                                 zeros(100,1), linspace(0,maxC,100)'];
                             evalC1d = evalC(:,2) - evalC(:,1);
-                            phat = obj.calculatePhat(obj.parameterFits,evalC);
+                            
+                            otherInputs = obj.Zinput(obj.data);
+                            otherInputs(:,1:2)=[];
+                            
+                            if isempty(otherInputs)
+                                inputs = evalC;
+                            else
+                                inputs = [evalC, zeros(length(evalC),size(otherInputs,2))];
+                            end
+                            
+                            phat = obj.calculatePhat(obj.parameterFits,inputs);
                             set(gca, 'ColorOrderIndex', 1);
                             plot(h, evalC1d,phat);
                             title(obj.modelString);
