@@ -9,6 +9,7 @@ classdef GLM
         Zinput;
         ZL;
         ZR;
+        regularise;
         data;
         p_hat;
     end
@@ -137,6 +138,7 @@ classdef GLM
             if isempty(obj.parameterStart)
                 obj.parameterStart = zeros(1,length(obj.parameterLabels));
             end
+
         end
         
         function obj = fit(obj)    
@@ -155,7 +157,15 @@ classdef GLM
             
             inputs = obj.Zinput(obj.data);
             responses = obj.data.response;
-            [obj.parameterFits,~,exitflag] = fmincon(@(b) obj.calculateLogLik(b, inputs, responses), obj.parameterStart(), [], [], [], [], obj.parameterBounds(1,:), obj.parameterBounds(2,:), [], options);
+            
+            if isempty(obj.regularise)
+                objective = @(b) (obj.calculateLogLik(b, inputs, responses));
+            else
+                objective = @(b) (obj.calculateLogLik(b, inputs, responses) + obj.regularise(b));
+            end
+            
+            [obj.parameterFits,~,exitflag] = fmincon(objective, obj.parameterStart(), [], [], [], [], obj.parameterBounds(1,:), obj.parameterBounds(2,:), [], options);
+            
             if ~any(exitflag == [1,2])
                 obj.parameterFits = nan(1,length(obj.parameterLabels));
             end
@@ -175,7 +185,7 @@ classdef GLM
             %Remove trials with repeats
             obj.data = obj.getrow(obj.data,obj.data.repeatNum==1);
             
-            options = optimoptions('fmincon','UseParallel',0,'MaxFunEvals',10000,'MaxIter',2000,'Display','off');
+            options = optimoptions('fmincon','UseParallel',0,'MaxFunEvals',100000,'MaxIter',2000);
             
             if isempty(varargin)
                 C = cvpartition(length(obj.data.response),'LeaveOut');
@@ -184,6 +194,7 @@ classdef GLM
             end
             
             obj.parameterFits = nan(C.NumTestSets,length(obj.parameterLabels));
+            obj.p_hat = [];
             for f=1:C.NumTestSets
                 disp(['Model: ' obj.modelString '. Fold: ' num2str(f) '/' num2str(C.NumTestSets)]);
                 trainIdx = find(C.training(f)==1);
@@ -196,7 +207,13 @@ classdef GLM
                 trainResponses = obj.data.response(trainIdx);
                 testResponse = obj.data.response(testIdx);
                 
-                [obj.parameterFits(f,:),~,exitflag] = fmincon(@(b) obj.calculateLogLik(b, trainInputs, trainResponses), obj.parameterStart(), [], [], [], [], obj.parameterBounds(1,:), obj.parameterBounds(2,:), [], options);
+                if isempty(obj.regularise)
+                    objective = @(b) ( obj.calculateLogLik(b, trainInputs, trainResponses) );
+                else
+                    objective = @(b) ( obj.calculateLogLik(b, trainInputs, trainResponses) + obj.regularise(b));
+                end
+                
+                [obj.parameterFits(f,:),~,exitflag] = fmincon(objective, obj.parameterStart(), [], [], [], [], obj.parameterBounds(1,:), obj.parameterBounds(2,:), [], options);
                 
                 if ~any(exitflag == [1,2])
                     obj.parameterFits(f,:) = nan(1,length(obj.parameterLabels));
