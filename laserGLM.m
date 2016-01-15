@@ -67,7 +67,13 @@ classdef laserGLM < GLM
                     obj.Zinput = @(data)([data.contrast_cond(:,1) data.contrast_cond(:,2) ~isnan(data.laser(:,1))]);
                     obj.ZL = @(P,INPUT)( P(1) + (1-INPUT(:,3)).*(P(2).*INPUT(:,1).^P(7)) + INPUT(:,3).*(P(5).*INPUT(:,1).^P(7)) );
                     obj.ZR = @(P,INPUT)( P(3) + (1-INPUT(:,3)).*(P(4).*INPUT(:,2).^P(7)) + INPUT(:,3).*(P(6).*INPUT(:,2).^P(7)) );
-              
+                case 'C50-subset-laser'
+                    obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','laser-Offset_L','laser-ScaleL_L','laser-Offset_R','laser-ScaleR_R','N','C50'};
+                    obj.parameterBounds = [-inf -inf -inf -inf -inf -inf -inf -inf 0 0;
+                                        +inf +inf +inf +inf +inf +inf +inf +inf +inf +inf];
+                    obj.Zinput = @(data)([data.contrast_cond(:,1) data.contrast_cond(:,2) ~isnan(data.laser(:,1))]);
+                    obj.ZL = @(P,INPUT)( (1-INPUT(:,3)).*(P(1) + P(2).*(INPUT(:,1).^P(9))./(P(10) + INPUT(:,1).^P(9)) ) + INPUT(:,3).*(P(5) + P(6).*(INPUT(:,1).^P(9))./(P(10) + INPUT(:,1).^P(9)) ) );
+                    obj.ZR = @(P,INPUT)( (1-INPUT(:,3)).*(P(3) + P(4).*(INPUT(:,2).^P(9))./(P(10) + INPUT(:,2).^P(9)) ) + INPUT(:,3).*(P(7) + P(8).*(INPUT(:,2).^P(9))./(P(10) + INPUT(:,2).^P(9)) ) );
                     
                 otherwise
                     error('Model does not exist');

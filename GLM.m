@@ -100,9 +100,26 @@ classdef GLM
                     obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','N','C50'};
                     obj.parameterBounds = [-inf -inf -inf -inf 0 0;
                         +inf +inf +inf +inf +inf +inf];
+                    
                     obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
                     obj.ZL = @(P,in)(P(1) + P(2).*(in(:,1).^P(5))./(in(:,1).^P(5) + P(6)^P(5)));
                     obj.ZR = @(P,in)(P(3) + P(4).*(in(:,2).^P(5))./(in(:,2).^P(5) + P(6)^P(5)));
+                case 'Clogistic-subset'
+                    obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','k','c0_L','c0_R'};
+                    obj.parameterBounds = [-inf -inf -inf -inf -inf -inf -inf;
+                        +inf +inf +inf +inf +inf +inf +inf];
+                    
+                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
+                    obj.ZL = @(P,in)(P(1) + P(2)./(1 + exp(-P(5).*(in(:,1) - P(6)))) );
+                    obj.ZR = @(P,in)(P(3) + P(4)./(1 + exp(-P(5).*(in(:,2) - P(7)))) );
+                case 'Supersaturation-subset'
+                    obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','N','C50','Q'};
+                    obj.parameterBounds = [-inf -inf -inf -inf 0 0 0;
+                        +inf +inf +inf +inf +inf +inf 2];
+                    
+                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
+                    obj.ZL = @(P,in)(P(1) + P(2).*(in(:,1).^P(5))./(in(:,1).^P(5)*P(7) + P(6)^P(5)*P(7)));
+                    obj.ZR = @(P,in)(P(3) + P(4).*(in(:,2).^P(5))./(in(:,2).^P(5)*P(7) + P(6)^P(5)*P(7)));
                 case 'AFC'
                     obj.parameterLabels = {'Offset','ScaleL','ScaleR'};
                     obj.parameterBounds = [-inf -inf -inf; +inf +inf +inf];
@@ -153,7 +170,7 @@ classdef GLM
             
             %Remove trials with repeats
             obj.data = obj.getrow(obj.data,obj.data.repeatNum==1);
-            options = optimoptions('fmincon','UseParallel',0,'MaxFunEvals',100000,'MaxIter',2000);
+            options = optimoptions('fmincon','UseParallel',0,'MaxFunEvals',100000,'MaxIter',10000);
             
             inputs = obj.Zinput(obj.data);
             responses = obj.data.response;
@@ -164,12 +181,21 @@ classdef GLM
                 objective = @(b) (obj.calculateLogLik(b, inputs, responses) + obj.regularise(b));
             end
             
-            [obj.parameterFits,~,exitflag] = fmincon(objective, obj.parameterStart(), [], [], [], [], obj.parameterBounds(1,:), obj.parameterBounds(2,:), [], options);
-            
-            if ~any(exitflag == [1,2])
-                obj.parameterFits = nan(1,length(obj.parameterLabels));
+            if exist('opti','file')==2 %use opti toolbox if loaded
+                options = optiset('display','iter','solver','NLOPT');
+                Opt = opti('fun',objective,'bounds',obj.parameterBounds(1,:),obj.parameterBounds(2,:),'x0',obj.parameterStart(),'options',options);
+                [p,~,exitflag,~] = Opt.solve;
+                obj.parameterFits = p';
+                if exitflag < 0
+                    obj.parameterFits = nan(1,length(obj.parameterLabels));
+                end
+            else
+                [obj.parameterFits,~,exitflag] = fmincon(objective, obj.parameterStart(), [], [], [], [], obj.parameterBounds(1,:), obj.parameterBounds(2,:), [], options);
+                if ~any(exitflag == [1,2])
+                    obj.parameterFits = nan(1,length(obj.parameterLabels));
+                end
             end
-            
+
         end
         
         function obj = fitCV(obj,varargin)
@@ -213,11 +239,21 @@ classdef GLM
                     objective = @(b) ( obj.calculateLogLik(b, trainInputs, trainResponses) + obj.regularise(b));
                 end
                 
-                [obj.parameterFits(f,:),~,exitflag] = fmincon(objective, obj.parameterStart(), [], [], [], [], obj.parameterBounds(1,:), obj.parameterBounds(2,:), [], options);
-                
-                if ~any(exitflag == [1,2])
-                    obj.parameterFits(f,:) = nan(1,length(obj.parameterLabels));
+                if exist('opti','file')==2 %use opti toolbox if loaded
+                    options = optiset('solver','NLOPT');
+                    Opt = opti('fun',objective,'bounds',obj.parameterBounds(1,:),obj.parameterBounds(2,:),'x0',obj.parameterStart(),'options',options);
+                    [p,~,exitflag,~] = Opt.solve;
+                    obj.parameterFits(f,:) = p';
+                    if exitflag < 0
+                        obj.parameterFits = nan(1,length(obj.parameterLabels));
+                    end
+                else
+                    [obj.parameterFits(f,:),~,exitflag] = fmincon(objective, obj.parameterStart(), [], [], [], [], obj.parameterBounds(1,:), obj.parameterBounds(2,:), [], options);
+                    if ~any(exitflag == [1,2])
+                        obj.parameterFits(f,:) = nan(1,length(obj.parameterLabels));
+                    end
                 end
+
                 
                 phat = obj.calculatePhat(obj.parameterFits(f,:), testInputs);
                 
@@ -234,13 +270,17 @@ classdef GLM
                     contrast1D = obj.data.contrast_cond(:,2) - obj.data.contrast_cond(:,1);
                     uniqueC1D = unique(contrast1D);
                     prop=[];
+                    binom_se=[];
                     for c = 1:length(uniqueC1D)
                         D = obj.getrow(obj.data,contrast1D == uniqueC1D(c));
                         p = sum([D.response==1 D.response==2 D.response==3])/length(D.response);
                         prop = [prop;p];
+                        bse = sqrt((p.*(1-p)/length(D.response)));
+                        binom_se = [binom_se;bse];
                     end
                     
-                    plot(uniqueC1D,prop,'.','MarkerSize',20);
+%                     plot(uniqueC1D,prop,'.','MarkerSize',20);
+                    errorbar(repmat(uniqueC1D,1,3),prop,0.5*binom_se,'.','MarkerSize',20)
                     xlabel('Contrast1D');
                     ylabel('% choice');
                     
