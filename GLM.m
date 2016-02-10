@@ -68,6 +68,20 @@ classdef GLM
                     obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
                     obj.ZL = @(P,in)(P(1)*ones(length(in(:,1)),1));
                     obj.ZR = @(P,in)(P(2)*ones(length(in(:,1)),1));
+                case 'C-subset'
+                    obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R'};
+                    obj.parameterBounds = [-inf -inf -inf -inf;
+                        +inf +inf +inf +inf];
+                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
+                    obj.ZL = @(P,in)(P(1) + P(2).*in(:,1)   );
+                    obj.ZR = @(P,in)(P(3) + P(4).*in(:,2)  );
+                case 'C'
+                    obj.parameterLabels = {'Offset_L','ScaleL_L','ScaleR_L','Offset_R','ScaleL_R','ScaleR_R'};
+                    obj.parameterBounds = [-inf -inf -inf -inf -inf -inf;
+                        +inf +inf +inf +inf +inf +inf];
+                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
+                    obj.ZL = @(P,in)(P(1) + P(2).*in(:,1) + P(3).*in(:,2));
+                    obj.ZR = @(P,in)(P(4) + P(5).*in(:,1) + P(6).*in(:,2));
                 case 'C^N'
                     obj.parameterLabels = {'Offset_L','ScaleL_L','ScaleR_L','Offset_R','ScaleL_R','ScaleR_R','N'};
                     obj.parameterBounds = [-inf -inf -inf -inf -inf -inf 0;
@@ -77,8 +91,8 @@ classdef GLM
                     obj.ZR = @(P,in)(P(4) + P(5).*in(:,1).^P(7) + P(6).*in(:,2).^P(7));
                 case 'C^N-subset'
                     obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','N'};
-                    obj.parameterBounds = [-inf -inf -inf -inf 0;
-                        +inf +inf +inf +inf +inf];
+                    obj.parameterBounds = [-inf -inf -inf -inf 0.1;
+                        +inf +inf +inf +inf 1];
                     obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
                     obj.ZL = @(P,in)(P(1) + P(2).*in(:,1).^P(5));
                     obj.ZR = @(P,in)(P(3) + P(4).*in(:,2).^P(5));
@@ -147,11 +161,47 @@ classdef GLM
                     obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2) D.hist]);
                     obj.ZL = @(P,in)( P(1) + P(2).*in(:,1).^P(7) + P(5).*in(:,3) );
                     obj.ZR = @(P,in)( P(3) + P(4).*in(:,2).^P(7) + P(6).*in(:,3) );
+                case 'C^N-subset-Qlearning'
+                    obj.parameterLabels = {'ScaleL_L','ScaleR_R','Q_L','Q_R','N'};
+                    obj.parameterBounds = [-inf(1,2) 1 1 0.1;
+                                            inf(1,2) 1 1 1];
+                    obj.Zinput = @(D,B)(behav.GLM_QlearningInputs(D,B));
+                    obj.ZL = @(P,in)(P(1).*in(:,1).^P(5) + P(3).*in(:,3) ); %+ P(5).*in(:,5));
+                    obj.ZR = @(P,in)(P(2).*in(:,2).^P(5) + P(4).*in(:,4) ); %+ P(5).*in(:,5));
+                    obj.parameterStart = @()([-1+2*rand(1,4) 0.5]);
+                    
+                case 'C^N-subset-2AFC'
+                    obj.parameterLabels = {'OffsetL-R','ScaleL-R'};
+                    obj.parameterBounds = [-inf -inf;
+                        +inf +inf];
+                    obj.Zinput = @(D)([D.contrast_cond(:,2)-D.contrast_cond(:,1)]);
+                    N = 0.4;
+                    obj.ZL = @(P,in)( P(1) + P(2).*in(:,1)  );
+                    obj.parameterStart = @()([10*rand(1,2)]);
+                    
+                case 'C^N-subset-Qlearning-2AFC'
+                    obj.parameterLabels = {'OffsetL-R','ScaleL-R','QL-R'};
+                    obj.parameterBounds = [-inf -inf -inf;
+                        +inf +inf +inf];
+                    obj.Zinput = @(D)(behav.GLM_QlearningInputs(D));
+                    N = 0.4;
+                    obj.ZL = @(P,in)( P(1) + P(2).*in(:,1) + P(3).*in(:,2) );
+                    obj.parameterStart = @()([10*rand(1,3)]);
+                    
+                case 'C^N-subset-Qlearning-noBias-2AFC'
+                    obj.parameterLabels = {'ScaleL-R','QL-R'};
+                    obj.parameterBounds = [-inf -inf;
+                        +inf +inf];
+                    obj.Zinput = @(D)(behav.GLM_QlearningInputs(D));
+                    N = 0.4;
+                    obj.ZL = @(P,in)( P(1).*in(:,1) + P(2).*in(:,2) );
+                    obj.parameterStart = @()([10*rand(1,2)]);
+                    
                 otherwise
                     error('Model does not exist');
                     
             end
-            
+           
             if isempty(obj.parameterStart)
                 obj.parameterStart = zeros(1,length(obj.parameterLabels));
             end
@@ -166,23 +216,24 @@ classdef GLM
             end
                         
             %Trim first 5 trials
-            obj.data = obj.getrow(obj.data,6:length(obj.data.response));
+%             obj.data = obj.getrow(obj.data,6:length(obj.data.response));
             
             %Remove trials with repeats
-            obj.data = obj.getrow(obj.data,obj.data.repeatNum==1);
+%             obj.data = obj.getrow(obj.data,obj.data.repeatNum==1);
             options = optimoptions('fmincon','UseParallel',0,'MaxFunEvals',100000,'MaxIter',10000);
             
-            inputs = obj.Zinput(obj.data);
             responses = obj.data.response;
             
             if isempty(obj.regularise)
-                objective = @(b) (obj.calculateLogLik(b, inputs, responses));
+                objective = @(b) (obj.calculateLogLik(b, obj.Zinput(obj.data), responses));
             else
-                objective = @(b) (obj.calculateLogLik(b, inputs, responses) + obj.regularise(b));
+                objective = @(b) (obj.calculateLogLik(b, obj.Zinput(obj.data), responses) + obj.regularise(b));
             end
             
+            
+            
             if exist('opti','file')==2 %use opti toolbox if loaded
-                options = optiset('display','iter','solver','NLOPT');
+                options = optiset('display','final','solver','NLOPT');
                 Opt = opti('fun',objective,'bounds',obj.parameterBounds(1,:),obj.parameterBounds(2,:),'x0',obj.parameterStart(),'options',options);
                 [p,~,exitflag,~] = Opt.solve;
                 obj.parameterFits = p';
@@ -198,7 +249,7 @@ classdef GLM
 
         end
         
-        function obj = fitCV(obj,varargin)
+        function [obj,varargout] = fitCV(obj,varargin)
             %Crossvalidated fitting
             
             if isempty(obj.ZL)
@@ -206,10 +257,10 @@ classdef GLM
             end
             
             %Trim first 5 trials
-            obj.data = obj.getrow(obj.data,6:length(obj.data.response));
+%             obj.data = obj.getrow(obj.data,6:length(obj.data.response));
             
             %Remove trials with repeats
-            obj.data = obj.getrow(obj.data,obj.data.repeatNum==1);
+%             obj.data = obj.getrow(obj.data,obj.data.repeatNum==1);
             
             options = optimoptions('fmincon','UseParallel',0,'MaxFunEvals',100000,'MaxIter',2000);
             
@@ -260,7 +311,11 @@ classdef GLM
                 for i = 1:length(testResponse)
                     obj.p_hat(testIdx(i),1) = phat(i,testResponse(i));
                 end
+                
+                LL(f)=mean(-log2(obj.p_hat(testIdx)));
             end
+            
+            varargout = {LL};
         end
         
         function h = plotData(obj)
@@ -270,19 +325,35 @@ classdef GLM
                     contrast1D = obj.data.contrast_cond(:,2) - obj.data.contrast_cond(:,1);
                     uniqueC1D = unique(contrast1D);
                     prop=[];
-                    binom_se=[];
+                    prop_ci=[];
                     for c = 1:length(uniqueC1D)
                         D = obj.getrow(obj.data,contrast1D == uniqueC1D(c));
-                        p = sum([D.response==1 D.response==2 D.response==3])/length(D.response);
+                        p = sum([D.response==1 D.response==2 D.response==3],1)/length(D.response);
+                        
+                        [p,pci]=binofit(sum([D.response==1 D.response==2 D.response==3],1),length(D.response),0.05);
+                        
+                        prop_ci(:,:,c) = pci;
+                        
                         prop = [prop;p];
-                        bse = sqrt((p.*(1-p)/length(D.response)));
-                        binom_se = [binom_se;bse];
+                        %                         bse = sqrt((p.*(1-p)/length(D.response)));
+                        %                         binom_se = [binom_se;bse];
                     end
                     
+                    
+                    
 %                     plot(uniqueC1D,prop,'.','MarkerSize',20);
-                    errorbar(repmat(uniqueC1D,1,3),prop,0.5*binom_se,'.','MarkerSize',20)
-                    xlabel('Contrast1D');
-                    ylabel('% choice');
+                    
+                    err = [prop - squeeze(prop_ci(:,1,:))', squeeze(prop_ci(:,2,:))' - prop];
+                    
+                    if max(obj.data.response) == 2 %for 2AFC tasks
+                        r = 2;
+                    else
+                        r = 3;
+                    end
+                    
+                    errorbar(repmat(uniqueC1D,1,r),prop(:,1:r),err(:,[1:r]),err(:,[4:(3+r)]),'.','MarkerSize',20)
+                    xlabel('contrast');
+                    ylabel('P( choice | contrast)');
                     
                     h=gca;
                     
@@ -300,14 +371,14 @@ classdef GLM
                         end
                     end
                     
-                    titles = {'%L','%R','%NG'};
+                    titles = {'P( left | contrast)','P( right | contrast)','P( nogo | contrast)'};
                     for i=1:3
                         h(i)=subplot(2,3,i);
                         imagesc(uniqueCR,uniqueCL,prop(:,:,i),[0 1]);
                         set(gca,'YDir','normal');
                         
-                        xlabel('C Right');
-                        ylabel('C Left');
+                        xlabel('c right');
+                        ylabel('c left');
                         title(titles{i});
                         axis square;
                     end
@@ -373,7 +444,7 @@ classdef GLM
                         end
                         
                         figure(fig);
-                        titles = {'Pred %L','Pred %R','Pred %NG'};
+                        titles = {'pred P( left | contrast)','pred P( right | contrast)','pred P( nogo | contrast)'};
                         for i=1:3
                             subplot(2,3,i+3);
                             imagesc(evalCR,evalCL,prop(:,:,i),[0 1]);
