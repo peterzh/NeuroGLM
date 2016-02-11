@@ -204,7 +204,7 @@ classdef neurGLM
             
         end
         
-        function [psthSm,bins] = PSTH(obj,neuronID,epochID,splitBy,varargin)
+        function [psthSm,bins] = PSTH(obj,neuronID,epochID,splitBy,smoothing,legendFlag)
             epoch = obj.epochs{epochID,1};
             time = obj.epochs{epochID,2};
             
@@ -280,8 +280,7 @@ classdef neurGLM
                 
                 %smoothing
                 % smooth the PSTH
-                if ~isempty(varargin)
-                    smoothing = varargin{1};
+                if smoothing>0
                     numEle = sum(smoothing > cumsum(diff(bins(:,tr))));
                     gw = gausswin(numEle,3);
                     smWin = gw./sum(gw);
@@ -299,37 +298,38 @@ classdef neurGLM
             switch(splitBy)
                 case 'choice'
                     plot(binsSm, psthSm');
-                    if any(cellfun(@(i)strcmp(i,'legend'),varargin))
+                    if legendFlag==1
                         legend('left choice','right choice');
                     end
                 case 'stimulus'
                     plot(binsSm, psthSm');
-                    if any(cellfun(@(i)strcmp(i,'legend'),varargin))
+                    if legendFlag==1
                         legend('left contrast','right contrast');
                     end
                 case 'stim+choice'
                     plot(binsSm(:,1),psthSm(1,:)','b-',...
-                         binsSm(:,2),psthSm(2,:)','r-',...
-                         binsSm(:,3),psthSm(3,:)','k-',...
-                         binsSm(:,4),psthSm(4,:)','b--',...
-                         binsSm(:,5),psthSm(5,:)','r--',...
-                         binsSm(:,6),psthSm(6,:)','k--');
-                     
-                     if any(cellfun(@(i)strcmp(i,'legend'),varargin))
-                         legend('left choice + left contrast',...
-                             'left choice + right contrast',...
-                             'left choice + zero contrast',...
-                             'right choice + left contrast',...
-                             'right choice + right contrast',...
-                             'right choice + zero contrast');
-                     end
+                        binsSm(:,2),psthSm(2,:)','r-',...
+                        binsSm(:,3),psthSm(3,:)','k-',...
+                        binsSm(:,4),psthSm(4,:)','b--',...
+                        binsSm(:,5),psthSm(5,:)','r--',...
+                        binsSm(:,6),psthSm(6,:)','k--','LineWidth',1);
+                    set(gca,'box','off');
+                    if legendFlag==1
+                        legend('left choice + left contrast',...
+                            'left choice + right contrast',...
+                            'left choice + zero contrast',...
+                            'right choice + left contrast',...
+                            'right choice + right contrast',...
+                            'right choice + zero contrast');
+                    end
             end
             
             xlim(time);
+            set(gcf,'color','w');
             
         end
         
-        function popPSTH(obj,varargin)
+        function popPSTH(obj,smoothing)
             epo = 1:size(obj.epochs,1);
             
             numgroups = length(obj.split.Groups);
@@ -347,8 +347,8 @@ classdef neurGLM
                     ax(i)=subplot(numgroups,length(epo),a);
                     
                     
-                    obj.PSTH(cellIdxs,i,'stim+choice',varargin{:});
-                    
+                    obj.PSTH(cellIdxs,i,'stim+choice',smoothing,(i==length(epo) && g == numgroups));
+
                     if g == 1
                         title([obj.epochs{i,1}]);
                     end
