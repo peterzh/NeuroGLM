@@ -29,6 +29,7 @@ classdef neurGLM
             s=load(fullfile(cw_dir,'spikes.mat'));
             cwe=load(fullfile(cw_dir,'cwEvents.mat'));
             inclTrials = [cwl.cwLabels.repeatNum==1 & cwl.cwLabels.inclTrials]';
+%             inclTrials = ones(length(cwl.cwLabels.repeatNum),1);
             
             %remove invalid trials
             cwl.cwLabels=rmfield(cwl.cwLabels,'contrastIndVals');
@@ -204,7 +205,7 @@ classdef neurGLM
             
         end
         
-        function [psthSm,bins] = PSTH(obj,neuronID,epochID,splitBy,smoothing,legendFlag)
+        function [psthSm,binsSm] = calculatePSTH(obj,neuronID,epochID,splitBy,smoothing)
             epoch = obj.epochs{epochID,1};
             time = obj.epochs{epochID,2};
             
@@ -218,7 +219,7 @@ classdef neurGLM
             
             sTimes_all=arrayfun(@(u){obj.spikes.shanks.units(u).spikeTimes},neuronID);
             sTimes_all(cellfun(@isempty,sTimes_all))=[];
-            spikeTimes=cell2mat(sTimes_all);
+            spikeTimes=sort(cell2mat(sTimes_all));
             
             if isempty(spikeTimes)
                 spikeTimes = 0;
@@ -243,7 +244,6 @@ classdef neurGLM
                     choice = obj.cwLabels.responseMade;
                     
                     trGroups = [choice stim];
-                case 'stimulusExact' %{-1,-0.5,..,0,...,0.5,1}
             end
             
             eventTimes = obj.cwEvents.(epoch);
@@ -261,6 +261,11 @@ classdef neurGLM
 %                 ranges_tr = ranges(trGroups==groupings(tr),:);
 %                 rangeLabel_tr = rangeLabel(trGroups==groupings(tr));
                 ranges_tr = ranges(ic==tr,:);
+                
+                if size(ranges_tr,1) < 10
+                    warning(['There are only ' num2str(size(ranges_tr,1)) ' trials of condition: '  num2str(tr)]);
+                end
+                
                 rangeLabel_tr = rangeLabel(ic==tr);
                 
                 wr_tr = WithinRanges(spikeTimes, ranges_tr, rangeLabel_tr', 'vector');
@@ -269,7 +274,6 @@ classdef neurGLM
                 stRelToEvent = stIn-eventTimes(wr_tr); % subtract the event time corresponding to each spike
                 
                 [psth(tr,:),bins(:,tr)] = hist(stRelToEvent, time(1):0.01:time(2));
-%                 [psth(tr,:),bins(:,tr)] = hist(stRelToEvent, linspace(time(1),time(2),10));
                 [rasterX{tr},yy] = rasterize(stRelToEvent);
                 rasterY{tr} = yy+reshape(repmat(wr_tr,3,1),1,length(wr_tr)*3); % yy is of the form [0 1 NaN 0 1 NaN...] so just need to add trial number to everything
                 
@@ -291,45 +295,120 @@ classdef neurGLM
                     binsSm(:,tr) = bins(trimStart : (end-trimEnd),tr);
                 else
                     psthSm(tr,:) = psth(tr,:);
+                    binsSm(:,tr) = bins(:,tr);
                 end
                 
+            end
+
+        end
+               
+        function [psthSm,binsSm] = PSTH(obj,neuronID,epochID,splitBy,smoothing,legendFlag,errorFlag)
+            [psthSm,binsSm] = obj.calculatePSTH(neuronID,epochID,splitBy,smoothing);
+            
+            if errorFlag == 1
+                psthError = obj.calculatePSTHError(neuronID,epochID,splitBy,smoothing);
             end
             
             switch(splitBy)
                 case 'choice'
                     plot(binsSm, psthSm');
+                    
                     if legendFlag==1
-                        legend('left choice','right choice');
+                        if max(obj.cwLabels.responseMade)==2
+                            legend('left choice','right choice');
+                        elseif max(obj.cwLabels.responseMade)==3
+                            legend('left choice','right choice','nogo choice');
+                        end
                     end
                 case 'stimulus'
                     plot(binsSm, psthSm');
                     if legendFlag==1
-                        legend('left contrast','right contrast');
+                        legend('left contrast','right contrast','zero contrast');
                     end
                 case 'stim+choice'
-                    plot(binsSm(:,1),psthSm(1,:)','b-',...
-                        binsSm(:,2),psthSm(2,:)','r-',...
-                        binsSm(:,3),psthSm(3,:)','k-',...
-                        binsSm(:,4),psthSm(4,:)','b--',...
-                        binsSm(:,5),psthSm(5,:)','r--',...
-                        binsSm(:,6),psthSm(6,:)','k--','LineWidth',1);
-                    set(gca,'box','off');
-                    if legendFlag==1
-                        legend('left choice + left contrast',...
-                            'left choice + right contrast',...
-                            'left choice + zero contrast',...
-                            'right choice + left contrast',...
-                            'right choice + right contrast',...
-                            'right choice + zero contrast');
+
+                    if max(obj.cwLabels.responseMade)==2
+                        plot(binsSm(:,1),psthSm(1,:)','b-',...
+                            binsSm(:,2),psthSm(2,:)','r-',...
+                            binsSm(:,3),psthSm(3,:)','k-',...
+                            binsSm(:,4),psthSm(4,:)','b--',...
+                            binsSm(:,5),psthSm(5,:)','r--',...
+                            binsSm(:,6),psthSm(6,:)','k--','LineWidth',0.5);
+                        set(gca,'box','off');
+                        if legendFlag==1
+                            legend('left choice + left contrast',...
+                                'left choice + right contrast',...
+                                'left choice + zero contrast',...
+                                'right choice + left contrast',...
+                                'right choice + right contrast',...
+                                'right choice + zero contrast',...
+                                'Orientation','horizontal');
+                        end
+                    elseif max(obj.cwLabels.responseMade)==3
+                        plot(binsSm(:,1),psthSm(1,:)','b-',...
+                            binsSm(:,2),psthSm(2,:)','r-',...
+                            binsSm(:,3),psthSm(3,:)','k-',...
+                            binsSm(:,4),psthSm(4,:)','b--',...
+                            binsSm(:,5),psthSm(5,:)','r--',...
+                            binsSm(:,6),psthSm(6,:)','k--',...
+                            binsSm(:,7),psthSm(7,:)','b-.',...
+                            binsSm(:,8),psthSm(8,:)','r-.',...
+                            binsSm(:,9),psthSm(9,:)','k-.','LineWidth',0.5);
+                        set(gca,'box','off');
+                        if legendFlag==1
+                            legend('left choice + left contrast',...
+                                'left choice + right contrast',...
+                                'left choice + zero contrast',...
+                                'right choice + left contrast',...
+                                'right choice + right contrast',...
+                                'right choice + zero contrast',...
+                                'nogo choice + left contrast',...
+                                'nogo choice + right contrast',...
+                                'nogo choice + zero contrast',...
+                                'Orientation','vertical');
+                        end
                     end
             end
-            
-            xlim(time);
+            xlim(obj.epochs{epochID,2});
             set(gcf,'color','w');
-            
         end
         
-        function popPSTH(obj,smoothing)
+        function PSTHError(obj,neuronID,epochID,splitBy,smoothing)
+            epoch = obj.epochs{epochID,1};
+            time = obj.epochs{epochID,2};
+            
+            if strcmp(neuronID,'all')
+                neuronID = obj.spikes.shanks.singleUnitInds;
+            end
+            
+            if size(neuronID,2)>size(neuronID,1)
+                neuronID = neuronID';
+            end
+            
+%             psths = nan(length(neuronID),length(time(1):0.01:time(2)));
+            for n = 1:length(neuronID)
+                [psths(:,:,n),bins] = obj.calculatePSTH(neuronID(n),epochID,splitBy,smoothing);
+            end
+            psthMean = sum(psths,3);
+            psthError = std(psths,[],3);
+            
+            
+            errH = psthMean+psthError;
+            errL = psthMean-psthError;
+                    
+            figure;
+            ax = subplot(1,1,1);
+            cols = {'r','g','b','k','m','c'};
+            hold on;
+            for i = 1:size(psthMean,1)
+%             for i = [2,4,6]
+                plotWithErrUL(ax,bins(:,i)',psthMean(i,:),[errH(i,:); errL(i,:)],cols{i});
+            end
+            hold off;
+                    
+        end
+        
+        function popPSTH(obj,splitBy,smoothing)
             epo = 1:size(obj.epochs,1);
             
             numgroups = length(obj.split.Groups);
@@ -347,14 +426,14 @@ classdef neurGLM
                     ax(i)=subplot(numgroups,length(epo),a);
                     
                     
-                    obj.PSTH(cellIdxs,i,'stim+choice',smoothing,(i==length(epo) && g == numgroups));
+                    obj.PSTH(cellIdxs,i,splitBy,smoothing,(i==length(epo) && g == numgroups),0);
 
                     if g == 1
                         title([obj.epochs{i,1}]);
                     end
                     
                     if i == 1
-                        ylabel(sprintf(['Group ' num2str(g) '  \n' obj.split.splitVals{g} ' \n n=' num2str(length(cellIdxs))]));
+                        ylabel(sprintf(['Group ' num2str(g) '  \n' obj.split.splitVals{g} ' \n n=' num2str(length(cellIdxs))]),'FontSize',8);
                     end
                     a=a+1;
                 end
@@ -366,7 +445,7 @@ classdef neurGLM
             set(gcf,'color','w');
         end
         
-        function neurPSTH(obj,neuronIDs,epochID,splitBy,varargin)
+        function neurPSTH(obj,neuronIDs,epochID,splitBy,smoothing)
             if strcmp(neuronIDs,'all')
                 neuronIDs = obj.spikes.shanks.singleUnitInds;
             end
@@ -385,15 +464,15 @@ classdef neurGLM
             end
             
 %             psthImageT = [obj.epochs{epochID,2}(1):0.01:obj.epochs{epochID,2}(2)];
-%             psthImageDiff = nan(numN,length(psthImageT),1);
+%             psthImage = nan(numN,length(psthImageT),1);
             figure;
             for i = 1:numN
                 subplot(ceil(sqrt(numN)),ceil(sqrt(numN)),i);
-                [psthSm,~]=obj.PSTH(neuronIDs(i),epochID,splitBy,varargin{:});
+                [psthSm,binsSm]=obj.PSTH(neuronIDs(i),epochID,splitBy,smoothing,0,0);
 %                 psthImageDiff(i,:,1) = (psthSm(1,:)-psthSm(4,:))/max(max(psthSm));
                 %                 psthImageDiff(i,:,2) = (psthSm(1,:)-psthSm(3,:))/max(max(psthSm));
                 %                 psthImageDiff(i,:,3) = (psthSm(2,:)-psthSm(3,:))/max(max(psthSm));
-                
+                psthImage(i,:) = psthSm(1,:)/max(max(psthSm));
                 
                 set(gca,'YTickLabel',{},'box','off','YColor',[1 1 1])
                 line([0 0],get(gca,'YLim'),'Color',[0 0 0 0.2]);
@@ -410,17 +489,17 @@ classdef neurGLM
             set(h,'Visible','on');
             set(gcf,'color','w');
             
-%             figure;
+            figure;
             
 %             psthImageDiff(isnan(psthImageDiff))=0;
             %             for j = 1:3
             %                 subplot(1,3,j);
-%             imagesc(psthImageT,neuronIDs,psthImageDiff);
+            imagesc(binsSm(:,1),neuronIDs,psthImage);
             
             
         end
         
-        function GPFA(obj)
+        function GPFA_TODO(obj)
             %Gaussian process factor analysis using toolbox from Yu
             %https://users.ece.cmu.edu/~byronyu/software.shtml
         end
