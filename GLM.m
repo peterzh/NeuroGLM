@@ -498,13 +498,16 @@ classdef GLM
                     for c = 1:length(uniqueC1D)
                         for r = 1:rMax
                             plot(prop(c,r), phat(c,r), rSymbols{r}, 'Color', 'r')
-                            hold on;
+                            hold on;                            
+                        end
+                        for r = 1:rMax
                             plot(squeeze(prop_ci(c,r,:)), phat(c,r)*ones(1,2), 'r')
                         end
                     end
                     plot([0 1], [0 1], 'k--');
                     xlabel('actual probability');
                     ylabel('predicted probability');
+                    legend({'resp=1', 'resp=2', 'resp=3'}, 'Location', 'Best');
                     axis square
                     box off
                     
