@@ -17,8 +17,13 @@ classdef laserGLM < GLM
             obj@GLM(inputData);
             
             if isa(inputData,'char')
-                L=load(dat.expFilePath(inputData, 'laserManip', 'm'));
-                obj.data.laser = L.laserCoordByTrial; 
+                try
+                    L=load(dat.expFilePath(inputData, 'laserManip', 'm'));
+                    obj.data.laser = L.laserCoordByTrial; 
+                catch
+                    getLaserLabels(inputData);
+                    error('laserCoordByTrial not found, generating..');
+                end
             end
             sites = unique(obj.data.laser(~isnan(obj.data.laser(:,1)),:),'rows');
             
@@ -236,6 +241,8 @@ classdef laserGLM < GLM
             phat = obj.calculatePhat(testParams, inputs);
             logLik = -sum(log( phat(sub2ind(size(phat), [1:length(responses)]', responses)) ));
         end
+        
+        
         
     end
 end

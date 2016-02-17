@@ -12,7 +12,7 @@ classdef neurGLM
         cwLabels;
         cwEvents;
         spikes;
-        timebinWidth=0.1;
+        timebinWidth=0.01;
         split;
     end
     
@@ -273,13 +273,13 @@ classdef neurGLM
                 stIn = spikeTimes(wr_tr>0); wr_tr = wr_tr(wr_tr>0);
                 stRelToEvent = stIn-eventTimes(wr_tr); % subtract the event time corresponding to each spike
                 
-                [psth(tr,:),bins(:,tr)] = hist(stRelToEvent, time(1):0.01:time(2));
+                [psth(tr,:),bins(:,tr)] = hist(stRelToEvent, time(1):obj.timebinWidth:time(2));
                 [rasterX{tr},yy] = rasterize(stRelToEvent);
                 rasterY{tr} = yy+reshape(repmat(wr_tr,3,1),1,length(wr_tr)*3); % yy is of the form [0 1 NaN 0 1 NaN...] so just need to add trial number to everything
                 
                 %normalise each PSTH by the number of trials used to
                 %generate that PSTH
-                psth(tr,:) = psth(tr,:)/size(ranges_tr,1);
+                psth(tr,:) = psth(tr,:)/(size(ranges_tr,1)*obj.timebinWidth);
                 
                 
                 %smoothing
