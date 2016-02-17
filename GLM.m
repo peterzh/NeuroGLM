@@ -461,6 +461,60 @@ classdef GLM
             end
         end
         
+        function plotPredVsActual(obj)
+            switch(obj.ContrastDimensions)
+                case 1
+                    contrast1D = diff(obj.data.contrast_cond, [], 2);
+                    uniqueC1D = unique(contrast1D);
+                    nC = length(uniqueC1D);
+                    prop=zeros(nC,3);
+                    prop_ci=zeros(nC,3,2);
+                    for c = 1:length(uniqueC1D)
+                        D = obj.getrow(obj.data,contrast1D == uniqueC1D(c));
+                        respSum = sum([D.response==1 D.response==2 D.response==3],1);
+                        p = respSum/length(D.response);
+                        
+                        [p,pci]=binofit(respSum,length(D.response),0.05);
+                        
+                        prop_ci(c,:,:) = pci;
+                        
+                        prop(c,:) = p;
+                    end                                                            
+                    
+                    if max(obj.data.response) == 2 %for 2AFC tasks
+                        rMax = 2;
+                    else
+                        rMax = 3;
+                    end                    
+
+                    evalCon = unique(obj.data.contrast_cond,'rows');
+                    evalC1d = evalCon(:,2) - evalCon(:,1);
+                    [~,sortIdx]=sort(evalC1d);
+                    evalCon = evalCon(sortIdx,:);
+                    phat = obj.calculatePhat(obj.parameterFits,evalCon);
+                    
+                    rSymbols = {'x', '+', 'o'};
+                    h = axes();
+                    for c = 1:length(uniqueC1D)
+                        for r = 1:rMax
+                            plot(prop(c,r), phat(c,r), rSymbols{r}, 'Color', 'r')
+                            hold on;
+                            plot(squeeze(prop_ci(c,r,:)), phat(c,r)*ones(1,2), 'r')
+                        end
+                    end
+                    plot([0 1], [0 1], 'k--');
+                    xlabel('actual probability');
+                    ylabel('predicted probability');
+                    axis square
+                    box off
+                    
+                case 2
+                    fprintf(1, 'plotPredVsActual not yet implemented for 2D task\n')
+            end
+        end
+                    
+        
+        
         function h = plotParams(obj)
             if size(obj.parameterFits,1)==1
                 bar(obj.parameterFits);
