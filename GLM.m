@@ -461,7 +461,14 @@ classdef GLM
             end
         end
         
-        function plotPredVsActual(obj)
+        function plotPredVsActual(obj, varargin)
+            
+            plotParams.Color = 'r';
+            plotParams.ax = gca;
+            if ~isempty(varargin)
+                plotParams = mergeStructs(varargin{1},plotParams);
+            end
+            
             switch(obj.ContrastDimensions)
                 case 1
                     contrast1D = diff(obj.data.contrast_cond, [], 2);
@@ -494,17 +501,17 @@ classdef GLM
                     phat = obj.calculatePhat(obj.parameterFits,evalCon);
                     
                     rSymbols = {'x', '+', 'o'};
-                    h = axes();
+                    
                     for c = 1:length(uniqueC1D)
                         for r = 1:rMax
-                            plot(prop(c,r), phat(c,r), rSymbols{r}, 'Color', 'r')
+                            plot(plotParams.ax, prop(c,r), phat(c,r), rSymbols{r}, 'Color', plotParams.Color)
                             hold on;                            
                         end
                         for r = 1:rMax
-                            plot(squeeze(prop_ci(c,r,:)), phat(c,r)*ones(1,2), 'r')
+                            plot(plotParams.ax, squeeze(prop_ci(c,r,:)), phat(c,r)*ones(1,2), 'Color', plotParams.Color)
                         end
                     end
-                    plot([0 1], [0 1], 'k--');
+                    plot(plotParams.ax, [0 1], [0 1], 'k--');
                     xlabel('actual probability');
                     ylabel('predicted probability');
                     legend({'resp=1', 'resp=2', 'resp=3'}, 'Location', 'Best');
