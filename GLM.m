@@ -112,12 +112,20 @@ classdef GLM
                     obj.ZR = @(P,in)(P(4) + P(5).*(in(:,1).^P(7))./(in(:,1).^P(7) + P(8)) + P(6).*(in(:,2).^P(7))./(in(:,2).^P(7) + P(8)^P(7)));
                 case 'C50-subset'
                     obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','N','C50'};
-                    obj.parameterBounds = [-inf -inf -inf -inf 1 0.05;
-                        +inf +inf +inf +inf 1 0.05];
+                    obj.parameterBounds = [-inf -inf -inf -inf 0.1 0.01;
+                        +inf +inf +inf +inf 3 0.5];
                     
                     obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
                     obj.ZL = @(P,in)(P(1) + P(2).*(in(:,1).^P(5))./(in(:,1).^P(5) + P(6)^P(5)));
                     obj.ZR = @(P,in)(P(3) + P(4).*(in(:,2).^P(5))./(in(:,2).^P(5) + P(6)^P(5)));
+                case 'C50LR-subset'
+                    obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','N_L','C50_L', 'N_R', 'C50_R'};
+                    obj.parameterBounds = [-inf -inf -inf -inf 0.1 0.01 0.1 0.01;
+                        +inf +inf +inf +inf 3 0.5 3 0.5];
+                    
+                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
+                    obj.ZL = @(P,in)(P(1) + P(2).*(in(:,1).^P(5))./(in(:,1).^P(5) + P(6)^P(5)));
+                    obj.ZR = @(P,in)(P(3) + P(4).*(in(:,2).^P(7))./(in(:,2).^P(7) + P(8)^P(7)));    
                 case 'Clogistic-subset'
                     obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','k','c0_L','c0_R'};
                     obj.parameterBounds = [-inf -inf -inf -inf -inf -inf -inf;
