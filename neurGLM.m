@@ -276,7 +276,9 @@ classdef neurGLM
                 [psth(tr,:),bins(:,tr)] = hist(stRelToEvent, time(1):obj.timebinWidth:time(2));
                 [rasterX{tr},yy] = rasterize(stRelToEvent);
                 rasterY{tr} = yy+reshape(repmat(wr_tr,3,1),1,length(wr_tr)*3); % yy is of the form [0 1 NaN 0 1 NaN...] so just need to add trial number to everything
-                
+                rasterX{tr} = rasterX{tr}(1:3:end);
+                rasterY{tr} = rasterY{tr}(1:3:end);
+
                 %normalise each PSTH by the number of trials used to
                 %generate that PSTH
                 psth(tr,:) = psth(tr,:)/(size(ranges_tr,1)*obj.timebinWidth);
@@ -299,7 +301,8 @@ classdef neurGLM
                 end
                 
             end
-
+            
+%             scatter(rasterX{1},rasterY{1},'.')
         end
                
         function [psthSm,binsSm] = PSTH(obj,neuronID,epochID,splitBy,smoothing,legendFlag,errorFlag)

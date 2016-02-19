@@ -22,7 +22,8 @@ classdef laserGLM < GLM
                     obj.data.laser = L.laserCoordByTrial; 
                 catch
                     getLaserLabels(inputData);
-                    error('laserCoordByTrial not found, generating..');
+                    L=load(dat.expFilePath(inputData, 'laserManip', 'm'));
+                    obj.data.laser = L.laserCoordByTrial; 
                 end
             end
             sites = unique(obj.data.laser(~isnan(obj.data.laser(:,1)),:),'rows');
