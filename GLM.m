@@ -522,7 +522,7 @@ classdef GLM
                     plot(plotParams.ax, [0 1], [0 1], 'k--');
                     xlabel('actual probability');
                     ylabel('predicted probability');
-                    legend({'resp=1', 'resp=2', 'resp=3'}, 'Location', 'Best');
+                    legend({'left response', 'right', 'nogo'}, 'Location', 'Best');
                     axis square
                     box off
                     
