@@ -508,7 +508,7 @@ classdef GLM
                     evalCon = evalCon(sortIdx,:);
                     phat = obj.calculatePhat(obj.parameterFits,evalCon);
                     
-                    rSymbols = {'x', '+', 'o'};
+                    rSymbols = {'o', '.', 'x'};
                     
                     for c = 1:length(uniqueC1D)
                         for r = 1:rMax
