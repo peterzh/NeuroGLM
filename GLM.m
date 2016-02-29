@@ -240,20 +240,20 @@ classdef GLM
             
             
             
-            if exist('opti','file')==2 %use opti toolbox if loaded
-                options = optiset('display','final','solver','NLOPT');
-                Opt = opti('fun',objective,'bounds',obj.parameterBounds(1,:),obj.parameterBounds(2,:),'x0',obj.parameterStart(),'options',options);
-                [p,~,exitflag,~] = Opt.solve;
-                obj.parameterFits = p';
-                if exitflag < 0
-                    obj.parameterFits = nan(1,length(obj.parameterLabels));
-                end
-            else
+%             if exist('opti','file')==2 %use opti toolbox if loaded
+%                 options = optiset('display','final','solver','NLOPT');
+%                 Opt = opti('fun',objective,'bounds',obj.parameterBounds(1,:),obj.parameterBounds(2,:),'x0',obj.parameterStart(),'options',options);
+%                 [p,~,exitflag,~] = Opt.solve;
+%                 obj.parameterFits = p';
+%                 if exitflag < 0
+%                     obj.parameterFits = nan(1,length(obj.parameterLabels));
+%                 end
+%             else
                 [obj.parameterFits,~,exitflag] = fmincon(objective, obj.parameterStart(), [], [], [], [], obj.parameterBounds(1,:), obj.parameterBounds(2,:), [], options);
                 if ~any(exitflag == [1,2])
                     obj.parameterFits = nan(1,length(obj.parameterLabels));
                 end
-            end
+%             end
 
         end
         
@@ -298,20 +298,20 @@ classdef GLM
                     objective = @(b) ( obj.calculateLogLik(b, trainInputs, trainResponses) + obj.regularise(b));
                 end
                 
-                if exist('opti','file')==2 %use opti toolbox if loaded
-                    options = optiset('solver','NLOPT');
-                    Opt = opti('fun',objective,'bounds',obj.parameterBounds(1,:),obj.parameterBounds(2,:),'x0',obj.parameterStart(),'options',options);
-                    [p,~,exitflag,~] = Opt.solve;
-                    obj.parameterFits(f,:) = p';
-                    if exitflag < 0
-                        obj.parameterFits = nan(1,length(obj.parameterLabels));
-                    end
-                else
+%                 if exist('opti','file')==2 %use opti toolbox if loaded
+%                     options = optiset('solver','NLOPT');
+%                     Opt = opti('fun',objective,'bounds',obj.parameterBounds(1,:),obj.parameterBounds(2,:),'x0',obj.parameterStart(),'options',options);
+%                     [p,~,exitflag,~] = Opt.solve;
+%                     obj.parameterFits(f,:) = p';
+%                     if exitflag < 0
+%                         obj.parameterFits = nan(1,length(obj.parameterLabels));
+%                     end
+%                 else
                     [obj.parameterFits(f,:),~,exitflag] = fmincon(objective, obj.parameterStart(), [], [], [], [], obj.parameterBounds(1,:), obj.parameterBounds(2,:), [], options);
                     if ~any(exitflag == [1,2])
                         obj.parameterFits(f,:) = nan(1,length(obj.parameterLabels));
                     end
-                end
+%                 end
 
                 
                 phat = obj.calculatePhat(obj.parameterFits(f,:), testInputs);
