@@ -39,11 +39,11 @@ classdef Q
 
         end
         
-        function obj = fitAlpha(obj)
+        function obj = fitAlphaBeta(obj)
 %             options = optiset('iterfun',@optiplotfval);%'solver','NLOPT',);
-%             Opt = opti('fun',@obj.objective,'bounds',[0.0001 0.0001],[1 +inf],'x0',[0.9 0.9])%,'options',options);
+%             Opt = opti('fun',@obj.objective,'bounds',[0 0],[1 +inf],'x0',[0.01 1],'options',options);
 %             [p_est,~,exitflag,~] = Opt.solve;
-            p_est = fmincon(@obj.objective,[0.1 1],[],[],[],[],[0 0],[1 10]);
+            p_est = fmincon(@obj.objective,[0.1 1],[],[],[],[],[0 0],[1 100]);
             
             alpha = p_est(1);
             beta = p_est(2);
