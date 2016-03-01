@@ -107,6 +107,38 @@ classdef Q
             ezplot('y=x',[min(QL) max(QL)]);
             xlabel('QL');ylabel('QR');
             hold off;
+            
+            subplot(3,3,8); %psychometric curves
+
+            divisions = [0,0.5;
+                         0.5,1];
+            
+             pLdat = cell(size(divisions,1),1);
+             pL = cell(size(divisions,1),1);
+             for d = 1:size(divisions,1)
+                 trials=round([numTrials*divisions(d,1)+1 numTrials*divisions(d,2)]);
+                 stim = obj.data.stimulus(trials(1):trials(2),:);
+                 act = obj.data.action(trials(1):trials(2));
+
+                 c1d=diff(stim,[],2);
+                 [uniqueC,~,IC] = unique(c1d);
+                 for c = 1:length(uniqueC)
+                     choices=act(IC==c);
+                     pLdat{d}(c,1) = sum(choices==1)/length(choices);
+                 end
+                 
+                 midTrial = round(mean(trials));
+                 contrasts = linspace(0,1,200);
+                 ql = w{1}(1,midTrial)*(contrasts.^obj.N) + w{1}(2,midTrial);
+                 qr = w{2}(1,midTrial)*(contrasts.^obj.N) + w{2}(2,midTrial);
+                 dQ=beta*[ql-w{2}(2,midTrial), w{1}(2,midTrial)-qr];
+                 pL{d} = [exp(dQ)./(1+exp(dQ))]';
+             end
+                        
+            plot([-contrasts contrasts],cell2mat(pL'),'.',uniqueC,cell2mat(pLdat'),'s');
+            legend({'first half model','second half model','first half data','second half data'});
+            ylabel('pL'); title('predicted psychometric curve from w');
+            xlim([min(c1d) max(c1d)]);
         end
     end
     
