@@ -5,37 +5,39 @@ classdef Q
     end
 
     methods
-        function obj = Q(expRef)
+        function obj = Q(expRefs)
             obj.data=struct;
             
-            block = dat.loadBlock(expRef);
-            trials = block.trial;
-            d = struct;
-            
-            for t=1:block.numCompletedTrials
-                d.stimulus(t,:) = trials(t).condition.visCueContrast';
-                d.action(t,1) = trials(t).responseMadeID';
-                d.repeatNum(t,1) = trials(t).condition.repeatNum;
-                d.reward(t,1) = trials(t).feedbackType==1;
+            for b = 1:length(expRefs)
+                block = dat.loadBlock(expRefs{b});
+                trials = block.trial;
+                d = struct;
                 
-                try
-                    d.DA(t,1) = trials(t).condition.rewardVolume(2)>0 & trials(t).feedbackType==1;
-                catch
-                    d.DA(t,1)=nan;
+                for t=1:block.numCompletedTrials
+                    d.stimulus(t,:) = trials(t).condition.visCueContrast';
+                    d.action(t,1) = trials(t).responseMadeID';
+                    d.repeatNum(t,1) = trials(t).condition.repeatNum;
+                    d.reward(t,1) = trials(t).feedbackType==1;
+                    d.session(t,1) = b;
+                    
+                    try
+                        d.DA(t,1) = trials(t).condition.rewardVolume(2)>0 & trials(t).feedbackType==1;
+                    catch
+                        d.DA(t,1)=nan;
+                    end
                 end
+                obj.data = addstruct(obj.data,d);
             end
-            obj.data = d;
-            
             if max(obj.data.action) == 3
                 error('Not implemented for 3 choice task');
             end
             
             if any(isnan(obj.data.DA))
-                warning('No dopamine in this block');
-                obj.data.DA = zeros(length(obj.data.DA),1);
+                warning('No dopamine in these blocks. Removing...');
+                expRefs(unique(obj.data.session(isnan(obj.data.DA))))
             end
-%             badIdx = ~isnan(obj.data.DA);
-
+            badIdx = isnan(obj.data.DA);
+            obj.data = getrow(obj.data,~badIdx);
         end
         
         function obj = fit(obj)
@@ -240,10 +242,6 @@ classdef Q
             for t = 2:numTrials
                 prev.rt = obj.data.reward(t-1) + p.gamma*obj.data.DA(t-1);
                 prev.at = at(t-1);
-% 
-%                 if t==63
-%                     keyboard;
-%                 end
                 
                 if prev.at==1
                     prev.xt = xt{1}(:,t-1);
