@@ -1,18 +1,13 @@
 classdef Q
     properties (Access=public)
         data;
-%         wt;
-%         params=struct;
         N=1;
     end
-    
-       
+
     methods
         function obj = Q(expRef)
             obj.data=struct;
             
-            %             for b = 1:length(expRef)
-            %                 block = dat.loadBlock(expRef{b});
             block = dat.loadBlock(expRef);
             trials = block.trial;
             d = struct;
@@ -35,48 +30,49 @@ classdef Q
                 error('Not implemented for 3 choice task');
             end
             
+            if any(isnan(obj.data.DA))
+                warning('No dopamine in this block');
+                obj.data.DA = zeros(length(obj.data.DA),1);
+            end
 %             badIdx = ~isnan(obj.data.DA);
 
         end
         
-        function obj = fitAlphaBeta(obj)
+        function obj = fit(obj)
 %             options = optiset('iterfun',@optiplotfval);%'solver','NLOPT',);
 %             Opt = opti('fun',@obj.objective,'bounds',[0 0],[1 +inf],'x0',[0.01 1],'options',options);
 %             [p_est,~,exitflag,~] = Opt.solve;
-            p_est = fmincon(@obj.objective,[0.1 1],[],[],[],[],[0 0],[1 100]);
+            p_est = fmincon(@obj.objective,[0.1 1 1],[],[],[],[],[0 0 0],[1 100 100]);
             
             alpha = p_est(1);
             beta = p_est(2);
-            %             obj.params.beta = p_est(2);
-            %             obj.params.beta = 1;
+            gamma = p_est(3);
             
-            obj.plot(alpha,beta);
+            obj.plot(alpha,beta,gamma);
 
         end
         
-        function plot(obj,alpha,beta)
+        function plot(obj,alpha,beta,gamma)
             p.alpha = alpha;
             p.beta = beta;
+            p.gamma = gamma;
             
-            w_init = obj.fitWINIT(p.alpha,p.beta);
+            w_init = obj.fitWINIT(p.alpha,p.gamma);
             p.sL_init = w_init(1);
             p.bL_init = w_init(2);
             p.sR_init = w_init(3);
             p.bR_init = w_init(4);
-            
             w = obj.calculateWT(p);
-            ph = obj.calculatePHAT(w);
+            ph = obj.calculatePHAT(w,p.beta);
             bpt = obj.calculateLOGLIK(ph)/length(obj.data.action);
-%             
+             
             figure;
             h(1)=subplot(3,1,1);
-            plot([w{1};w{2}]');
+            plot([w{1};w{2}]','LineWidth',2);
             legend({'sL','bL','sR','bR'});
 
-            title(['\alpha: ' num2str(p.alpha) '\beta: ' num2str(p.beta)])
-%             
+            title(['\alpha: ' num2str(p.alpha) '\beta: ' num2str(p.beta) '\gamma: ' num2str(p.gamma)])            
             xt = obj.x;
-%             y = bsxfun(@times,[1 -1 1 -1]',x);
             numTrials = length(obj.data.action);
 
             for n = 1:numTrials
@@ -86,6 +82,11 @@ classdef Q
 
             h(2)=subplot(3,1,2);
             ax=plotyy(1:numTrials,QR-QL,1:numTrials,obj.data.action==2);
+%             hold on;
+% ax=plotyy(1:numTrials,QR-QL,1:numTrials,obj.data.reward==1 && obj.data.action==2);
+
+%             hold off;
+            
             set(get(ax(2),'children'),'linestyle','none','marker','.','markersize',30)
             ylabel('QR - QL'); 
             line([0 numTrials],[ 0 0]);
@@ -95,7 +96,8 @@ classdef Q
 %             title(['Bits per trial on training set: ' num2str(nLogLik/length(obj.data.action))])
 %             
             linkaxes(h,'x');
-            subplot(3,1,3);
+            xlim([0 length(obj.data.action)]);
+            subplot(3,3,7);
             plot(QL(obj.data.action==1),QR(obj.data.action==1),'bo',...
                 QL(obj.data.action==2),QR(obj.data.action==2),'ro')
 %             scatter(QL,QR,[],obj.data.action,'filled'); colorbar; caxis([1 2]);
@@ -112,16 +114,19 @@ classdef Q
         function nloglik = objective(obj,p_vec)
             p.alpha = p_vec(1);
             p.beta = p_vec(2);
+            p.gamma = p_vec(3);
             
-            w_init = obj.fitWINIT(p.alpha,p.beta);
+            w_init = obj.fitWINIT(p.alpha,p.gamma);
             p.sL_init = w_init(1);
             p.bL_init = w_init(2);
             p.sR_init = w_init(3);
             p.bR_init = w_init(4);
             
             w = obj.calculateWT(p);
-            ph = obj.calculatePHAT(w);
+            
+            ph = obj.calculatePHAT(w,p.beta);
             nloglik = obj.calculateLOGLIK(ph);
+            plot([w{1}',w{2}']); title(nloglik/length(obj.data.action)); drawnow;
         end
 %         
         function xt = x(obj)
@@ -130,9 +135,9 @@ classdef Q
                   [obj.data.stimulus(:,2)'.^obj.N; ones(1,numTrials)]};
         end
         
-        function [W_init] = fitWINIT(obj,alpha,beta)
+        function [W_init] = fitWINIT(obj,alpha,gamma)
             numTrials = size(obj.data.action,1);
-            rt = obj.data.reward*beta;
+            rt = obj.data.reward + gamma*obj.data.DA;
             at = obj.data.action;
             xt = obj.x;
               
@@ -147,10 +152,7 @@ classdef Q
             offset=nan(numTrials,1);
             regressors=nan(numTrials,4);
             
-%             y = [xt{1}(:,1); -xt{2}(:,1)];
-%             offset(1) = y'*[Vt{1}(:,1); Vt{2}(:,1)];
             offset(1) = Vt{1}(:,1)'*xt{1}(:,1) - Vt{2}(:,1)'*xt{2}(:,1);
-%             regressors(1,:) = y'*[Bt{1}(:,:,1) eye(2); eye(2) Bt{2}(:,:,1) ];
             regressors(1,:) = [xt{1}(:,1)'*Bt{1}(:,:,1) -xt{2}(:,1)'*Bt{2}(:,:,1)];
             
             for t = 2:numTrials
@@ -178,11 +180,8 @@ classdef Q
                     Vt{1}(:,t) = Vt{1}(:,t-1);
                     Bt{1}(:,:,t) = Bt{1}(:,:,t-1);
                 end
-                
-%                 y = [xt{1}(:,t); -xt{2}(:,t)];
-%                 offset(t) = y'*[Vt{1}(:,t); Vt{2}(:,t)];
+
                 offset(t) = Vt{1}(:,t)'*xt{1}(:,t) - Vt{2}(:,t)'*xt{2}(:,t);
-%                 regressors(t,:) = y'*[Bt{1}(:,:,t) eye(2); eye(2) Bt{2}(:,:,t) ];
                 regressors(t,:) = [xt{1}(:,t)'*Bt{1}(:,:,t), -xt{2}(:,t)'*Bt{2}(:,:,t)];
 
 
@@ -207,9 +206,13 @@ classdef Q
             
             
             for t = 2:numTrials
-                prev.rt = obj.data.reward(t-1)*p.beta;% + obj.data.DA(t-1);
+                prev.rt = obj.data.reward(t-1) + p.gamma*obj.data.DA(t-1);
                 prev.at = at(t-1);
-
+% 
+%                 if t==63
+%                     keyboard;
+%                 end
+                
                 if prev.at==1
                     prev.xt = xt{1}(:,t-1);
                     wt{1}(:,t) = wt{1}(:,t-1) + p.alpha*(prev.rt - prev.xt'*wt{1}(:,t-1))*prev.xt;
@@ -224,7 +227,7 @@ classdef Q
 
         end 
 %         
-        function phat = calculatePHAT(obj,wt)
+        function phat = calculatePHAT(obj,wt,beta)
             xt = obj.x;
             
             numTrials = length(obj.data.action);
@@ -234,7 +237,7 @@ classdef Q
                 QR(n) = wt{2}(:,n)'*xt{2}(:,n);
             end
             
-            Z = (QL-QR);
+            Z = beta*(QL-QR);
 
             pL = exp(Z)./(1+exp(Z));
             pR = 1-pL;
