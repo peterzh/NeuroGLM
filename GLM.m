@@ -91,37 +91,37 @@ classdef GLM
                     obj.ZR = @(P,in)(P(4) + P(5).*in(:,1).^P(7) + P(6).*in(:,2).^P(7));
                 case 'C^N-subset'
                     obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','N'};
-                    obj.parameterBounds = [-inf -inf -inf -inf 0.1;
-                        +inf +inf +inf +inf 1];
+                    obj.parameterBounds = [-inf -inf -inf -inf 0;
+                        +inf +inf +inf +inf 3];
                     obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
                     obj.ZL = @(P,in)(P(1) + P(2).*in(:,1).^P(5));
                     obj.ZR = @(P,in)(P(3) + P(4).*in(:,2).^P(5));
                 case 'C^NL^NR-subset'
                     obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','N_L','N_R'};
                     obj.parameterBounds = [-inf -inf -inf -inf 0 0;
-                        +inf +inf +inf +inf +inf +inf];
+                        +inf +inf +inf +inf 3 3];
                     obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
                     obj.ZL = @(P,in)(P(1) + P(2).*in(:,1).^P(5));
                     obj.ZR = @(P,in)(P(3) + P(4).*in(:,2).^P(6));
                 case 'C50'
                     obj.parameterLabels = {'Offset_L','ScaleL_L','ScaleR_L','Offset_R','ScaleL_R','ScaleR_R','N','C50'};
-                    obj.parameterBounds = [-inf -inf -inf -inf -inf -inf 0 0;
-                        +inf +inf +inf +inf +inf +inf +inf +inf];
+                    obj.parameterBounds = [-inf -inf -inf -inf -inf -inf 0.001 0.001;
+                        +inf +inf +inf +inf +inf +inf 0.8 0.8];
                     obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
                     obj.ZL = @(P,in)(P(1) + P(2).*(in(:,1).^P(7))./(in(:,1).^P(7) + P(8)) + P(3).*(in(:,2).^P(7))./(in(:,2).^P(7) + P(8)^P(7)));
                     obj.ZR = @(P,in)(P(4) + P(5).*(in(:,1).^P(7))./(in(:,1).^P(7) + P(8)) + P(6).*(in(:,2).^P(7))./(in(:,2).^P(7) + P(8)^P(7)));
                 case 'C50-subset'
                     obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','N','C50'};
-                    obj.parameterBounds = [-inf -inf -inf -inf 0.1 0.01;
-                        +inf +inf +inf +inf 3 0.5];
+                    obj.parameterBounds = [-inf -inf -inf -inf 0 0.001;
+                        +inf +inf +inf +inf 3 0.8];
                     
                     obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
                     obj.ZL = @(P,in)(P(1) + P(2).*(in(:,1).^P(5))./(in(:,1).^P(5) + P(6)^P(5)));
                     obj.ZR = @(P,in)(P(3) + P(4).*(in(:,2).^P(5))./(in(:,2).^P(5) + P(6)^P(5)));
                 case 'C50LR-subset'
                     obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','N_L','C50_L', 'N_R', 'C50_R'};
-                    obj.parameterBounds = [-inf -inf -inf -inf 0.1 0.01 0.1 0.01;
-                        +inf +inf +inf +inf 3 0.5 3 0.5];
+                    obj.parameterBounds = [-inf -inf -inf -inf 0 0.001 0 0.001;
+                        +inf +inf +inf +inf 3 0.8 3 0.8];
                     
                     obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
                     obj.ZL = @(P,in)(P(1) + P(2).*(in(:,1).^P(5))./(in(:,1).^P(5) + P(6)^P(5)));
@@ -512,17 +512,19 @@ classdef GLM
                     
                     for c = 1:length(uniqueC1D)
                         for r = 1:rMax
-                            plot(plotParams.ax, prop(c,r), phat(c,r), rSymbols{r}, 'Color', plotParams.Color)
+                            plot(plotParams.ax, phat(c,r), prop(c,r), rSymbols{r}, 'Color', plotParams.Color)
                             hold on;                            
                         end
                         for r = 1:rMax
-                            plot(plotParams.ax, squeeze(prop_ci(c,r,:)), phat(c,r)*ones(1,2), 'Color', plotParams.Color)
+                            plot(plotParams.ax, phat(c,r)*ones(1,2), squeeze(prop_ci(c,r,:)), 'Color', plotParams.Color)
                         end
                     end
                     plot(plotParams.ax, [0 1], [0 1], 'k--');
-                    xlabel('actual probability');
-                    ylabel('predicted probability');
-                    legend({'left response', 'right', 'nogo'}, 'Location', 'Best');
+
+                    ylabel('actual probability');
+                    xlabel('predicted probability');
+                    legend({'left resp', 'right resp', 'nogo'}, 'Location', 'Best');
+
                     axis square
                     box off
                     
