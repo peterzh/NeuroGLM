@@ -241,7 +241,7 @@ classdef GLM
             
             
 %             if exist('opti','file')==2 %use opti toolbox if loaded
-%                 options = optiset('display','final','solver','NLOPT');
+%                 options = optiset('display','final','solver','NOMAD');
 %                 Opt = opti('fun',objective,'bounds',obj.parameterBounds(1,:),obj.parameterBounds(2,:),'x0',obj.parameterStart(),'options',options);
 %                 [p,~,exitflag,~] = Opt.solve;
 %                 obj.parameterFits = p';
