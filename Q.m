@@ -1,7 +1,7 @@
 classdef Q
     properties (Access=public)
         data;
-        N=1;
+        N=0.5;
     end
 
     methods
@@ -23,7 +23,7 @@ classdef Q
                     try
                         d.DA(t,1) = trials(t).condition.rewardVolume(2)>0 & trials(t).feedbackType==1;
                     catch
-                        d.DA(t,1)=nan;
+                        d.DA(t,1)= nan;
                     end
                 end
                 obj.data = addstruct(obj.data,d);
@@ -33,18 +33,21 @@ classdef Q
             end
             
             if any(isnan(obj.data.DA))
-                warning('No dopamine in these blocks. Removing...');
+                warning('No dopamine in these blocks. Setting to zero DA');
                 expRefs(unique(obj.data.session(isnan(obj.data.DA))))
             end
             badIdx = isnan(obj.data.DA);
-            obj.data = getrow(obj.data,~badIdx);
+            obj.data.DA(badIdx)=0;
+%             obj.data = getrow(obj.data,~badIdx);
         end
         
         function obj = fit(obj)
-%             options = optiset('iterfun',@optiplotfval);%'solver','NLOPT',);
-%             Opt = opti('fun',@obj.objective,'bounds',[0 0],[1 +inf],'x0',[0.01 1],'options',options);
-%             [p_est,~,exitflag,~] = Opt.solve;
-            p_est = fmincon(@obj.objective,[0.1 1 1],[],[],[],[],[0 0 0],[1 100 100]);
+            options = optiset('solver','NOMAD','display','final');
+            Opt = opti('fun',@obj.objective,...
+                'bounds',[0 0 0],[1 inf inf],...
+                'x0',[0.05 1 2],'options',options);
+            [p_est,~,exitflag,~] = Opt.solve;
+%             p_est = fmincon(@obj.objective,[0.1 1 1],[],[],[],[],[0 0 0],[1 100 100]);
             
             alpha = p_est(1);
             beta = p_est(2);
