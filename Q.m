@@ -1,14 +1,17 @@
 classdef Q
     properties (Access=public)
+        expRef;
         data;
-        N=0.3;
+        N;
     end
     
     methods
         function obj = Q(expRefs)
             obj.data=struct;
             
+            obj.expRef = cell(length(expRefs),1);
             for b = 1:length(expRefs)
+                obj.expRef{b} = expRefs{b};
                 block = dat.loadBlock(expRefs{b});
                 trials = block.trial;
                 d = struct;
@@ -28,6 +31,7 @@ classdef Q
                 end
                 obj.data = addstruct(obj.data,d);
             end
+            
             if max(obj.data.action) == 3
                 error('Not implemented for 3 choice task');
             end
@@ -39,6 +43,8 @@ classdef Q
             badIdx = isnan(obj.data.DA);
             obj.data.DA(badIdx)=0;
             %             obj.data = getrow(obj.data,~badIdx);
+            
+            obj.N = ones(length(obj.data.action),1)*0.5;
         end
         
         function obj = fit(obj)
@@ -116,7 +122,7 @@ classdef Q
             
             exitFlag = 0;
             xDiv = [];
-            PADDING = 100;
+            PADDING = 50;
             while exitFlag == 0
                 [x,~,button] = ginput(1);
                 if button == 3 || length(xDiv) > 10
@@ -139,6 +145,7 @@ classdef Q
                 trials = [xDiv(d)-PADDING xDiv(d)+PADDING];
                 stim = obj.data.stimulus(trials(1):trials(2),:);
                 act = obj.data.action(trials(1):trials(2));
+                nPower = mean(obj.N(trials(1):trials(2)));
                 
                 c1d=diff(stim,[],2);
                 [uniqueC,~,IC] = unique(c1d);
@@ -149,8 +156,8 @@ classdef Q
                 
                 midTrial = xDiv(d);
                 contrasts = linspace(0,1,200);
-                ql = w{1}(1,midTrial)*(contrasts.^obj.N) + w{1}(2,midTrial);
-                qr = w{2}(1,midTrial)*(contrasts.^obj.N) + w{2}(2,midTrial);
+                ql = w{1}(1,midTrial)*(contrasts.^nPower) + w{1}(2,midTrial);
+                qr = w{2}(1,midTrial)*(contrasts.^nPower) + w{2}(2,midTrial);
                 dQ=beta*[ql-w{2}(2,midTrial), w{1}(2,midTrial)-qr];
                 pL{d} = [exp(dQ)./(1+exp(dQ))]';
             end
@@ -166,6 +173,14 @@ classdef Q
             %             legend({'first half model','second half model','first half data','second half data'});
             ylabel('pL'); title('psych from w compared to data');
             xlim([min(c1d) max(c1d)]);
+        end
+        
+        function obj = fitContrastFcn(obj)
+            for b = 1:max(obj.data.session)
+                g = GLM(obj.expRef{b}).setModel('C^N-subset-2AFC').fit;
+%                 g.plotFit; keyboard;
+                obj.N(obj.data.session==b,1) = g.parameterFits(end);
+            end
         end
     end
     
@@ -190,8 +205,8 @@ classdef Q
         %
         function xt = x(obj)
             numTrials = length(obj.data.action);
-            xt = {[obj.data.stimulus(:,1)'.^obj.N; ones(1,numTrials)],
-                [obj.data.stimulus(:,2)'.^obj.N; ones(1,numTrials)]};
+            xt = {[(obj.data.stimulus(:,1).^obj.N)'; ones(1,numTrials)];
+                [(obj.data.stimulus(:,2).^obj.N)'; ones(1,numTrials)]};
         end
         
         function [W_init] = fitWINIT(obj,alpha,gamma)
