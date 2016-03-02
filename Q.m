@@ -86,22 +86,22 @@ classdef Q
             end
 
             h(2)=subplot(3,1,2);
-            ax=plotyy(1:numTrials,QR-QL,1:numTrials,obj.data.action==2);
-%             hold on;
-% ax=plotyy(1:numTrials,QR-QL,1:numTrials,obj.data.reward==1 && obj.data.action==2);
-
-%             hold off;
+            trialDot = obj.data.action-1;
+            trialDot(obj.data.reward==0)=nan;
+            trialDot(obj.data.DA==0)=nan;
+            ax=plotyy(1:numTrials,QR-QL,1:numTrials,trialDot);
             
-            set(get(ax(2),'children'),'linestyle','none','marker','.','markersize',30)
+            set(get(ax(2),'children'),'linestyle','none','marker','.','markersize',5)
             ylabel('QR - QL'); 
             line([0 numTrials],[ 0 0]);
             ax(2).YTickLabel={'L','R'}; ax(2).YTick=[0 1];
+            ax(2).YLim=[-0.1 1.1];
             xlabel('Trial number');
             title(['Bits per trial ' num2str(bpt)]);
 %             title(['Bits per trial on training set: ' num2str(nLogLik/length(obj.data.action))])
 %             
             linkaxes(h,'x');
-            xlim([0 length(obj.data.action)]);
+            set(ax,'xlim',[0 length(obj.data.action)]);
             subplot(3,3,7);
             plot(QL(obj.data.action==1),QR(obj.data.action==1),'bo',...
                 QL(obj.data.action==2),QR(obj.data.action==2),'ro')
