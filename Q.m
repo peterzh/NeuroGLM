@@ -86,7 +86,7 @@ classdef Q
             bpt = obj.calculateLOGLIK(ph)/length(obj.data.action);
             
             figure;
-            h(1)=subplot(3,1,1);
+            h(1)=subplot(4,1,1);
             plot([w{1};w{2}]','LineWidth',2);
             legend({'sL','bL','sR','bR'});
             grid on;
@@ -103,54 +103,69 @@ classdef Q
                 QR(n) = w{2}(:,n)'*xt{2}(:,n);
             end
             
-            h(2)=subplot(3,1,2);
+            h(2)=subplot(4,1,2);
             trialDot = obj.data.action-1;
-            trialDot(obj.data.reward==0)=nan;
+            trialDot((diff(obj.data.stimulus,[],2))==0)=nan;
+%             trialDot(obj.data.reward==0)=nan;
+%             trialDot(obj.data.DA==0)=nan;
+            plot(trialDot,'k.');
+
+            hold on;
+            plot((diff(obj.data.stimulus,[],2)>0),'o')
             trialDot(obj.data.DA==0)=nan;
-            ax=plotyy(1:numTrials,QR-QL,1:numTrials,trialDot);
-            
-            set(get(ax(2),'children'),'linestyle','none','marker','.','markersize',5)
+            plot(trialDot,'.');
+            hold off;
+            ylim([-1 2]);
+            set(gca,'box','off','YTick',{});
+            trialAx=gca;
+
+            h(3)=subplot(4,1,3);
+            ax=plot(QR-QL);
+%             ax=plotyy(1:numTrials,QR-QL,1:numTrials,trialDot);            
+%             set(get(ax(2),'children'),'linestyle','none','marker','.','markersize',5)
             ylabel('QR - QL');
             line([0 numTrials],[ 0 0]);
-            ax(2).YTickLabel={'L','R'}; ax(2).YTick=[0 1];
-            ax(2).YLim=[-0.1 1.1];
+%             ax.YTickLabel={'L+DA','R+DA'}; ax.YTick=[0 1];
+%             ax.YLim=[-0.1 1.1];
             xlabel('Trial number');
 
             title(['loglik_{model} - loglik_{guess} = ' num2str(bpt - obj.guess_bpt)]);
-            %             title(['Bits per trial on training set: ' num2str(nLogLik/length(obj.data.action))])
-            %
+            
             linkaxes(h,'x');
-            set(ax,'xlim',[0 length(obj.data.action)]);
-            subplot(3,3,7);
+            xlim([0 length(obj.data.action)]);
+            subplot(4,3,10);
             plot(QL(obj.data.action==1),QR(obj.data.action==1),'bo',...
                 QL(obj.data.action==2),QR(obj.data.action==2),'ro')
             %             scatter(QL,QR,[],obj.data.action,'filled'); colorbar; caxis([1 2]);
-            legend({'Chose L','Chose R'});
+            legend({'Chose L','Chose R'},'location','BestOutside');
             axis square;
             hold on;
             ezplot('y=x',[min(QL) max(QL)]);
             xlabel('QL');ylabel('QR');
             hold off;
             
-            exitFlag = 0;
-            xDiv = [];
-            PADDING = 50;
-            while exitFlag == 0
-                [x,~,button] = ginput(1);
-                if button == 3 || length(xDiv) > 10
-                    exitFlag=1;
-                else
-                    xDiv = [xDiv;x];
-                    line([x x],[-1 2]);
-                    line([x x]-PADDING,[0 1]);
-                    line([x x]+PADDING,[0 1]);
-                    line([x-PADDING x+PADDING],[0.5 0.5]);
-                end
-            end
-            xDiv = round(sort(xDiv));
-            subplot(3,3,8); %psychometric curves
+            %             try
+            %             exitFlag = 0;
+            %             xDiv = [];
+            PADDING = 25;
+            %             while exitFlag == 0
+            %                 [x,~,button] = ginput(1);
+            %                 if button == 3 || length(xDiv) > 10
+            %                     exitFlag=1;
+            %                 else
+            %                     xDiv = [xDiv;x];
+            %                     line([x x],[-1 2]);
+            %                     line([x x]-PADDING,[0 1]);
+            %                     line([x x]+PADDING,[0 1]);
+            %                     line([x-PADDING x+PADDING],[0.5 0.5]);
+            %                 end
+            %             end
+            %             xDiv = round(sort(xDiv));
+            xDiv = round([0.25 0.5 0.75]*numTrials);
             
             pLdat = cell(length(xDiv),1);
+            pLdatErr = cell(length(xDiv),1);
+            
             pL = cell(length(xDiv),1);
             for d = 1:length(xDiv)
                 %                  trials=round([numTrials*divisions(d,1)+1 numTrials*divisions(d,2)]);
@@ -163,7 +178,10 @@ classdef Q
                 [uniqueC,~,IC] = unique(c1d);
                 for c = 1:length(uniqueC)
                     choices=act(IC==c);
-                    pLdat{d}(c,1) = sum(choices==1)/length(choices);
+                    %                         pLdat{d}(c,1) = sum(choices==1)/length(choices);
+                    [p,ci] = binofit(sum(choices==1),length(choices));
+                    pLdat{d}(c,1)=p;
+                    pLdatErr{d}(c,:)=[p-ci(1) ci(2)-p];
                 end
                 
                 midTrial = xDiv(d);
@@ -172,19 +190,36 @@ classdef Q
                 qr = w{2}(1,midTrial)*(contrasts.^nPower) + w{2}(2,midTrial);
                 dQ=beta*[ql-w{2}(2,midTrial), w{1}(2,midTrial)-qr];
                 pL{d} = [exp(dQ)./(1+exp(dQ))]';
+                
+
+                line([xDiv(d) xDiv(d)],[-0.5 1.5],'Parent',trialAx);
+                line([xDiv(d) xDiv(d)]-PADDING,[0 1],'Parent',trialAx);
+                line([xDiv(d) xDiv(d)]+PADDING,[0 1],'Parent',trialAx);
+                line([xDiv(d)-PADDING xDiv(d)+PADDING],[0.5 0.5],'Parent',trialAx);
+
             end
             
             M = [[-contrasts contrasts]' cell2mat(pL')];
             M = sortrows(M,1);
+            subplot(4,3,[11 12]); %psychometric curves
             plot(M(:,1),M(:,2:end),'-');
             hold on;
             set(gca, 'ColorOrderIndex', 1);
-            plot(uniqueC,cell2mat(pLdat'),'s');
+%             plot(uniqueC,cell2mat(pLdat'),'s');
+            for d = 1:length(xDiv)
+                ax=errorbar(uniqueC,pLdat{d},pLdatErr{d}(:,1),pLdatErr{d}(:,2));
+                ax.LineStyle='none';
+                ax.Marker='s';
+                uniqueC = uniqueC + 0.01;
+            end
             hold off;
-            legend(cellfun(@(c)num2str(c),num2cell([xDiv;xDiv]),'uni',0))
+            legend(cellfun(@(c)num2str(c),num2cell([xDiv]),'uni',0),'location','BestOutside')
             %             legend({'first half model','second half model','first half data','second half data'});
             ylabel('pL'); title('psych from w compared to data');
             xlim([min(c1d) max(c1d)]);
+            
+            %             catch
+            %             end
         end
         
         function obj = fitContrastFcn(obj)
