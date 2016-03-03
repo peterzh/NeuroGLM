@@ -50,14 +50,14 @@ classdef Q
         function obj = fit(obj)
             options = optiset('solver','NOMAD','display','final');
             Opt = opti('fun',@obj.objective,...
-                'bounds',[0 0 0],[1 inf inf],...
-                'x0',[0.05 1 2],'options',options);
+                'bounds',[0 0 0 0],[1 1 inf 1],...
+                'x0',[0.05 0.05 1 0.5],'options',options);
             [p_est,~,exitflag,~] = Opt.solve;
             %             p_est = fmincon(@obj.objective,[0.1 1 1],[],[],[],[],[0 0 0],[1 100 100]);
             
-            alpha = p_est(1);
-            beta = p_est(2);
-            gamma = p_est(3);
+            alpha = [p_est(1) 0; 0 p_est(2)];
+            beta = p_est(3);
+            gamma = p_est(4);
             
             obj.plot(alpha,beta,gamma);
             
@@ -83,7 +83,10 @@ classdef Q
             legend({'sL','bL','sR','bR'});
             grid on;
             
-            title(['\alpha: ' num2str(p.alpha) '\beta: ' num2str(p.beta) '\gamma: ' num2str(p.gamma)])
+            title(['\alphaS: ' num2str(p.alpha(1,1)) ,...
+                   ' \alphaB: ' num2str(p.alpha(2,2)) ,...
+                   ' \beta: ' num2str(p.beta) ,...
+                   ' \gamma: ' num2str(p.gamma)])
             xt = obj.x;
             numTrials = length(obj.data.action);
             
@@ -185,10 +188,10 @@ classdef Q
     end
     
     methods (Access=public)
-        function nloglik = objective(obj,p_vec)
-            p.alpha = p_vec(1);
-            p.beta = p_vec(2);
-            p.gamma = p_vec(3);
+        function negLogLik = objective(obj,p_vec)
+            p.alpha = [p_vec(1) 0; 0 p_vec(2)];
+            p.beta = p_vec(3);
+            p.gamma = p_vec(4);
             
             w_init = obj.fitWINIT(p.alpha,p.gamma);
             p.sL_init = w_init(1);
@@ -211,7 +214,7 @@ classdef Q
         
         function [W_init] = fitWINIT(obj,alpha,gamma)
             numTrials = size(obj.data.action,1);
-            rt = obj.data.reward + gamma*obj.data.DA;
+            rt = (1-gamma)*obj.data.reward + gamma*obj.data.DA;
             at = obj.data.action;
             xt = obj.x;
             
@@ -280,7 +283,7 @@ classdef Q
             
             
             for t = 2:numTrials
-                prev.rt = obj.data.reward(t-1) + p.gamma*obj.data.DA(t-1);
+                prev.rt = (1-p.gamma)*obj.data.reward(t-1) + p.gamma*obj.data.DA(t-1);
                 prev.at = at(t-1);
                 
                 if prev.at==1
