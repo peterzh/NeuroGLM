@@ -5,6 +5,10 @@ classdef Q
         N;
     end
     
+    properties (Access=private)
+        guess_bpt;
+    end
+    
     methods
         function obj = Q(expRefs)
             obj.data=struct;
@@ -45,6 +49,10 @@ classdef Q
             %             obj.data = getrow(obj.data,~badIdx);
             
             obj.N = ones(length(obj.data.action),1)*0.5;
+            
+            tab = tabulate(obj.data.action);
+            tab = tab(:,3)/100;
+            obj.guess_bpt=sum(tab.*log2(tab));
         end
         
         function obj = fit(obj)
@@ -107,7 +115,8 @@ classdef Q
             ax(2).YTickLabel={'L','R'}; ax(2).YTick=[0 1];
             ax(2).YLim=[-0.1 1.1];
             xlabel('Trial number');
-            title(['Bits per trial ' num2str(bpt)]);
+
+            title(['loglik_{model} - loglik_{guess} = ' num2str(bpt - obj.guess_bpt)]);
             %             title(['Bits per trial on training set: ' num2str(nLogLik/length(obj.data.action))])
             %
             linkaxes(h,'x');
@@ -202,8 +211,12 @@ classdef Q
             w = obj.calculateWT(p);
             
             ph = obj.calculatePHAT(w,p.beta);
-            nloglik = obj.calculateLOGLIK(ph);
-            plot([w{1}',w{2}']); title(nloglik/length(obj.data.action)); drawnow;
+            negLogLik = -obj.calculateLOGLIK(ph);
+            plot([w{1}',w{2}']);
+            bpt = -negLogLik/length(obj.data.action);
+            title([num2str(bpt - obj.guess_bpt)]); 
+            drawnow;
+
         end
         %
         function xt = x(obj)
@@ -329,7 +342,7 @@ classdef Q
                 r =  obj.data.action(t);
                 p(t) = phat(r,t);
             end
-            nloglik = -sum(log2(p));
+            nloglik = sum(log2(p));
         end
     end
 end
