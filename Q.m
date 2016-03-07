@@ -58,14 +58,15 @@ classdef Q
         function obj = fit(obj)
             options = optiset('solver','NOMAD','display','final');
             Opt = opti('fun',@obj.objective,...
-                'bounds',[0 0 0 0],[1 1 inf 1],...
-                'x0',[0.05 0.05 1 0.5],'options',options);
+                'bounds',[0 0 0],[1 1 1],...
+                'x0',[0.5 0.5 0.5],'options',options);
             [p_est,~,exitflag,~] = Opt.solve;
             %             p_est = fmincon(@obj.objective,[0.1 1 1],[],[],[],[],[0 0 0],[1 100 100]);
             
             alpha = [p_est(1) 0; 0 p_est(2)];
-            beta = p_est(3);
-            gamma = p_est(4);
+%             beta = p_est(3);
+            beta = 1;
+            gamma = p_est(3);
             
             obj.plot(alpha,beta,gamma);
             
@@ -108,16 +109,17 @@ classdef Q
             trialDot((diff(obj.data.stimulus,[],2))==0)=nan;
 %             trialDot(obj.data.reward==0)=nan;
 %             trialDot(obj.data.DA==0)=nan;
-            plot(trialDot,'k.');
+            plot(trialDot,'k.','markersize',10);
 
             hold on;
             plot((diff(obj.data.stimulus,[],2)>0),'o')
             trialDot(obj.data.DA==0)=nan;
-            plot(trialDot,'.');
+            plot(trialDot,'.','markersize',10);
             hold off;
             ylim([-1 2]);
             set(gca,'box','off','YTick',{});
             trialAx=gca;
+            legend('action','target');
 
             h(3)=subplot(4,1,3);
             ax=plot(QR-QL);
@@ -137,7 +139,7 @@ classdef Q
             plot(QL(obj.data.action==1),QR(obj.data.action==1),'bo',...
                 QL(obj.data.action==2),QR(obj.data.action==2),'ro')
             %             scatter(QL,QR,[],obj.data.action,'filled'); colorbar; caxis([1 2]);
-            legend({'Chose L','Chose R'},'location','BestOutside');
+            legend({'Chose L','Chose R'});
             axis square;
             hold on;
             ezplot('y=x',[min(QL) max(QL)]);
@@ -210,13 +212,13 @@ classdef Q
                 ax=errorbar(uniqueC,pLdat{d},pLdatErr{d}(:,1),pLdatErr{d}(:,2));
                 ax.LineStyle='none';
                 ax.Marker='s';
-                uniqueC = uniqueC + 0.01;
+                uniqueC = uniqueC + 0.004;
             end
             hold off;
             legend(cellfun(@(c)num2str(c),num2cell([xDiv]),'uni',0),'location','BestOutside')
             %             legend({'first half model','second half model','first half data','second half data'});
             ylabel('pL'); title('psych from w compared to data');
-            xlim([min(c1d) max(c1d)]);
+            xlim([min(c1d)-0.1 max(c1d)+0.1]);
             
             %             catch
             %             end
@@ -234,8 +236,9 @@ classdef Q
     methods (Access=public)
         function negLogLik = objective(obj,p_vec)
             p.alpha = [p_vec(1) 0; 0 p_vec(2)];
-            p.beta = p_vec(3);
-            p.gamma = p_vec(4);
+%             p.beta = p_vec(3);
+            p.gamma = p_vec(3);
+            p.beta = 1;
             
             w_init = obj.fitWINIT(p.alpha,p.gamma);
             p.sL_init = w_init(1);
