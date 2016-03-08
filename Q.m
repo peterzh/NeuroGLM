@@ -195,9 +195,9 @@ classdef Q
                 
 
                 line([xDiv(d) xDiv(d)],[-0.5 1.5],'Parent',trialAx);
-                line([xDiv(d) xDiv(d)]-PADDING,[0 1],'Parent',trialAx);
-                line([xDiv(d) xDiv(d)]+PADDING,[0 1],'Parent',trialAx);
-                line([xDiv(d)-PADDING xDiv(d)+PADDING],[0.5 0.5],'Parent',trialAx);
+%                 line([xDiv(d) xDiv(d)]-PADDING,[0 1],'Parent',trialAx);
+%                 line([xDiv(d) xDiv(d)]+PADDING,[0 1],'Parent',trialAx);
+%                 line([xDiv(d)-PADDING xDiv(d)+PADDING],[0.5 0.5],'Parent',trialAx);
 
             end
             
