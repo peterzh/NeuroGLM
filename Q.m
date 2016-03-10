@@ -291,7 +291,8 @@ classdef Q
                 if prev.at==1
                     prev.xt = xt{1}(:,t-1);
                     prev.nt = alpha*prev.rt*prev.xt;
-                    prev.Mt = eye(2) - alpha*prev.xt*prev.xt';
+%                     prev.Mt = eye(2) - alpha*prev.xt*prev.xt';
+                    prev.Mt = eye(2) - alpha*prev.xt*[diff(obj.data.stimulus(t-1,:))<0 1];
                     
                     Vt{1}(:,t) = prev.nt + prev.Mt*Vt{1}(:,t-1);
                     Bt{1}(:,:,t) = prev.Mt*Bt{1}(:,:,t-1);
@@ -301,8 +302,10 @@ classdef Q
                 elseif prev.at==2
                     prev.xt = xt{2}(:,t-1);
                     prev.nt = alpha*prev.rt*prev.xt;
-                    prev.Mt = eye(2) - alpha*prev.xt*prev.xt';
+%                     prev.Mt = eye(2) - alpha*prev.xt*prev.xt';
+                    prev.Mt = eye(2) - alpha*prev.xt*[diff(obj.data.stimulus(t-1,:))>0 1];
                     
+
                     Vt{2}(:,t) = prev.nt + prev.Mt*Vt{2}(:,t-1);
                     Bt{2}(:,:,t) = prev.Mt*Bt{2}(:,:,t-1);
                     
@@ -340,11 +343,11 @@ classdef Q
                 
                 if prev.at==1
                     prev.xt = xt{1}(:,t-1);
-                    wt{1}(:,t) = wt{1}(:,t-1) + p.alpha*(prev.rt - prev.xt'*wt{1}(:,t-1))*prev.xt;
+                    wt{1}(:,t) = wt{1}(:,t-1) + p.alpha*(prev.rt - prev.xt'*wt{1}(:,t-1))*[diff(obj.data.stimulus(t-1,:))<0 1]';
                     wt{2}(:,t) = wt{2}(:,t-1);
                 elseif prev.at==2
                     prev.xt = xt{2}(:,t-1);
-                    wt{2}(:,t) = wt{2}(:,t-1) + p.alpha*(prev.rt - prev.xt'*wt{2}(:,t-1))*prev.xt;
+                    wt{2}(:,t) = wt{2}(:,t-1) + p.alpha*(prev.rt - prev.xt'*wt{2}(:,t-1))*[diff(obj.data.stimulus(t-1,:))>0 1]';
                     wt{1}(:,t) = wt{1}(:,t-1);
                 end
                 
