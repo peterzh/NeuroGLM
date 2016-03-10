@@ -56,6 +56,7 @@ classdef Q
         end
         
         function obj = fit(obj)
+            figure; %to prevent plotting over any old plots
             options = optiset('solver','NOMAD','display','final');
             Opt = opti('fun',@obj.objective,...
                 'bounds',[0 0 0],[1 1 1],...
@@ -149,7 +150,7 @@ classdef Q
             %             try
             %             exitFlag = 0;
             %             xDiv = [];
-            PADDING = 25;
+            PADDING = 50;
             %             while exitFlag == 0
             %                 [x,~,button] = ginput(1);
             %                 if button == 3 || length(xDiv) > 10
