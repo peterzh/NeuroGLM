@@ -2,7 +2,8 @@ classdef Q
     properties (Access=public)
         expRef;
         data;
-        N;
+        N=0.5;
+        stimNoise;
     end
     
     properties (Access=private)
@@ -47,12 +48,17 @@ classdef Q
             badIdx = isnan(obj.data.DA);
             obj.data.DA(badIdx)=0;
             %             obj.data = getrow(obj.data,~badIdx);
-            
-            obj.N = ones(length(obj.data.action),1)*0.5;
-            
+                       
             tab = tabulate(obj.data.action);
             tab = tab(:,3)/100;
             obj.guess_bpt=sum(tab.*log2(tab));
+            
+            obj.stimNoise = zeros(length(obj.data.action),2);
+        end
+        
+        function obj = drawNoise(obj,sigma)
+            noise = randn(length(obj.data.action),2)*sigma;
+            obj.stimNoise = noise;
         end
         
         function obj = fit(obj)
@@ -150,7 +156,7 @@ classdef Q
             %             try
             %             exitFlag = 0;
             %             xDiv = [];
-            PADDING = 50;
+            PADDING = 30;
             %             while exitFlag == 0
             %                 [x,~,button] = ginput(1);
             %                 if button == 3 || length(xDiv) > 10
@@ -175,7 +181,6 @@ classdef Q
                 trials = [xDiv(d)-PADDING xDiv(d)+PADDING];
                 stim = obj.data.stimulus(trials(1):trials(2),:);
                 act = obj.data.action(trials(1):trials(2));
-                nPower = mean(obj.N(trials(1):trials(2)));
                 
                 c1d=diff(stim,[],2);
                 [uniqueC,~,IC] = unique(c1d);
@@ -189,8 +194,8 @@ classdef Q
                 
                 midTrial = xDiv(d);
                 contrasts = linspace(0,1,200);
-                ql = w{1}(1,midTrial)*(contrasts.^nPower) + w{1}(2,midTrial);
-                qr = w{2}(1,midTrial)*(contrasts.^nPower) + w{2}(2,midTrial);
+                ql = w{1}(1,midTrial)*(contrasts.^obj.N) + w{1}(2,midTrial);
+                qr = w{2}(1,midTrial)*(contrasts.^obj.N) + w{2}(2,midTrial);
                 dQ=beta*[ql-w{2}(2,midTrial), w{1}(2,midTrial)-qr];
                 pL{d} = [exp(dQ)./(1+exp(dQ))]';
                 
@@ -225,13 +230,50 @@ classdef Q
             %             end
         end
         
-        function obj = fitContrastFcn(obj)
-            for b = 1:max(obj.data.session)
-                g = GLM(obj.expRef{b}).setModel('C^N-subset-2AFC').fit;
-%                 g.plotFit; keyboard;
-                obj.N(obj.data.session==b,1) = g.parameterFits(end);
+        function plotDet(obj,alpha,gamma,sigma)
+            obj = obj.drawNoise(sigma);
+            
+            p.alpha = alpha;
+            p.beta = 1;
+            p.gamma = gamma;
+            
+            w_init = obj.fitWINIT(p.alpha,p.gamma);
+            p.sL_init = w_init(1);
+            p.bL_init = w_init(2);
+            p.sR_init = w_init(3);
+            p.bR_init = w_init(4);
+            w = obj.calculateWT(p);
+            ph = obj.calculatePHAT(w,p.beta);
+            
+            ph_choice = 1+(ph(1,:)<=0.5);
+            c1d = diff(obj.data.stimulus,[],2);
+            
+            pLdat = [];
+            pLdatErr = [];
+            
+            pL = [];
+            pLErr = [];
+            [uniqueC,~,IC] = unique(c1d);
+            for c = 1:length(uniqueC)
+                choices=obj.data.action(IC==c);
+                [p,ci] = binofit(sum(choices==1),length(choices));
+                pLdat(c,1)=p;
+                pLdatErr(c,:)=[p-ci(1) ci(2)-p];
+                
+                choices=ph_choice(IC==c);
+                [p,ci] = binofit(sum(choices==1),length(choices));
+                pL(c,1) = p;
+                pLErr(c,:)=[p-ci(1) ci(2)-p];
             end
+            
+            errorbar(uniqueC,pLdat,pLdatErr(:,1),pLdatErr(:,2));
+            hold on;
+            errorbar(uniqueC,pL,pLErr(:,1),pLErr(:,2));
+            hold off;
+%             legend({'data','model'})
+            
         end
+
     end
     
     methods (Access=public)
@@ -260,8 +302,20 @@ classdef Q
         %
         function xt = x(obj)
             numTrials = length(obj.data.action);
-            xt = {[(obj.data.stimulus(:,1).^obj.N)'; ones(1,numTrials)];
-                [(obj.data.stimulus(:,2).^obj.N)'; ones(1,numTrials)]};
+            
+            s = obj.data.stimulus;
+            xt = {[s(:,1)'; ones(1,numTrials)];
+                  [s(:,2)'; ones(1,numTrials)]};
+        end
+        
+        
+        function xt = x_noisy(obj,sigma)
+            numTrials = length(obj.data.action);
+            
+            s = obj.data.stimulus + randn(numTrials,2)*sigma;
+            s = (abs(s).^obj.N).*sign(s);
+            xt = {[s(:,1)'; ones(1,numTrials)];
+                  [s(:,2)'; ones(1,numTrials)]};
         end
         
         function [W_init] = fitWINIT(obj,alpha,gamma)
@@ -386,5 +440,6 @@ classdef Q
             end
             nloglik = sum(log2(p));
         end
-    end
+            
+        end
 end
