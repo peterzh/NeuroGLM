@@ -8,6 +8,7 @@ classdef Q
     
     properties (Access=private)
         guess_bpt;
+        fitting_data;
     end
     
     methods
@@ -62,6 +63,8 @@ classdef Q
         end
         
         function obj = fit(obj)
+            obj.fitting_data = obj.data;
+            
             figure; %to prevent plotting over any old plots
             options = optiset('solver','NOMAD','display','final');
             Opt = opti('fun',@obj.objective,...
@@ -91,7 +94,7 @@ classdef Q
             p.bR_init = w_init(4);
             w = obj.calculateWT(p);
             ph = obj.calculatePHAT(w,p.beta);
-            bpt = obj.calculateLOGLIK(ph)/length(obj.data.action);
+            bpt = obj.calculateLOGLIK(ph)/length(obj.fitting_data.action);
             
             figure;
             h(1)=subplot(4,1,1);
@@ -112,15 +115,15 @@ classdef Q
             end
             
             h(2)=subplot(4,1,2);
-            trialDot = obj.data.action-1;
-            trialDot((diff(obj.data.stimulus,[],2))==0)=nan;
-%             trialDot(obj.data.reward==0)=nan;
-%             trialDot(obj.data.DA==0)=nan;
+            trialDot = obj.fitting_data.action-1;
+            trialDot((diff(obj.fitting_data.stimulus,[],2))==0)=nan;
+%             trialDot(obj.fitting_data.reward==0)=nan;
+%             trialDot(obj.fitting_data.DA==0)=nan;
             plot(trialDot,'k.','markersize',10);
 
             hold on;
-            plot((diff(obj.data.stimulus,[],2)>0),'o')
-            trialDot(obj.data.DA==0)=nan;
+            plot((diff(obj.fitting_data.stimulus,[],2)>0),'o')
+            trialDot(obj.fitting_data.DA==0)=nan;
             plot(trialDot,'.','markersize',10);
             hold off;
             ylim([-1 2]);
@@ -141,10 +144,10 @@ classdef Q
             title(['loglik_{model} - loglik_{guess} = ' num2str(bpt - obj.guess_bpt)]);
             
             linkaxes(h,'x');
-            xlim([0 length(obj.data.action)]);
+            xlim([0 length(obj.fitting_data.action)]);
             subplot(4,3,10);
-            plot(QL(obj.data.action==1),QR(obj.data.action==1),'bo',...
-                QL(obj.data.action==2),QR(obj.data.action==2),'ro')
+            plot(QL(obj.fitting_data.action==1),QR(obj.fitting_data.action==1),'bo',...
+                QL(obj.fitting_data.action==2),QR(obj.fitting_data.action==2),'ro')
             %             scatter(QL,QR,[],obj.data.action,'filled'); colorbar; caxis([1 2]);
             legend({'Chose L','Chose R'});
             axis square;
@@ -179,8 +182,8 @@ classdef Q
             for d = 1:length(xDiv)
                 %                  trials=round([numTrials*divisions(d,1)+1 numTrials*divisions(d,2)]);
                 trials = [xDiv(d)-PADDING xDiv(d)+PADDING];
-                stim = obj.data.stimulus(trials(1):trials(2),:);
-                act = obj.data.action(trials(1):trials(2));
+                stim = obj.fitting_data.stimulus(trials(1):trials(2),:);
+                act = obj.fitting_data.action(trials(1):trials(2));
                 
                 c1d=diff(stim,[],2);
                 [uniqueC,~,IC] = unique(c1d);
@@ -273,6 +276,49 @@ classdef Q
 %             legend({'data','model'})
             
         end
+        
+        function loglik = crossvalidate(obj)
+            numTrials = length(obj.data.action);
+            
+            p_hats = nan(numTrials-1,1);
+            for trial = 1:(numTrials-1)
+                test = structfun(@(c)c(trial==[1:numTrials],:),obj.data,'uni',0);
+                train = structfun(@(c)c(trial~=[1:numTrials],:),obj.data,'uni',0);
+                
+                obj.fitting_data = train; %Assign training set to be fit
+                options = optiset('solver','NLOPT','display','off');
+                Opt = opti('fun',@obj.objective,...
+                    'bounds',[0.4 0 0],[0.4 1 1],...
+                    'x0',[0.5 0.5 0.5],'options',options);
+                [p_est,~,exitflag,~] = Opt.solve;
+                p.alpha = [p_est(1) 0; 0 p_est(2)];
+                p.beta = 1;
+                p.gamma = p_est(3);
+                
+                w_init = obj.fitWINIT(p.alpha,p.gamma);
+                
+                p.sL_init = w_init(1);
+                p.bL_init = w_init(2);
+                p.sR_init = w_init(3);
+                p.bR_init = w_init(4);
+                
+                w = obj.calculateWT(p);
+            
+                %calculate probability of test point
+                QL = w{1}(:,trial)'*[test.stimulus(1)^obj.N; 1];
+                QR = w{2}(:,trial)'*[test.stimulus(2)^obj.N; 1];
+                Z = p.beta*(QL-QR);
+                pL = exp(Z)./(1+exp(Z));
+                pR = 1-pL;
+                ph = [pL pR];
+                
+                p_hats(trial) = ph(test.action);
+                
+                disp(p_hats(trial));
+            end
+            p_hats(p_hats==0)=[]; %remove trials where phat was zero
+            loglik = -mean(log2(p_hats));
+        end
 
     end
     
@@ -294,34 +340,24 @@ classdef Q
             ph = obj.calculatePHAT(w,p.beta);
             negLogLik = -obj.calculateLOGLIK(ph);
             plot([w{1}',w{2}']);
-            bpt = -negLogLik/length(obj.data.action);
+            bpt = -negLogLik/length(obj.fitting_data.action);
             title([num2str(bpt - obj.guess_bpt)]); 
             drawnow;
 
         end
         %
         function xt = x(obj)
-            numTrials = length(obj.data.action);
+            numTrials = length(obj.fitting_data.action);
             
-            s = obj.data.stimulus;
-            xt = {[s(:,1)'; ones(1,numTrials)];
-                  [s(:,2)'; ones(1,numTrials)]};
-        end
-        
-        
-        function xt = x_noisy(obj,sigma)
-            numTrials = length(obj.data.action);
-            
-            s = obj.data.stimulus + randn(numTrials,2)*sigma;
-            s = (abs(s).^obj.N).*sign(s);
+            s = obj.fitting_data.stimulus.^obj.N;
             xt = {[s(:,1)'; ones(1,numTrials)];
                   [s(:,2)'; ones(1,numTrials)]};
         end
         
         function [W_init] = fitWINIT(obj,alpha,gamma)
-            numTrials = size(obj.data.action,1);
-            rt = (1-gamma)*obj.data.reward + gamma*obj.data.DA;
-            at = obj.data.action;
+            numTrials = size(obj.fitting_data.action,1);
+            rt = (1-gamma)*obj.fitting_data.reward + gamma*obj.fitting_data.DA;
+            at = obj.fitting_data.action;
             xt = obj.x;
             
             Vt = {nan(2,numTrials),nan(2,numTrials)};
@@ -345,8 +381,8 @@ classdef Q
                 if prev.at==1
                     prev.xt = xt{1}(:,t-1);
                     prev.nt = alpha*prev.rt*prev.xt;
-%                     prev.Mt = eye(2) - alpha*prev.xt*prev.xt';
-                    prev.Mt = eye(2) - alpha*prev.xt*[diff(obj.data.stimulus(t-1,:))<0 1];
+                    prev.Mt = eye(2) - alpha*prev.xt*prev.xt';
+%                     prev.Mt = eye(2) - alpha*prev.xt*[diff(obj.fitting_data.stimulus(t-1,:))<0 1];
                     
                     Vt{1}(:,t) = prev.nt + prev.Mt*Vt{1}(:,t-1);
                     Bt{1}(:,:,t) = prev.Mt*Bt{1}(:,:,t-1);
@@ -356,8 +392,8 @@ classdef Q
                 elseif prev.at==2
                     prev.xt = xt{2}(:,t-1);
                     prev.nt = alpha*prev.rt*prev.xt;
-%                     prev.Mt = eye(2) - alpha*prev.xt*prev.xt';
-                    prev.Mt = eye(2) - alpha*prev.xt*[diff(obj.data.stimulus(t-1,:))>0 1];
+                    prev.Mt = eye(2) - alpha*prev.xt*prev.xt';
+%                     prev.Mt = eye(2) - alpha*prev.xt*[diff(obj.fitting_data.stimulus(t-1,:))>0 1];
                     
 
                     Vt{2}(:,t) = prev.nt + prev.Mt*Vt{2}(:,t-1);
@@ -374,7 +410,7 @@ classdef Q
             end
             
             X = regressors;
-            Y = obj.data.action;
+            Y = obj.fitting_data.action;
             Y(Y==2)=0;
             g = fitglm(X,Y,'Distribution','binomial','intercept',false,'offset',offset);
             W_init = table2array(g.Coefficients(:,1));
@@ -382,9 +418,9 @@ classdef Q
         end
         %
         function wt = calculateWT(obj,p)
-            numTrials = size(obj.data.action,1);
+            numTrials = size(obj.fitting_data.action,1);
             wt = {nan(2,numTrials),nan(2,numTrials)};
-            at = obj.data.action;
+            at = obj.fitting_data.action;
             wt{1}(:,1) = [p.sL_init; p.bL_init];
             wt{2}(:,1) = [p.sR_init; p.bR_init];
             
@@ -392,16 +428,16 @@ classdef Q
             
             
             for t = 2:numTrials
-                prev.rt = (1-p.gamma)*obj.data.reward(t-1) + p.gamma*obj.data.DA(t-1);
+                prev.rt = (1-p.gamma)*obj.fitting_data.reward(t-1) + p.gamma*obj.fitting_data.DA(t-1);
                 prev.at = at(t-1);
                 
                 if prev.at==1
                     prev.xt = xt{1}(:,t-1);
-                    wt{1}(:,t) = wt{1}(:,t-1) + p.alpha*(prev.rt - prev.xt'*wt{1}(:,t-1))*[diff(obj.data.stimulus(t-1,:))<0 1]';
+                    wt{1}(:,t) = wt{1}(:,t-1) + p.alpha*(prev.rt - prev.xt'*wt{1}(:,t-1))*prev.xt;%[diff(obj.fitting_data.stimulus(t-1,:))<0 1]';
                     wt{2}(:,t) = wt{2}(:,t-1);
                 elseif prev.at==2
                     prev.xt = xt{2}(:,t-1);
-                    wt{2}(:,t) = wt{2}(:,t-1) + p.alpha*(prev.rt - prev.xt'*wt{2}(:,t-1))*[diff(obj.data.stimulus(t-1,:))>0 1]';
+                    wt{2}(:,t) = wt{2}(:,t-1) + p.alpha*(prev.rt - prev.xt'*wt{2}(:,t-1))*prev.xt;%[diff(obj.fitting_data.stimulus(t-1,:))>0 1]';
                     wt{1}(:,t) = wt{1}(:,t-1);
                 end
                 
@@ -412,7 +448,7 @@ classdef Q
         function phat = calculatePHAT(obj,wt,beta)
             xt = obj.x;
             
-            numTrials = length(obj.data.action);
+            numTrials = length(obj.fitting_data.action);
             
             for n = 1:numTrials
                 QL(n) = wt{1}(:,n)'*xt{1}(:,n);
@@ -434,8 +470,8 @@ classdef Q
                 phat = phat';
             end
             
-            for t = 1:length(obj.data.action)
-                r =  obj.data.action(t);
+            for t = 1:length(obj.fitting_data.action)
+                r =  obj.fitting_data.action(t);
                 p(t) = phat(r,t);
             end
             nloglik = sum(log2(p));
