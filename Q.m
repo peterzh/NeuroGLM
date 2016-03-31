@@ -151,7 +151,7 @@ classdef Q
 %             ax.YLim=[-0.1 1.1];
             xlabel('Trial number');
 
-            title(['loglik_{model} - loglik_{guess} = ' num2str(bpt - obj.guess_bpt)]);
+            title(['loglik_{model} - loglik_{guess}(' num2str(obj.guess_bpt) ') = ' num2str(bpt - obj.guess_bpt)]);
             
             linkaxes(h,'x');
             xlim([0 length(obj.fitting_data.action)]);
