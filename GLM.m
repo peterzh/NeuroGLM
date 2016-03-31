@@ -169,6 +169,12 @@ classdef GLM
                     obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2) D.hist]);
                     obj.ZL = @(P,in)( P(1) + P(2).*in(:,1).^P(7) + P(5).*in(:,3) );
                     obj.ZR = @(P,in)( P(3) + P(4).*in(:,2).^P(7) + P(6).*in(:,3) );
+                case 'AFC-C^N-subset-hist-success'
+                    obj.parameterLabels = {'Offset','ScaleL_L','ScaleR_R','Hist','N'};
+                    obj.parameterBounds = [-inf(1,4) 0;
+                        +inf(1,4) inf];
+                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2) D.hist]);
+                    obj.ZL = @(P,in)( P(1) + P(2).*in(:,1).^P(5) + P(3).*in(:,2).^P(5) + P(4).*in(:,3) );
                 case 'C^N-subset-Qlearning'
                     obj.parameterLabels = {'ScaleL_L','ScaleR_R','Q_L','Q_R','N'};
                     obj.parameterBounds = [-inf(1,2) 1 1 0.1;
