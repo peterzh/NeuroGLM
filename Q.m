@@ -74,15 +74,19 @@ classdef Q
             figure; %to prevent plotting over any old plots
             options = optiset('solver','NOMAD','display','final');
             Opt = opti('fun',@obj.objective,...
-                'bounds',[0 0 0],[1 1 1],...
-                'x0',[0.5 0.5 0.5],'options',options);
+                'bounds',[0 0 0 0],[1 1 10 1],...
+                'x0',[0.5 0.5 0.5 0.5],'options',options);
             [p_est,~,exitflag,~] = Opt.solve;
             %             p_est = fmincon(@obj.objective,[0.1 1 1],[],[],[],[],[0 0 0],[1 100 100]);
             
             alpha = [p_est(1) 0; 0 p_est(2)];
-%             beta = p_est(3);
-            beta = 1;
-            gamma = p_est(3);
+            beta = p_est(3);
+%             beta = 1;
+            gamma = p_est(4);
+            
+            obj.alpha = alpha;
+            obj.beta = beta;
+            obj.gamma = gamma;
             
             obj.plot(alpha,beta,gamma);
             
@@ -292,14 +296,18 @@ classdef Q
                 train = structfun(@(c)c(trial~=[1:numTrials],:),obj.data,'uni',0);
                 
                 obj.fitting_data = train; %Assign training set to be fit
-                options = optiset('solver','NLOPT','display','off');
+                
+                
+                options = optiset('solver','NOMAD','display','off');
                 Opt = opti('fun',@obj.objective,...
-                    'bounds',[0.4 0 0],[0.4 1 1],...
-                    'x0',[0.5 0.5 0.5],'options',options);
+                    'bounds',[0 0 0 0],[1 1 10 1],...
+                    'x0',[0.5 0.5 0.5 0.5],'options',options);
                 [p_est,~,exitflag,~] = Opt.solve;
+                
+                
                 p.alpha = [p_est(1) 0; 0 p_est(2)];
-                p.beta = 1;
-                p.gamma = p_est(3);
+                p.beta = p_est(3);
+                p.gamma = p_est(4);
                 
                 w_init = obj.fitWINIT(p.alpha,p.gamma);
                 
@@ -331,9 +339,9 @@ classdef Q
     methods (Access=public)
         function negLogLik = objective(obj,p_vec)
             p.alpha = [p_vec(1) 0; 0 p_vec(2)];
-%             p.beta = p_vec(3);
-            p.gamma = p_vec(3);
-            p.beta = 1;
+            p.beta = p_vec(3);
+            p.gamma = p_vec(4);
+%             p.beta = 1;
             
             w_init = obj.fitWINIT(p.alpha,p.gamma);
             p.sL_init = w_init(1);
