@@ -15,27 +15,33 @@ classdef Q
         function obj = Q(expRefs)
             obj.data=struct;
             
-            obj.expRef = cell(length(expRefs),1);
-            for b = 1:length(expRefs)
-                obj.expRef{b} = expRefs{b};
-                block = dat.loadBlock(expRefs{b});
-                trials = block.trial;
-                d = struct;
-                
-                for t=1:block.numCompletedTrials
-                    d.stimulus(t,:) = trials(t).condition.visCueContrast';
-                    d.action(t,1) = trials(t).responseMadeID';
-                    d.repeatNum(t,1) = trials(t).condition.repeatNum;
-                    d.reward(t,1) = trials(t).feedbackType==1;
-                    d.session(t,1) = b;
+            if isa(expRefs,'cell')
+                obj.expRef = cell(length(expRefs),1);
+                for b = 1:length(expRefs)
+                    obj.expRef{b} = expRefs{b};
+                    block = dat.loadBlock(expRefs{b});
+                    trials = block.trial;
+                    d = struct;
                     
-                    try
-                        d.DA(t,1) = trials(t).condition.rewardVolume(2)>0 & trials(t).feedbackType==1;
-                    catch
-                        d.DA(t,1)= nan;
+                    for t=1:block.numCompletedTrials
+                        d.stimulus(t,:) = trials(t).condition.visCueContrast';
+                        d.action(t,1) = trials(t).responseMadeID';
+                        d.repeatNum(t,1) = trials(t).condition.repeatNum;
+                        d.reward(t,1) = trials(t).feedbackType==1;
+                        d.session(t,1) = b;
+                        
+                        try
+                            d.DA(t,1) = trials(t).condition.rewardVolume(2)>0 & trials(t).feedbackType==1;
+                        catch
+                            d.DA(t,1)= nan;
+                        end
                     end
+                    obj.data = addstruct(obj.data,d);
                 end
-                obj.data = addstruct(obj.data,d);
+                
+            elseif isa(expRefs,'struct')
+                obj.expRef = 'custom';
+                obj.data = expRefs;
             end
             
             if max(obj.data.action) == 3
