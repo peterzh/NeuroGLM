@@ -12,10 +12,10 @@ classdef GLM
         regularise;
         data;
         p_hat;
+        ContrastDimensions;
     end
     
-    properties (Access=private)
-        ContrastDimensions;
+    properties (Access=public)
     end
     
     methods
