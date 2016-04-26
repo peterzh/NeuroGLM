@@ -40,6 +40,7 @@ classdef GLM
                     D.response(t,1) = trials(t).responseMadeID';
                     D.repeatNum(t,1) = trials(t).condition.repeatNum;
                     D.feedbackType(t,1) = trials(t).feedbackType;
+                    D.RT(t,1) = trials(t).responseMadeTime-trials(t).interactiveStartedTime;
                 end
 
                 obj.data = D;
