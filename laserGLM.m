@@ -13,7 +13,7 @@ classdef laserGLM < GLM
     end
     
     methods
-        function obj = laserGLM(inputData)
+        function obj = laserGLM(inputData,varargin)
             obj@GLM(inputData);
             
             if isa(inputData,'char')
@@ -23,7 +23,31 @@ classdef laserGLM < GLM
                 catch
                     getLaserLabels(inputData);
                     L=load(dat.expFilePath(inputData, 'laserManip', 'm'));
-                    obj.data.laser = L.laserCoordByTrial; 
+                    obj.data.laser = L.laserCoordByTrial;
+                end
+                
+                if ~isempty(varargin)
+                    block = dat.loadBlock(inputData);
+                    trials = block.trial;
+                
+                    for x=1:length(varargin)
+                        choice = varargin{x};
+                        switch(choice)
+                            case 'lick'
+                                disp('Loading lick data...');
+                                L=load(dat.expFilePath(inputData, 'Timeline', 'm'));
+                                tseries = L.Timeline.rawDAQTimestamps;
+                                lickseries = L.Timeline.rawDAQData(:,7);
+                                
+                                for t=1:block.numCompletedTrials
+                                    start = trials(t).trialStartedTime;
+                                    finish = trials(t).trialEndedTime;
+                                    idx = (start < tseries) & (tseries < finish);
+                                    
+                                    D.lickenergy(t,1) = sum(lickseries(idx).^2);
+                                end
+                        end
+                    end
                 end
             end
             sites = unique(obj.data.laser(~isnan(obj.data.laser(:,1)),:),'rows');
