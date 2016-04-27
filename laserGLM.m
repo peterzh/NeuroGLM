@@ -50,15 +50,13 @@ classdef laserGLM < GLM
                     end
                 end
             end
-            sites = unique(obj.data.laser(~isnan(obj.data.laser(:,1)),:),'rows');
+            [sites,~,ic] = unique(obj.data.laser,'rows');
+            nanIdx = find(isnan(sites(:,1)),1,'first');
             
-            obj.inactivationSite = sites;
-            obj.data.laserIdx = zeros(size(obj.data.laser,1),1);
-            for i = 1:size(sites,1)
-                idx=bsxfun(@(a,b)(a==b),sites(i,:),obj.data.laser);
-                idx = sum(idx,2)==2;
-                obj.data.laserIdx = obj.data.laserIdx + idx*i; 
-            end
+            obj.inactivationSite = sites(1:nanIdx-1,:);
+            ic(ic>=nanIdx)=0;
+            obj.data.laserIdx = ic;
+
         end
         
         function obj = setModel(obj,modelString)
