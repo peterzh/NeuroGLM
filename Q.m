@@ -67,7 +67,7 @@ classdef Q
 %             obj.stimNoise = zeros(length(obj.data.action),2);
         end
         
-        function obj = setModel(obj,model)           
+        function obj = setModel(obj,model)
             if any(strcmp(obj.AllPossibleModels,model))
                 obj.model=model;
             else
@@ -83,19 +83,14 @@ classdef Q
             Opt = opti('fun',@obj.objective,...
                 'bounds',[0 0 0 0],[1 1 10 1],...
                 'x0',[0.5 0.5 0.5 0.5],'options',options);
-            [p_est,~,exitflag,~] = Opt.solve;
+            [p_est,~,~,~] = Opt.solve;
             %             p_est = fmincon(@obj.objective,[0.1 1 1],[],[],[],[],[0 0 0],[1 100 100]);
             
-            alpha = [p_est(1) 0; 0 p_est(2)];
-            beta = p_est(3);
-%             beta = 1;
-            gamma = p_est(4);
+            obj.alpha = [p_est(1) 0; 0 p_est(2)];
+            obj.beta = p_est(3);
+            obj.gamma = p_est(4);
             
-            obj.alpha = alpha;
-            obj.beta = beta;
-            obj.gamma = gamma;
-            
-            obj.plot(alpha,beta,gamma);
+            obj.plot(obj.alpha,obj.beta,obj.gamma);
             
         end
         
@@ -253,7 +248,6 @@ classdef Q
             end
             hold off;
             legend(cellfun(@(c)num2str(c),num2cell([xDiv]),'uni',0),'location','BestOutside')
-            %             legend({'first half model','second half model','first half data','second half data'});
             ylabel('pL'); title('psych from w compared to data');
             xlim([min(c1d)-0.1 max(c1d)+0.1]);
             
@@ -261,51 +255,7 @@ classdef Q
             %             end
         end
         
-        function plotDet(obj,alpha,gamma,sigma)
-            obj = obj.drawNoise(sigma);
-            
-            p.alpha = alpha;
-            p.beta = 1;
-            p.gamma = gamma;
-            
-            w_init = obj.fitWINIT(p.alpha,p.gamma);
-            p.sL_init = w_init(1);
-            p.bL_init = w_init(2);
-            p.sR_init = w_init(3);
-            p.bR_init = w_init(4);
-            w = obj.calculateWT(p);
-            ph = obj.calculatePHAT(w,p.beta);
-            
-            ph_choice = 1+(ph(1,:)<=0.5);
-            c1d = diff(obj.data.stimulus,[],2);
-            
-            pLdat = [];
-            pLdatErr = [];
-            
-            pL = [];
-            pLErr = [];
-            [uniqueC,~,IC] = unique(c1d);
-            for c = 1:length(uniqueC)
-                choices=obj.data.action(IC==c);
-                [p,ci] = binofit(sum(choices==1),length(choices));
-                pLdat(c,1)=p;
-                pLdatErr(c,:)=[p-ci(1) ci(2)-p];
-                
-                choices=ph_choice(IC==c);
-                [p,ci] = binofit(sum(choices==1),length(choices));
-                pL(c,1) = p;
-                pLErr(c,:)=[p-ci(1) ci(2)-p];
-            end
-            
-            errorbar(uniqueC,pLdat,pLdatErr(:,1),pLdatErr(:,2));
-            hold on;
-            errorbar(uniqueC,pL,pLErr(:,1),pLErr(:,2));
-            hold off;
-%             legend({'data','model'})
-            
-        end
-        
-        function p_hats = crossvalidate(obj)           
+        function p_hats = crossvalidate(obj)
             numTrials = length(obj.data.action);
 
             figure;
@@ -317,7 +267,8 @@ classdef Q
                 
                 obj.fitting_data = train; %Assign training set to be fit
 
-                options = optiset('solver','NOMAD','display','off');
+%                 options = optiset('solver','NOMAD','display','off');
+                options = optiset('solver','NLOPT','display','off');
                 
                 switch(obj.model)
                     case 'aB+aS'
@@ -379,7 +330,13 @@ classdef Q
                 
                 disp(p_hats(trial));
             end
-            save(['B:\QModelComparison\' obj.model '.mat'],'p_hats');
+            
+            if length(obj.expRef)>1
+                name='several';
+            else
+                name=obj.expRef{:};
+            end
+            save(['B:\QModelComparison\' name '_' obj.model '.mat'],'p_hats');
 %             loglik = -nanmean(log2(p_hats));
         end
 
@@ -416,10 +373,10 @@ classdef Q
             
             ph = obj.calculatePHAT(w,p.beta);
             negLogLik = -obj.calculateLOGLIK(ph);
-            plot([w{1}',w{2}']);
-            bpt = -negLogLik/length(obj.fitting_data.action);
-            title([num2str(bpt - obj.guess_bpt)]); 
-            drawnow;
+%             plot([w{1}',w{2}']);
+%             bpt = -negLogLik/length(obj.fitting_data.action);
+%             title([num2str(bpt - obj.guess_bpt)]); 
+%             drawnow;
 
         end
         
