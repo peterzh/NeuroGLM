@@ -19,17 +19,34 @@ classdef laserGLM < GLM
             if isa(inputData,'char')
                 try
                     L=load(dat.expFilePath(inputData, 'laserManip', 'm'));
-                    obj.data.laser = L.laserCoordByTrial; 
+                    L.laserCoordByTrial;
                 catch
                     getLaserLabels(inputData);
                     L=load(dat.expFilePath(inputData, 'laserManip', 'm'));
-                    obj.data.laser = L.laserCoordByTrial;
+                    L.laserCoordByTrial; %Test if this variable exists, that's all...
                 end
+                
+                %if bilateral then replace each row by its virtual
+                %coordinate
+                try 
+                    L.coordList_unadjusted(1,:); %in bilat expts this field exists
+                    for n=1:size(L.laserCoordByTrial,1)
+                        if ~isnan(L.laserCoordByTrial(n,1))
+                            matchIdx = sum(abs(bsxfun(@minus,L.laserCoordByTrial(n,:),L.coordList)),2)==0;
+                            L.laserCoordByTrial(n,:) = [L.coordList_unadjusted(matchIdx,:) 0];
+                        end
+                    end
+
+                catch
+                    disp('No coordList_unadjusted detected');
+                end
+                
+                obj.data.laser = L.laserCoordByTrial;
                 
                 if ~isempty(varargin)
                     block = dat.loadBlock(inputData);
                     trials = block.trial;
-                
+                    
                     for x=1:length(varargin)
                         choice = varargin{x};
                         switch(choice)
@@ -44,7 +61,7 @@ classdef laserGLM < GLM
                                     finish = trials(t).trialEndedTime;
                                     idx = (start < tseries) & (tseries < finish);
                                     
-                                    D.lickenergy(t,1) = sum(lickseries(idx).^2);
+                                    obj.data.lickenergy(t,1) = sum(lickseries(idx).^2);
                                 end
                         end
                     end
