@@ -38,7 +38,11 @@ classdef laserGLM < GLM
                     end
 
                 catch
-                    disp('No coordList_unadjusted detected');
+%                     disp('No coordList_unadjusted detected');
+                end
+                
+                if size(L.laserCoordByTrial,2)==2
+                    L.laserCoordByTrial = [L.laserCoordByTrial zeros(size(L.laserCoordByTrial,1),1)];
                 end
                 
                 obj.data.laser = L.laserCoordByTrial;
