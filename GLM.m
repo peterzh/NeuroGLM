@@ -106,11 +106,11 @@ classdef GLM
                     obj.ZR = @(P,in)(P(3) + P(4).*in(:,2).^P(6));
                 case 'C50'
                     obj.parameterLabels = {'Offset_L','ScaleL_L','ScaleR_L','Offset_R','ScaleL_R','ScaleR_R','N','C50'};
-                    obj.parameterBounds = [-inf -inf -inf -inf -inf -inf 0.001 0.001;
-                        +inf +inf +inf +inf +inf +inf 0.8 0.8];
+                    obj.parameterBounds = [-inf -inf -inf -inf -inf -inf 0 0.001;
+                        +inf +inf +inf +inf +inf +inf 3 0.8];
                     obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
-                    obj.ZL = @(P,in)(P(1) + P(2).*(in(:,1).^P(7))./(in(:,1).^P(7) + P(8)) + P(3).*(in(:,2).^P(7))./(in(:,2).^P(7) + P(8)^P(7)));
-                    obj.ZR = @(P,in)(P(4) + P(5).*(in(:,1).^P(7))./(in(:,1).^P(7) + P(8)) + P(6).*(in(:,2).^P(7))./(in(:,2).^P(7) + P(8)^P(7)));
+                    obj.ZL = @(P,in)(P(1) + P(2).*(in(:,1).^P(7))./(in(:,1).^P(7) + P(8)^P(7)) + P(3).*(in(:,2).^P(7))./(in(:,2).^P(7) + P(8)^P(7)));
+                    obj.ZR = @(P,in)(P(4) + P(5).*(in(:,1).^P(7))./(in(:,1).^P(7) + P(8)^P(7)) + P(6).*(in(:,2).^P(7))./(in(:,2).^P(7) + P(8)^P(7)));
                 case 'C50-subset'
                     obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','N','C50'};
                     obj.parameterBounds = [-inf -inf -inf -inf 0 0.001;
