@@ -7,6 +7,7 @@ classdef Q
         alpha=[];
         beta=[];
         gamma=[];
+        preset_winit=[];
     end
     
     properties (Access=public)
@@ -80,15 +81,43 @@ classdef Q
             
             figure; %to prevent plotting over any old plots
             options = optiset('solver','NOMAD','display','final');
-            Opt = opti('fun',@obj.objective,...
-                'bounds',[0 0 0 0],[1 1 10 1],...
-                'x0',[0.5 0.5 0.5 0.5],'options',options);
-            [p_est,~,~,~] = Opt.solve;
-            %             p_est = fmincon(@obj.objective,[0.1 1 1],[],[],[],[],[0 0 0],[1 100 100]);
             
-            obj.alpha = [p_est(1) 0; 0 p_est(2)];
-            obj.beta = p_est(3);
-            obj.gamma = p_est(4);
+            switch(obj.model)
+                case 'aB+aS'
+                    Opt = opti('fun',@obj.objective,...
+                        'bounds',[0 0 0 0],[1 1 10 1],...
+                        'x0',[0.5 0.5 0.5 0.5],'options',options);
+                    [p_est,~,~,~] = Opt.solve;
+                    obj.alpha = [p_est(1) 0; 0 p_est(2)];
+                    obj.beta = p_est(3);
+                    obj.gamma = p_est(4);
+                case 'aB'
+                    Opt = opti('fun',@obj.objective,...
+                        'bounds',[0 0 0],[1 10 1],...
+                        'x0',[0.5 0.5 0.5],'options',options);
+                    [p_est,~,~,~] = Opt.solve;
+                    obj.alpha = [0 0; 0 p_est(1)];
+                    obj.beta = p_est(2);
+                    obj.gamma = p_est(3);
+                case 'aS'
+                    Opt = opti('fun',@obj.objective,...
+                        'bounds',[0 0 0],[1 10 1],...
+                        'x0',[0.5 0.5 0.5],'options',options);
+                    [p_est,~,~,~] = Opt.solve;
+                    obj.alpha = [p_est(1) 0; 0 0];
+                    obj.beta = p_est(2);
+                    obj.gamma = p_est(3);
+                case 'nolearn'
+                    Opt = opti('fun',@obj.objective,...
+                        'bounds',[0 0],[10 1],...
+                        'x0',[0.5 0.5],'options',options);
+                    [p_est,~,~,~] = Opt.solve;
+                    obj.alpha = [0 0; 0 0];
+                    obj.beta = p_est(1);
+                    obj.gamma = p_est(2);
+            end
+
+            %             p_est = fmincon(@obj.objective,[0.1 1 1],[],[],[],[],[0 0 0],[1 100 100]);
             
             obj.plot(obj.alpha,obj.beta,obj.gamma);
             
@@ -101,7 +130,12 @@ classdef Q
             p.beta = beta;
             p.gamma = gamma;
             
-            w_init = obj.fitWINIT(p.alpha,p.gamma);
+            if isempty(obj.preset_winit)
+                w_init = obj.fitWINIT(p.alpha,p.gamma);
+            else
+                w_init = obj.preset_winit;
+            end
+            
             p.sL_init = w_init(1);
             p.bL_init = w_init(2);
             p.sR_init = w_init(3);
@@ -363,7 +397,11 @@ classdef Q
                     p.gamma = p_vec(2);
             end
             
-            w_init = obj.fitWINIT(p.alpha,p.gamma);
+            if isempty(obj.preset_winit)
+                w_init = obj.fitWINIT(p.alpha,p.gamma);
+            else
+                w_init = obj.preset_winit;
+            end
             p.sL_init = w_init(1);
             p.bL_init = w_init(2);
             p.sR_init = w_init(3);
@@ -373,10 +411,10 @@ classdef Q
             
             ph = obj.calculatePHAT(w,p.beta);
             negLogLik = -obj.calculateLOGLIK(ph);
-%             plot([w{1}',w{2}']);
-%             bpt = -negLogLik/length(obj.fitting_data.action);
-%             title([num2str(bpt - obj.guess_bpt)]); 
-%             drawnow;
+            plot([w{1}',w{2}']);
+            bpt = -negLogLik/length(obj.fitting_data.action);
+            title([num2str(bpt - obj.guess_bpt)]); 
+            drawnow;
 
         end
         
