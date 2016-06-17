@@ -574,6 +574,77 @@ classdef GLM
                 
                 phat = [pL pR pNG];
             end
+            
+%             if any(phat<0)
+%                 keyboard;
+%             end
+        end
+        
+        function obj = addData(obj,type)
+            %Adds extra data depending on what is required
+            
+            if strcmp(obj.expRef,'none')
+                error('not coded for custom struct inputs');
+            end
+            
+            switch(type)
+                case 'lick'
+                    block = dat.loadBlock(obj.expRef);
+                    trials = block.trial;
+                    
+                    disp('Loading lick data...');
+                    try
+                        L=load(dat.expFilePath(obj.expRef, 'Timeline', 'm'));
+                        tseries = L.Timeline.rawDAQTimestamps;
+                        lickseries = L.Timeline.rawDAQData(:,7);
+                        
+                        for t=1:block.numCompletedTrials
+                            start = trials(t).trialStartedTime;
+                            finish = trials(t).trialEndedTime;
+                            idx = (start < tseries) & (tseries < finish);
+                            
+                            obj.data.lickenergy(t,1) = sum(lickseries(idx).^2);
+                        end
+                    catch
+                        warning('No lick data found.. Setting to NaNs');
+                        obj.data.lickenergy = nan(block.numCompletedTrials,1);
+                    end
+                    
+                case 'pupil'
+                    block = dat.loadBlock(obj.expRef);
+                    trials = block.trial;
+                    
+                    disp('Loading eye movie...');
+                    
+                    try
+                        vidFilename = ['\\zserver\Data\EyeCamera\' obj.expRef(14:end) '\' obj.expRef(1:10) '\' obj.expRef(12) '\eye.mj2'];
+                        v = VideoReader(vidFilename);
+                        
+                        for t=1:block.numCompletedTrials
+                            %                             disp(t);
+                            start = trials(t).trialStartedTime;
+                            finish = trials(t).trialEndedTime;
+                            
+                            v.CurrentTime = start; a=0; pixCounts=0;
+                            while v.CurrentTime < finish
+                                frame = 255 - (v.readFrame*5.5);
+                                frame(frame>0)=1;
+                                frame = frame(50:110,80:180);
+                                pixCounts = pixCounts + sqrt(sum(frame(:)));
+                                a=a+1;
+                            end
+                            
+                            obj.data.pupilenergy(t,1) = pixCounts/a;
+                        end
+                    catch
+                        warning('No eye data found.. Setting to NaNs');
+                        obj.data.pupilenergy = nan(block.numCompletedTrials,1);
+                        
+                    end
+            end
+            
+            disp('Done!');
+            
         end
     end
     
