@@ -6,14 +6,15 @@ classdef laserGLM < GLM
     
     properties
         inactivationSite;
-        
+        sessionLabel='';
+
     end
     
     properties (Access=private)
     end
     
     methods
-        function obj = laserGLM(inputData,varargin)
+        function obj = laserGLM(inputData)
             obj@GLM(inputData);
             
             if isa(inputData,'char')
@@ -46,29 +47,10 @@ classdef laserGLM < GLM
                 end
                 
                 obj.data.laser = L.laserCoordByTrial;
-                
-                if ~isempty(varargin)
-                    block = dat.loadBlock(inputData);
-                    trials = block.trial;
-                    
-                    for x=1:length(varargin)
-                        choice = varargin{x};
-                        switch(choice)
-                            case 'lick'
-                                disp('Loading lick data...');
-                                L=load(dat.expFilePath(inputData, 'Timeline', 'm'));
-                                tseries = L.Timeline.rawDAQTimestamps;
-                                lickseries = L.Timeline.rawDAQData(:,7);
                                 
-                                for t=1:block.numCompletedTrials
-                                    start = trials(t).trialStartedTime;
-                                    finish = trials(t).trialEndedTime;
-                                    idx = (start < tseries) & (tseries < finish);
-                                    
-                                    obj.data.lickenergy(t,1) = sum(lickseries(idx).^2);
-                                end
-                        end
-                    end
+                try
+                    obj.sessionLabel = L.custom_name;
+                catch
                 end
             end
             [sites,~,ic] = unique(obj.data.laser,'rows');
