@@ -16,6 +16,7 @@ classdef GLM
     end
     
     properties (Access=public)
+        guess_bpt;
     end
     
     methods
@@ -54,6 +55,9 @@ classdef GLM
                 obj.ContrastDimensions = 1;
             end
             
+            tab = tabulate(obj.data.response);
+            tab = tab(:,3)/100;
+            obj.guess_bpt=sum(tab.*log2(tab));
         end
         
         function obj = setModel(obj,modelString)
