@@ -7,6 +7,9 @@ classdef Q
         alpha=[];
         beta=[];
         gamma=[];
+        wt=[];
+        QL=[];
+        QR=[];
         preset_winit=[];
     end
     
@@ -41,8 +44,15 @@ classdef Q
                             d.DA(t,1)= nan;
                         end
                     end
-                    obj.data = addstruct(obj.data,d);
+                    ds(b)=d;
                 end
+                
+                obj.data.stimulus   = vertcat(ds.stimulus);
+                obj.data.action     = vertcat(ds.action);
+                obj.data.repeatNum  = vertcat(ds.repeatNum);
+                obj.data.reward     = vertcat(ds.reward);
+                obj.data.session    = vertcat(ds.session);
+                obj.data.DA         = vertcat(ds.DA);
                 
             elseif isa(expRefs,'struct')
                 obj.expRef = 'custom';
@@ -59,7 +69,6 @@ classdef Q
             end
             badIdx = isnan(obj.data.DA);
             obj.data.DA(badIdx)=0;
-            %             obj.data = getrow(obj.data,~badIdx);
                        
             tab = tabulate(obj.data.action);
             tab = tab(:,3)/100;
@@ -77,6 +86,10 @@ classdef Q
         end
                 
         function obj = fit(obj)
+            if isempty(obj.model)
+                error('set model first');
+            end
+            
             obj.fitting_data = obj.data;
             
             figure; %to prevent plotting over any old plots
@@ -120,6 +133,30 @@ classdef Q
             %             p_est = fmincon(@obj.objective,[0.1 1 1],[],[],[],[],[0 0 0],[1 100 100]);
             
             obj.plot(obj.alpha,obj.beta,obj.gamma);
+            
+            p.alpha = obj.alpha;
+            p.beta = obj.beta;
+            p.gamma = obj.gamma;
+            
+            if isempty(obj.preset_winit)
+                w_init = obj.fitWINIT(p.alpha,p.gamma);
+            else
+                w_init = obj.preset_winit;
+            end
+            
+            p.sL_init = w_init(1);
+            p.bL_init = w_init(2);
+            p.sR_init = w_init(3);
+            p.bR_init = w_init(4);
+            obj.wt = obj.calculateWT(p);
+            xt = obj.x;
+            
+            numTrials = length(obj.fitting_data.action);
+            for n = 1:numTrials
+                obj.QL(n) = obj.wt{1}(:,n)'*xt{1}(:,n);
+                obj.QR(n) = obj.wt{2}(:,n)'*xt{2}(:,n);
+            end
+            
             
         end
         
@@ -216,7 +253,7 @@ classdef Q
             %             try
             %             exitFlag = 0;
             %             xDiv = [];
-            PADDING = 30;
+            PADDING = 10;
             %             while exitFlag == 0
             %                 [x,~,button] = ginput(1);
             %                 if button == 3 || length(xDiv) > 10
@@ -274,17 +311,20 @@ classdef Q
             hold on;
             set(gca, 'ColorOrderIndex', 1);
 %             plot(uniqueC,cell2mat(pLdat'),'s');
-            for d = 1:length(xDiv)
-                ax=errorbar(uniqueC,pLdat{d},pLdatErr{d}(:,1),pLdatErr{d}(:,2));
-                ax.LineStyle='none';
-                ax.Marker='s';
-                uniqueC = uniqueC + 0.004;
+            try
+                for d = 1:length(xDiv)
+                    ax=errorbar(uniqueC,pLdat{d},pLdatErr{d}(:,1),pLdatErr{d}(:,2));
+                    ax.LineStyle='none';
+                    ax.Marker='s';
+                    uniqueC = uniqueC + 0.004;
+                end
+                hold off;
+                legend(cellfun(@(c)num2str(c),num2cell([xDiv]),'uni',0),'location','BestOutside')
+                ylabel('pL'); title('psych from w compared to data');
+                xlim([min(c1d)-0.1 max(c1d)+0.1]);
+            catch
+                warning('problems displaying data');
             end
-            hold off;
-            legend(cellfun(@(c)num2str(c),num2cell([xDiv]),'uni',0),'location','BestOutside')
-            ylabel('pL'); title('psych from w compared to data');
-            xlim([min(c1d)-0.1 max(c1d)+0.1]);
-            
             %             catch
             %             end
         end
@@ -553,5 +593,5 @@ classdef Q
             nloglik = sum(log2(p));
         end
             
-        end
+    end
 end
