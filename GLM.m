@@ -566,7 +566,7 @@ classdef GLM
                 zr = obj.ZR(testParams,inputs);
                 pL = exp(zl)./(1+exp(zl)+exp(zr));
                 pR = exp(zr)./(1+exp(zl)+exp(zr));
-                pNG = 1 - pL - pR;
+                pNG = 1 - (pL + pR);
                 
                 phat = [pL pR pNG];
             end
