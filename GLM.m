@@ -32,32 +32,47 @@ classdef GLM
             elseif isa(inputData,'char')
                 %if expRef, then load using the dat package
                 obj.expRef = inputData;
-                block = dat.loadBlock(obj.expRef);
-                trials = block.trial;
-                D = struct;
+                D = struct('contrast_cond',[],'response',[],'repeatNum',[],'feedbackType',[],'RT',[]);
                 
-                for t=1:block.numCompletedTrials
-                    D.contrast_cond(t,:) = trials(t).condition.visCueContrast';
-                    D.response(t,1) = trials(t).responseMadeID';
-                    D.repeatNum(t,1) = trials(t).condition.repeatNum;
-                    D.feedbackType(t,1) = trials(t).feedbackType;
-                    D.RT(t,1) = trials(t).responseMadeTime-trials(t).interactiveStartedTime;
+                try
+                    block = dat.loadBlock(obj.expRef);
+                    trials = block.trial;
+                    
+                    for t=1:block.numCompletedTrials
+                        D.contrast_cond(t,:) = trials(t).condition.visCueContrast';
+                        D.response(t,1) = trials(t).responseMadeID';
+                        D.repeatNum(t,1) = trials(t).condition.repeatNum;
+                        D.feedbackType(t,1) = trials(t).feedbackType;
+                        D.RT(t,1) = trials(t).responseMadeTime-trials(t).interactiveStartedTime;
+                        
+%                         if D.RT(t,1) > 4
+%                             keyboard;
+%                         end
+                    end
+                catch
+                    warning('session data empty');
                 end
-
+                
                 obj.data = D;
             else
                 error('GLM:constructorFail', 'Must pass either an expRef or data struct to GLM constructor');
             end
             
-            if any(min(obj.data.contrast_cond,[],2)>0)
-                obj.ContrastDimensions = 2;
+            if ~isempty(obj.data.response)
+                
+                if any(min(obj.data.contrast_cond,[],2)>0)
+                    obj.ContrastDimensions = 2;
+                else
+                    obj.ContrastDimensions = 1;
+                end
+                
+                tab = tabulate(obj.data.response);
+                tab = tab(:,3)/100;
+                obj.guess_bpt=sum(tab.*log2(tab));
             else
-                obj.ContrastDimensions = 1;
+                obj.ContrastDimensions = NaN;
+                obj.guess_bpt = NaN;
             end
-            
-            tab = tabulate(obj.data.response);
-            tab = tab(:,3)/100;
-            obj.guess_bpt=sum(tab.*log2(tab));
         end
         
         function obj = setModel(obj,modelString)
@@ -389,18 +404,29 @@ classdef GLM
                         end
                     end
                     
-                    titles = {'P( left | contrast)','P( right | contrast)','P( nogo | contrast)'};
+                    titles = {'p( Left | c)','p( Right | c)','p( NoGo | c)'};
                     for i=1:3
                         h(i)=subplot(2,3,i);
                         imagesc(uniqueCR,uniqueCL,prop(:,:,i),[0 1]);
-                        set(gca,'YDir','normal');
+                        set(gca,'YDir','normal','box','off');
                         
-                        xlabel('c right');
-                        ylabel('c left');
+%                         xlabel('Contrast right');
+%                         ylabel('Contrast left');
                         title(titles{i});
                         axis square;
+                        set(gca,'XTick','','YTick',0:0.1:0.5);
+                        if i > 1
+                            set(gca,'XTick','','ytick','');
+                        end
+                        
+                        if i == 1
+                            %                                 xlabel('Contrast right');
+                            ylabel('Contrast left');
+                        end
                     end
             end
+            
+            set(gcf,'color','w');
         end
         
         function fig = plotFit(obj)
@@ -462,14 +488,24 @@ classdef GLM
                         end
                         
                         figure(fig);
-                        titles = {'pred P( left | contrast)','pred P( right | contrast)','pred P( nogo | contrast)'};
+%                         titles = {'pred P( left | contrast)','pred P( right | contrast)','pred P( nogo | contrast)'};
                         for i=1:3
                             subplot(2,3,i+3);
                             imagesc(evalCR,evalCL,prop(:,:,i),[0 1]);
-                            set(gca,'YDir','normal');
-                            xlabel('C Right');
-                            ylabel('C Left');
-                            title(titles{i});
+                            set(gca,'YDir','normal','box','off','YTick',0:0.1:0.5);
+                            
+                            
+                            if i > 1
+                                set(gca,'XTick','','ytick','');
+                            end
+                            
+                            if i == 1
+                                xlabel('Contrast right');
+                                ylabel('Contrast left');
+                            end
+%                             xlabel('Contrast right');
+%                             ylabel('Contrast left');
+%                             title(titles{i});
                             axis square;
                         end
                         
@@ -477,6 +513,67 @@ classdef GLM
             else
                 error('Model not fitted (non-crossvalidated) yet');
             end
+        end
+        
+        function plotPedestal(obj)
+            if isempty(obj.parameterFits)
+                error('Need to fit model first');
+            end
+            
+            cVals = unique(obj.data.contrast_cond(:));
+            prop=nan(length(cVals),length(cVals),3);
+            
+            for cl = 1:length(cVals)
+                for cr = 1:length(cVals)
+                    E = obj.getrow(obj.data,obj.data.contrast_cond(:,1) == cVals(cl) & obj.data.contrast_cond(:,2) == cVals(cr));
+                    for i=1:3
+                        prop(cl,cr,i) = sum(E.response==i)/length(E.response);
+                    end
+                    pd.propChooseLeft(cl,cr) = prop(cl,cr,1);
+                    pd.propChooseRight(cl,cr) = prop(cl,cr,2);
+                    pd.propChooseNogo(cl,cr) = prop(cl,cr,3);
+                end
+            end
+            
+            cTestVals = min(cVals):0.01:2;
+            selectContrast{1} = [reshape(reshape(repmat(cVals, 1, length(cTestVals)), length(cVals), length(cTestVals))', 1, length(cVals)*length(cTestVals)); ...
+                repmat(cTestVals, 1, length(cVals))];
+            selectContrast{2} = selectContrast{1}([2 1], :);
+            
+            predictionsSelect{1} = obj.calculatePhat(obj.parameterFits, selectContrast{1}')';
+            predictionsSelect{2} = obj.calculatePhat(obj.parameterFits, selectContrast{2}')';
+            f3 = figure; %set(f3, 'Position', [  -1896         507        1058         405]);
+            
+            colors = [        0    0.4470    0.7410;
+    0.8500    0.3250    0.0980;
+    0.9290    0.6940    0.1250];
+            
+            for ped = 1:length(cVals)-1
+                
+                subplot(1, length(cVals)-1, ped)
+                
+                for r = 1:3
+                    plot(-(cVals(ped:end)-cVals(ped)), prop(ped:end,ped,r), 'o','Color',colors(r,:));
+
+                    hold on;
+                    plot((cVals(ped:end)-cVals(ped)), prop(ped,ped:end,r), 'o','Color',colors(r,:));
+
+                    
+                    
+                    plot(-(cTestVals(cTestVals>=cVals(ped))-cVals(ped)), predictionsSelect{2}(r,selectContrast{1}(1,:)==cVals(ped)&selectContrast{1}(2,:)>=cVals(ped)),'Color',colors(r,:));
+
+                    plot((cTestVals(cTestVals>=cVals(ped))-cVals(ped)), predictionsSelect{1}(r,selectContrast{2}(2,:)==cVals(ped)&selectContrast{2}(1,:)>=cVals(ped)),'Color',colors(r,:));
+
+                end
+                
+                title(['pedestal = ' num2str(cVals(ped))]);
+                xlabel('delta C');
+                ylim([0 1]);
+                xlim([-1 1]);
+                set(gca,'box','off');
+%                 makepretty
+            end
+            set(gcf,'color','w');
         end
         
         function plotPredVsActual(obj, varargin)
