@@ -205,12 +205,12 @@ classdef GLM
                     obj.parameterStart = @()([-1+2*rand(1,4) 0.5]);
                     
                 case 'C^N-subset-2AFC'
-                    obj.parameterLabels = {'OffsetL-R','ScaleL-R','N'};
-                    obj.parameterBounds = [-inf -inf 0.1;
-                        +inf +inf 1];
-                    obj.Zinput = @(D)([D.contrast_cond(:,2)-D.contrast_cond(:,1)]);
-                    obj.ZL = @(P,in)( P(1) + P(2).*in(:,1).^P(3)  );
-                    obj.parameterStart = [0 0 0.4];
+                    obj.parameterLabels = {'Offset','ScaleL','ScaleR','N'};
+                    obj.parameterBounds = [-inf -inf -inf 0.1;
+                        +inf +inf +inf 1];
+                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
+                    obj.ZL = @(P,in)( P(1) + P(2).*in(:,1).^P(4) + P(3).*in(:,2).^P(4)  );
+                    obj.parameterStart = [0 0 0 0.1];
                     
                 case 'C^N-subset-Qlearning-2AFC'
                     obj.parameterLabels = {'OffsetL-R','ScaleL-R','QL-R'};
