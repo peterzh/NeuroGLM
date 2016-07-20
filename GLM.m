@@ -17,6 +17,7 @@ classdef GLM
     
     properties (Access=public)
         guess_bpt;
+        lapseFlag=0;
     end
     
     methods
@@ -241,6 +242,18 @@ classdef GLM
 
         end
         
+        function obj = addLapse(obj)
+            if isempty(obj.ZL)
+                error('Set model first');
+            end
+            
+            obj.parameterLabels = [obj.parameterLabels 'LapseRate'];
+            obj.parameterBounds = [obj.parameterBounds, [0;1]];
+            obj.parameterStart = [obj.parameterStart 0];
+            
+            obj.lapseFlag=obj.ContrastDimensions;            
+        end
+        
         function obj = fit(obj)    
             %Non crossvalidated fitting
             
@@ -263,8 +276,6 @@ classdef GLM
                 objective = @(b) (obj.calculateLogLik(b, obj.Zinput(obj.data), responses) + obj.regularise(b));
             end
             
-            
-            
 %             if exist('opti','file')==2 %use opti toolbox if loaded
 %                 options = optiset('display','final','solver','NOMAD');
 %                 Opt = opti('fun',objective,'bounds',obj.parameterBounds(1,:),obj.parameterBounds(2,:),'x0',obj.parameterStart(),'options',options);
@@ -279,7 +290,43 @@ classdef GLM
                     obj.parameterFits = nan(1,length(obj.parameterLabels));
                 end
 %             end
+            
+        end
+        
+        function r2(obj)
+            if isempty(obj.parameterFits)
+                error('Fit first');
+            end
+            
+            %non-cv log likelihood for fitted model
+            ll_model = obj.calculateLogLik(obj.parameterFits,obj.data.contrast_cond,obj.data.response);
+            
+            %another thing to do is just take the mode of the pred
+            %probabilities and see if they match the data
+            phats = obj.calculatePhat(obj.parameterFits,obj.data.contrast_cond);
+            classify = nan(length(obj.data.response),1);
+            for t = 1:length(obj.data.response)
+                [~,rhat] = max(phats(t,:));
+                
+                if rhat == obj.data.response(t)
+                    classify(t)=1;
+                else
+                    classify(t)=0;
+                end
+            end
+            
+%             keyboard;
+            
+            %non-cv log likelihood for naive intercept model (no contrast)
+            obj = obj.setModel('Offset');            
+            obj=obj.fit;
+            ll_naive = obj.calculateLogLik(obj.parameterFits,obj.data.contrast_cond,obj.data.response);
 
+            r2 = 1 - ll_model/ll_naive;
+            disp(['McFadden Pseudo-R^2: ' num2str(r2)]);
+            disp(['Proportion correctly classified: ' num2str(mean(classify))]);
+
+            
         end
         
         function [obj,varargout] = fitCV(obj,varargin)
@@ -388,6 +435,7 @@ classdef GLM
                     xlabel('contrast');
                     ylabel('P( choice | contrast)');
                     
+                    set(gca,'box','off');
                     h=gca;
                     
                 case 2
@@ -427,6 +475,7 @@ classdef GLM
             end
             
             set(gcf,'color','w');
+            
         end
         
         function fig = plotFit(obj)
@@ -640,8 +689,6 @@ classdef GLM
             end
         end
                     
-        
-        
         function h = plotParams(obj)
             if size(obj.parameterFits,1)==1
                 bar(obj.parameterFits);
@@ -655,18 +702,27 @@ classdef GLM
             if isempty(obj.ZL)
                 error('Please set a model first using method setModel(...)');
             end
+            
+            switch(obj.lapseFlag)
+                case 0
+                    lapse = 0;
+                case 1
+                    lapse = testParams(end);
+                case 2
+                    lapse = testParams(end);
+            end
 
             if isempty(obj.ZR) %if a AFC task then no ZR is defined, only pL vs pR
                 zl = obj.ZL(testParams,inputs);
-                pL = exp(zl)./(1+exp(zl));
+                pL = lapse + (1-2*lapse)*exp(zl)./(1+exp(zl));
                 pR = 1 - pL;
                 N = length(pL);
                 phat = [pL pR zeros(N,1)];
             else 
                 zl = obj.ZL(testParams,inputs);
                 zr = obj.ZR(testParams,inputs);
-                pL = exp(zl)./(1+exp(zl)+exp(zr));
-                pR = exp(zr)./(1+exp(zl)+exp(zr));
+                pL = (1-lapse)*exp(zl)./(1+exp(zl)+exp(zr));
+                pR = (1-lapse)*exp(zr)./(1+exp(zl)+exp(zr));
                 pNG = 1 - (pL + pR);
                 
                 phat = [pL pR pNG];
@@ -742,6 +798,160 @@ classdef GLM
             
             disp('Done!');
             
+        end
+        
+        function cov=paramCov(obj)
+            if isempty(obj.parameterFits)
+                error('Fit model first!');
+            end
+            
+            p = obj.parameterFits;
+            
+            if obj.lapseFlag>0
+                lapse = p(end);
+                c50 = p(end-1);
+                n = p(end-2);
+                PSIZE=5;
+            else
+                lapse = 0;
+                c50 = p(end);
+                n = p(end-1);
+                PSIZE=4;
+            end
+            
+            n = p(end-1);
+            c50 = p(end);
+            
+            cfn = @(c)(c.^n)./(c.^n + c50.^n);
+            c = cfn(obj.data.contrast_cond);
+            
+            H = zeros(PSIZE,PSIZE,length(obj.data.response));
+            %hessian of log likelihood
+            for t = 1:length(obj.data.response)
+                cl=c(t,1);
+                cr=c(t,2);
+                 
+                zl=obj.ZL(obj.parameterFits,[cl cr]);
+                zr=obj.ZR(obj.parameterFits,[cl cr]);
+                pL = (1-lapse)*exp(zl)/(1+exp(zl)+exp(zr));
+                pR = (1-lapse)*exp(zr)/(1+exp(zl)+exp(zr));
+
+                H(1,1,t) = pL*(pL-1);
+                H(2,2,t) = pR*(pR-1);
+                H(3,3,t) = (cl^2)*pL*(pL-1);
+                H(4,4,t) = (cr^2)*pR*(pR-1);
+                
+                H(2,1,t) = pL*pR;
+                H(1,2,t) = pL*pR;
+                
+                H(3,1,t) = cl*pL*(pL-1);
+                H(1,3,t) = cl*pL*(pL-1);
+                
+                H(4,1,t) = cr*pL*pR;
+                H(1,4,t) = cr*pL*pR;
+                
+                H(3,2,t) = cl*pL*pR;
+                H(2,3,t) = cl*pL*pR;
+                
+                H(4,2,t) = cr*pR*(pR-1);
+                H(2,4,t) = cr*pR*(pR-1);
+                
+                H(4,3,t) = cl*cr*pL*pR;
+                H(3,4,t) = cl*cr*pL*pR;
+                
+                if obj.data.response(t)<3 && obj.lapseFlag>0
+                    H(5,5,t) = -1/((1+lapse)^2);
+                end
+            end
+            
+%             figure;
+%             disp(-sum(F,3));
+%             keyboard;
+            %Calculate fisher info
+            F = -sum(H,3);
+            
+            %Calculate covariance
+            cov = inv(F);
+            
+            %Calculate correlation
+            figure;
+            imagesc(corrcov(cov)); caxis([-1 1]); 
+            disp(cov);
+%             caxis([-5 40]);
+            cmap = [ones(100,1) linspace(0,1,100)' linspace(0,1,100)';
+                linspace(1,0,100)' linspace(1,0,100)' ones(100,1)];
+            colormap(cmap); colorbar;
+            set(gca,'XTickLabel',{'B_L','B_R','S_L','S_R'},'xtick',1:4,'yTickLabel',{'B_L','B_R','S_L','S_R'},'ytick',1:4);
+            title('Correlation between parameters, from Fisher info');
+%             keyboard;
+
+            %Try simulating many contrast levels and compare
+            
+            configs = [1 500 5;
+                       1 500 1;
+                       1 500 0.1;
+                       1 500 0.01;
+                       2 500 5;
+                       2 500 1;
+                       2 500 0.1;
+                       2 500 0.01]; %dimensions, num0c, multiple for contrast trials
+            
+           figure;
+            for cfg = 1:size(configs,1)
+               dim = configs(cfg,1);
+               num_zeroC = configs(cfg,2);
+               multiplier = configs(cfg,3);
+
+               if dim == 1
+                   num_C = round(num_zeroC*multiplier);
+                   testC = [zeros(num_zeroC,2);
+                       linspace(0,1,num_C)' zeros(num_C,1);
+                       zeros(num_C,1) linspace(0,1,num_C)'];
+               elseif dim == 2
+                   %2D stimulus
+                   cVals = linspace(0,1,100);
+                   [p,q]=meshgrid(cVals,cVals); pairs = [p(:) q(:)];
+                   num_zeroC = round(size(pairs,1)/multiplier);
+                   testC = [pairs; zeros(num_zeroC,2)];
+               end
+
+               zl=obj.ZL(obj.parameterFits,testC);
+               zr=obj.ZR(obj.parameterFits,testC);
+               pL = exp(zl)./(1+exp(zl)+exp(zr));
+               pR = exp(zr)./(1+exp(zl)+exp(zr));
+               H = zeros(PSIZE,PSIZE,length(testC));
+               H(1,1,:) = pL.*(pL-1);
+               H(2,2,:) = pR.*(pR-1);
+               H(3,3,:) = (testC(:,1).^2).*pL.*(pL-1);
+               H(4,4,:) = (testC(:,2).^2).*pR.*(pR-1);
+               H(2,1,:) = pL.*pR;
+               H(1,2,:) = pL.*pR;
+               H(3,1,:) = testC(:,1).*pL.*(pL-1);
+               H(1,3,:) = testC(:,1).*pL.*(pL-1);
+               H(4,1,:) = testC(:,2).*pL.*pR;
+               H(1,4,:) = testC(:,2).*pL.*pR;
+               H(3,2,:) = testC(:,1).*pL.*pR;
+               H(2,3,:) = testC(:,1).*pL.*pR;
+               H(4,2,:) = testC(:,2).*pR.*(pR-1);
+               H(2,4,:) = testC(:,2).*pR.*(pR-1);
+               H(4,3,:) = testC(:,1).*testC(:,2).*pL.*pR;
+               H(3,4,:) = testC(:,1).*testC(:,2).*pL.*pR;
+               F = -sum(H,3);
+               cov = inv(F);
+               
+               %Calculate and plot correlation
+               subplot(2,4,cfg);
+%                imagesc(corrcov(cov)); caxis([-1 1]);
+%                cmap = [ones(100,1) linspace(0,1,100)' linspace(0,1,100)';
+%                    linspace(1,0,100)' linspace(1,0,100)' ones(100,1)];
+%                colormap(cmap); 
+%                
+               imagesc(cov);
+               colorbar; axis square;
+               set(gca,'XTickLabel',{'B_L','B_R','S_L','S_R'},'xtick',1:4,'yTickLabel',{'B_L','B_R','S_L','S_R'},'ytick',1:4);
+               title(['ContrastDim:' num2str(dim) ' Proportion C:' num2str(multiplier)]);
+
+            end
         end
     end
     
