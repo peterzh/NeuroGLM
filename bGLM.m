@@ -198,13 +198,4 @@ classdef bGLM
         
     end
     
-
-    
-    methods (Access= {?bGLM})        
-        function logLik = calculateLogLik(obj,testParams, inputs, responses)
-            phat = obj.calculatePhat(testParams, inputs);
-            logLik = -sum(log2( phat(sub2ind(size(phat), [1:length(responses)]', responses)) ));
-        end
-
-    end
 end

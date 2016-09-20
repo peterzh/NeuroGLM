@@ -139,6 +139,23 @@ classdef GLM
                     obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
                     obj.ZL = @(P,in)(P(1) + P(2).*(in(:,1).^P(5))./(in(:,1).^P(5) + P(6)^P(5)));
                     obj.ZR = @(P,in)(P(3) + P(4).*(in(:,2).^P(5))./(in(:,2).^P(5) + P(6)^P(5)));
+                case 'C50-subset-separate'
+                    obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','N','C50'};
+                    obj.parameterBounds = [-inf -inf -inf -inf -inf -inf;
+                        +inf +inf +inf +inf inf inf];
+                    
+                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2) D.response]);
+                    obj.ZL = @(P,in)( P(1) + P(2).*(in(:,1).^P(5))./(in(:,1).^P(5) + P(6)^P(5)) ).*(in(:,3)~=2);
+                    obj.ZR = @(P,in)( P(3) + P(4).*(in(:,2).^P(5))./(in(:,2).^P(5) + P(6)^P(5)) ).*(in(:,3)~=1);
+                    
+                case 'C50-subset-contrastGain'
+                    obj.parameterLabels = {'B_L','B_R','Alpha_L','Alpha_R','Sigma_L','Sigma_R','N'};
+                    obj.parameterBounds = [-inf -inf -inf -inf 0 0 1;
+                        +inf +inf +inf +inf 1 1 1];
+                    
+                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
+                    obj.ZL = @(P,in)( P(1) + P(3).*(in(:,1).^P(7))./(in(:,1).^P(7) + P(5)) );
+                    obj.ZR = @(P,in)( P(2) + P(4).*(in(:,2).^P(7))./(in(:,2).^P(7) + P(6)) );
                 case 'C50LR-subset'
                     obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','N_L','C50_L', 'N_R', 'C50_R'};
                     obj.parameterBounds = [-inf -inf -inf -inf 0 0.001 0 0.001;
@@ -168,6 +185,18 @@ classdef GLM
                     obj.parameterBounds = [-inf -inf -inf; +inf +inf +inf];
                     obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
                     obj.ZL = @(P,in)(P(1) + P(2)*in(:,1) + P(3)*in(:,2));
+                    obj.ZR = [];
+                case 'AFC_diff'
+                    obj.parameterLabels = {'Offset','Scale'};
+                    obj.parameterBounds = [-inf -inf;inf inf];
+                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
+                    obj.ZL = @(P,in)(P(1) + P(2)*(in(:,1)-in(:,2)) );
+                    obj.ZR = [];
+                case 'AFC_diff_alternate'
+                    obj.parameterLabels = {'Offset','Scale'};
+                    obj.parameterBounds = [-inf -inf;inf inf];
+                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
+                    obj.ZL = @(P,in)(P(2)*P(1) + P(2)*(in(:,1)-in(:,2)) );
                     obj.ZR = [];
                 case 'C^N-subset-hist-response'
                     obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','HistL_L','HistR_L','HistNG_L','HistL_R','HistR_R','HistNG_R','N'};
@@ -231,6 +260,14 @@ classdef GLM
                     obj.ZL = @(P,in)( P(1).*in(:,1) + P(2).*in(:,2) );
                     obj.parameterStart = @()([10*rand(1,2)]);
                     
+                case 'C50-subset-centred'
+                    obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','N','C50'};
+                    obj.parameterBounds = [-inf -inf -inf -inf 0 0.001;
+                        +inf +inf +inf +inf 3 0.8];
+                    
+                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
+                    obj.ZL = @(P,in)( P(1) + P(2).*(in(:,1).^P(5))./(in(:,1).^P(5) + P(6)^P(5)) - P(2)*mean(in(:,1).^P(5)./(in(:,1).^P(5) + P(6)^P(5))) );
+                    obj.ZR = @(P,in)( P(3) + P(4).*(in(:,2).^P(5))./(in(:,2).^P(5) + P(6)^P(5)) - P(4)*mean(in(:,2).^P(5)./(in(:,2).^P(5) + P(6)^P(5))) );
                 otherwise
                     error('Model does not exist');
                     
@@ -299,7 +336,7 @@ classdef GLM
             end
             
             %non-cv log likelihood for fitted model
-            ll_model = obj.calculateLogLik(obj.parameterFits,obj.data.contrast_cond,obj.data.response);
+            ll_model = obj.calculateLogLik(obj.parameterFits,obj.data.contrast_cond,obj.data.response)/length(obj.data.response);
             
             %another thing to do is just take the mode of the pred
             %probabilities and see if they match the data
@@ -317,12 +354,12 @@ classdef GLM
             
 %             keyboard;
             
-            %non-cv log likelihood for naive intercept model (no contrast)
-            obj = obj.setModel('Offset');            
-            obj=obj.fit;
-            ll_naive = obj.calculateLogLik(obj.parameterFits,obj.data.contrast_cond,obj.data.response);
+%             %non-cv log likelihood for naive intercept model (no contrast)
+%             obj = obj.setModel('Offset');            
+%             obj=obj.fit;
+%             ll_naive = obj.calculateLogLik(obj.parameterFits,obj.data.contrast_cond,obj.data.response);
 
-            r2 = 1 - ll_model/ll_naive;
+            r2 = 1 + ll_model/obj.guess_bpt;
             disp(['McFadden Pseudo-R^2: ' num2str(r2)]);
             disp(['Proportion correctly classified: ' num2str(mean(classify))]);
 
@@ -431,7 +468,11 @@ classdef GLM
                         r = 3;
                     end
                     
-                    errorbar(repmat(uniqueC1D,1,r),prop(:,1:r),err(:,[1:r]),err(:,[4:(3+r)]),'.','MarkerSize',20)
+                    if length(uniqueC1D)<50
+                        errorbar(repmat(uniqueC1D,1,r),prop(:,1:r),err(:,[1:r]),err(:,[4:(3+r)]),'.','MarkerSize',20);
+                    else
+                        plot(repmat(uniqueC1D,1,r),prop(:,1:r),'o');
+                    end
                     xlabel('contrast');
                     ylabel('P( choice | contrast)');
                     
@@ -800,167 +841,158 @@ classdef GLM
             
         end
         
-        function cov=paramCov(obj)
+        function cov=paramCov(obj,varargin)
             if isempty(obj.parameterFits)
                 error('Fit model first!');
             end
+                                   
+            c = obj.data.contrast_cond;
+            H = obj.hessian(obj.parameterFits,c);
             
-            p = obj.parameterFits;
-            
-            if obj.lapseFlag>0
-                lapse = p(end);
-                c50 = p(end-1);
-                n = p(end-2);
-                PSIZE=5;
-            else
-                lapse = 0;
-                c50 = p(end);
-                n = p(end-1);
-                PSIZE=4;
-            end
-            
-            n = p(end-1);
-            c50 = p(end);
-            
-            cfn = @(c)(c.^n)./(c.^n + c50.^n);
-            c = cfn(obj.data.contrast_cond);
-            
-            H = zeros(PSIZE,PSIZE,length(obj.data.response));
-            %hessian of log likelihood
-            for t = 1:length(obj.data.response)
-                cl=c(t,1);
-                cr=c(t,2);
-                 
-                zl=obj.ZL(obj.parameterFits,[cl cr]);
-                zr=obj.ZR(obj.parameterFits,[cl cr]);
-                pL = (1-lapse)*exp(zl)/(1+exp(zl)+exp(zr));
-                pR = (1-lapse)*exp(zr)/(1+exp(zl)+exp(zr));
-
-                H(1,1,t) = pL*(pL-1);
-                H(2,2,t) = pR*(pR-1);
-                H(3,3,t) = (cl^2)*pL*(pL-1);
-                H(4,4,t) = (cr^2)*pR*(pR-1);
-                
-                H(2,1,t) = pL*pR;
-                H(1,2,t) = pL*pR;
-                
-                H(3,1,t) = cl*pL*(pL-1);
-                H(1,3,t) = cl*pL*(pL-1);
-                
-                H(4,1,t) = cr*pL*pR;
-                H(1,4,t) = cr*pL*pR;
-                
-                H(3,2,t) = cl*pL*pR;
-                H(2,3,t) = cl*pL*pR;
-                
-                H(4,2,t) = cr*pR*(pR-1);
-                H(2,4,t) = cr*pR*(pR-1);
-                
-                H(4,3,t) = cl*cr*pL*pR;
-                H(3,4,t) = cl*cr*pL*pR;
-                
-                if obj.data.response(t)<3 && obj.lapseFlag>0
-                    H(5,5,t) = -1/((1+lapse)^2);
-                end
-            end
-            
-%             figure;
-%             disp(-sum(F,3));
-%             keyboard;
             %Calculate fisher info
             F = -sum(H,3);
-            
-            %Calculate covariance
             cov = inv(F);
             
-            %Calculate correlation
             figure;
-            imagesc(corrcov(cov)); caxis([-1 1]); 
-            disp(cov);
-%             caxis([-5 40]);
+            ax1=subplot(1,2,1);
+            imagesc(cov); title('Covariance'); axis square;
+            ax2=subplot(1,2,2);
+            imagesc(corrcov(cov)); caxis([-1 1]); title('Correlation'); axis square;
+            set(get(gcf,'children'),'XTickLabel',{'B_L','B_R','S_L','S_R'},'xtick',1:4,'yTickLabel',{'B_L','B_R','S_L','S_R'},'ytick',1:4);
+
             cmap = [ones(100,1) linspace(0,1,100)' linspace(0,1,100)';
                 linspace(1,0,100)' linspace(1,0,100)' ones(100,1)];
-            colormap(cmap); colorbar;
-            set(gca,'XTickLabel',{'B_L','B_R','S_L','S_R'},'xtick',1:4,'yTickLabel',{'B_L','B_R','S_L','S_R'},'ytick',1:4);
-            title('Correlation between parameters, from Fisher info');
-%             keyboard;
-
-            %Try simulating many contrast levels and compare
-            
-            configs = [1 500 5;
-                       1 500 1;
-                       1 500 0.1;
-                       1 500 0.01;
-                       2 500 5;
-                       2 500 1;
-                       2 500 0.1;
-                       2 500 0.01]; %dimensions, num0c, multiple for contrast trials
-            
-           figure;
-            for cfg = 1:size(configs,1)
-               dim = configs(cfg,1);
-               num_zeroC = configs(cfg,2);
-               multiplier = configs(cfg,3);
-
-               if dim == 1
-                   num_C = round(num_zeroC*multiplier);
-                   testC = [zeros(num_zeroC,2);
-                       linspace(0,1,num_C)' zeros(num_C,1);
-                       zeros(num_C,1) linspace(0,1,num_C)'];
-               elseif dim == 2
-                   %2D stimulus
-                   cVals = linspace(0,1,100);
-                   [p,q]=meshgrid(cVals,cVals); pairs = [p(:) q(:)];
-                   num_zeroC = round(size(pairs,1)/multiplier);
-                   testC = [pairs; zeros(num_zeroC,2)];
-               end
-
-               zl=obj.ZL(obj.parameterFits,testC);
-               zr=obj.ZR(obj.parameterFits,testC);
-               pL = exp(zl)./(1+exp(zl)+exp(zr));
-               pR = exp(zr)./(1+exp(zl)+exp(zr));
-               H = zeros(PSIZE,PSIZE,length(testC));
-               H(1,1,:) = pL.*(pL-1);
-               H(2,2,:) = pR.*(pR-1);
-               H(3,3,:) = (testC(:,1).^2).*pL.*(pL-1);
-               H(4,4,:) = (testC(:,2).^2).*pR.*(pR-1);
-               H(2,1,:) = pL.*pR;
-               H(1,2,:) = pL.*pR;
-               H(3,1,:) = testC(:,1).*pL.*(pL-1);
-               H(1,3,:) = testC(:,1).*pL.*(pL-1);
-               H(4,1,:) = testC(:,2).*pL.*pR;
-               H(1,4,:) = testC(:,2).*pL.*pR;
-               H(3,2,:) = testC(:,1).*pL.*pR;
-               H(2,3,:) = testC(:,1).*pL.*pR;
-               H(4,2,:) = testC(:,2).*pR.*(pR-1);
-               H(2,4,:) = testC(:,2).*pR.*(pR-1);
-               H(4,3,:) = testC(:,1).*testC(:,2).*pL.*pR;
-               H(3,4,:) = testC(:,1).*testC(:,2).*pL.*pR;
-               F = -sum(H,3);
-               cov = inv(F);
-               
-               %Calculate and plot correlation
-               subplot(2,4,cfg);
-%                imagesc(corrcov(cov)); caxis([-1 1]);
-%                cmap = [ones(100,1) linspace(0,1,100)' linspace(0,1,100)';
-%                    linspace(1,0,100)' linspace(1,0,100)' ones(100,1)];
-%                colormap(cmap); 
-%                
-               imagesc(cov);
-               colorbar; axis square;
-               set(gca,'XTickLabel',{'B_L','B_R','S_L','S_R'},'xtick',1:4,'yTickLabel',{'B_L','B_R','S_L','S_R'},'ytick',1:4);
-               title(['ContrastDim:' num2str(dim) ' Proportion C:' num2str(multiplier)]);
-
-            end
+            colormap(ax2,cmap); colorbar;
         end
+        
+        function paramCovSimulate(obj)
+            %Plots covariance/variance of parameters as a function of
+            %varying stimulus and behavioural configurations. This is to
+            %explore other ways of setting up the task such that the
+            %parameter estimation can be less variable/less covariable.
+            if isempty(obj.parameterFits)
+                error('Fit first');
+            end
+           
+            %1) Same parameters but vary the distribution of contrasts
+            if obj.ContrastDimensions == 1
+                n = obj.parameterFits(end-1);
+                c50 = obj.parameterFits(end);
+                cfn = @(c)(c.^n)./(c.^n + c50.^n);
+                numTrials = length(obj.data.response);
+                
+                widths = linspace(0.01,0.5,50);
+                
+                meanVarS = []; cv = [];
+                for w = 1:length(widths)
+                    varS = [];
+                    for iter = 1:50
+                        crnd = widths(w)*randn(numTrials,1);
+                        c = zeros(length(crnd),2);
+                        c(crnd<0,1) = -crnd(crnd<0);
+                        c(crnd>0,2) = crnd(crnd>0);
+                        
+                        H = obj.hessian(obj.parameterFits,c);
+                        
+                        F = -sum(H,3);
+                        cov = inv(F);
+                        varS(iter,:) = [cov(1,1) cov(2,2) cov(3,3) cov(4,4) cov(3,1) cov(2,1) cov(4,3)];
+                        
+                    end
+                    meanVarS(w,:) = mean(varS);
+                    
+                    corrSLBL(w,1) = meanVarS(w,5)/sqrt(meanVarS(w,1)*meanVarS(w,3));
+                    
+                    cv(w,1) = sqrt(meanVarS(w,1))/obj.parameterFits(1);
+                    cv(w,2) = sqrt(meanVarS(w,2))/obj.parameterFits(3);
+                    cv(w,3) = sqrt(meanVarS(w,3))/obj.parameterFits(2);
+                    cv(w,4) = sqrt(meanVarS(w,4))/obj.parameterFits(4);
+                end
+                figure;
+                subplot(3,1,1);
+                plot(widths,[meanVarS corrSLBL],'LineWidth',2); xlabel('Standard Deviation of Contrasts');
+                legend({'Var[B_L]','Var[B_R]','Var[S_L]','Var[S_R]','Cov[B_L,S_L]','Cov[B_L,B_R]','Cov[S_L,S_R]','Corr[B_L,S_L]'});
+                
+                hold on;
+                this = std(diff(obj.data.contrast_cond,[],2));
+                line([this,this],[-1 1]);
+            end
+            
+            %2) Same contrasts but vary GovsNoGo bias
+            fitted_p = obj.parameterFits;
+            Biases = linspace(-5,5,50);
+            varS = []; CVs = [];
+            for bias = 1:length(Biases)
+                new_p = fitted_p;
+                new_p([1 3]) = Biases(bias);
+                H = obj.hessian(new_p,obj.data.contrast_cond);
+                F = -sum(H,3);
+                cov = inv(F);
+                varS(bias,:) = [cov(1,1) cov(2,2) cov(3,3) cov(4,4) cov(3,1) cov(2,1) cov(4,3)];
+                CVs(bias,1) = sqrt(cov(1,1))/new_p(1);
+                CVs(bias,2) = sqrt(cov(2,2))/new_p(3);
+                CVs(bias,3) = sqrt(cov(3,3))/new_p(2);
+                CVs(bias,4) = sqrt(cov(4,4))/new_p(4);
+            end
+            corrS = varS(:,5)./sqrt(varS(:,1).*varS(:,3));
+            subplot(3,1,2);
+            pGO = 1- 1./(1+2*exp(Biases)); xlim([0 1]);
+            plot(pGO,[varS,corrS],'LineWidth',2); xlabel('pGO');
+%             legend({'cv[B_L]','cv[B_R]','cv[S_L]','cv[S_R]'});
+
+            this = mean(fitted_p([1 3]));
+            this = 1- 1./(1+2*exp(this));
+            line([this,this],[-1 1]);
+            
+            %3) Same contrast but vary LvNG bias
+            fitted_p = obj.parameterFits;
+            Biases = linspace(-5,5,50);
+            varS = [];
+            for bias = 1:length(Biases)
+                new_p = fitted_p;
+                new_p(1) = Biases(bias);
+                H = obj.hessian(new_p,obj.data.contrast_cond);
+                F = -sum(H,3);
+                cov = inv(F);
+                varS(bias,:) = [cov(1,1) cov(2,2) cov(3,3) cov(4,4) cov(3,1) cov(2,1) cov(4,3)];
+            end
+            corrS = varS(:,5)./sqrt(varS(:,1).*varS(:,3));
+            subplot(3,1,3);
+            plot(Biases,[varS corrS],'LineWidth',2); xlabel(['bL . bR=' num2str(fitted_p(3))]);
+            this = fitted_p(1);
+%             this = 1- 1./(1+2*exp(this));
+            line([this,this],[-1 1]);
+        end
+        
+        function bootstrapFit(obj)
+            if isempty(obj.ZL)
+                error('Please set a model first using method setModel(...)');
+            end
+            
+            numIter = 300;
+            
+            options = optimoptions('fmincon','UseParallel',0,'MaxFunEvals',100000,'MaxIter',10000);
+            bootstrap_params = nan(numIter,length(obj.parameterLabels));
+            
+            T = struct2table(obj.data);
+            for iter = 1:numIter
+                datTemp = datasample(T,height(T));
+                objective = @(b) (obj.calculateLogLik(b, obj.Zinput(datTemp), datTemp.response));
+                bootstrap_params(iter,:) = fmincon(objective, obj.parameterStart(), [], [], [], [], obj.parameterBounds(1,:), obj.parameterBounds(2,:), [], options);
+            end
+            
+            gplotmatrix(bootstrap_params,[],[],[],[],[],[],[],obj.parameterLabels);
+        end
+        
     end
+    
+
     
     methods (Access= {?GLM})        
         function logLik = calculateLogLik(obj,testParams, inputs, responses)
             phat = obj.calculatePhat(testParams, inputs);
-            logLik = -sum(log( phat(sub2ind(size(phat), [1:length(responses)]', responses)) ));
+            logLik = -sum(log2( phat(sub2ind(size(phat), [1:length(responses)]', responses)) ));
         end
-        
         function row = getrow(~,D,numrow)
             % Version 1.0 9/18/03
             % by Joern Diedrichsen
@@ -981,6 +1013,39 @@ classdef GLM
                 end
             end
             
+        end
+        
+        function H = hessian(obj,params,contrasts)
+
+            %Use untransformed contrasts in ZL and ZR eqns
+            zl=obj.ZL(params,contrasts);
+            zr=obj.ZR(params,contrasts);
+            pL = exp(zl)./(1+exp(zl)+exp(zr));
+            pR = exp(zr)./(1+exp(zl)+exp(zr));
+            
+            n = obj.parameterFits(end-1);
+            c50 = obj.parameterFits(end);
+            cfn = @(c)(c.^n)./(c.^n + c50.^n);
+            CL = cfn(contrasts(:,1));
+            CR = cfn(contrasts(:,2));
+            
+            H = zeros(4,4,length(contrasts));
+            H(1,1,:) = pL.*(pL-1);
+            H(2,2,:) = pR.*(pR-1);
+            H(3,3,:) = (CL.^2).*pL.*(pL-1);
+            H(4,4,:) = (CR.^2).*pR.*(pR-1);
+            H(2,1,:) = pL.*pR;
+            H(1,2,:) = pL.*pR;
+            H(3,1,:) = CL.*pL.*(pL-1);
+            H(1,3,:) = CL.*pL.*(pL-1);
+            H(4,1,:) = CR.*pL.*pR;
+            H(1,4,:) = CR.*pL.*pR;
+            H(3,2,:) = CL.*pL.*pR;
+            H(2,3,:) = CL.*pL.*pR;
+            H(4,2,:) = CR.*pR.*(pR-1);
+            H(2,4,:) = CR.*pR.*(pR-1);
+            H(4,3,:) = CL.*CR.*pL.*pR;
+            H(3,4,:) = CL.*CR.*pL.*pR;
         end
     end
 end
