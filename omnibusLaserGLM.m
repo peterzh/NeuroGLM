@@ -34,7 +34,7 @@ classdef omnibusLaserGLM
             end
             
             disp('Loading data...');
-            obj.inactivationCoords = cell(1,numSubjects);
+%             obj.inactivationCoords = cell(1,numSubjects);
             obj.data = cell(1,numSubjects);
             obj.cfn_parameters = cell(1,numSubjects);
             for n = 1:numSubjects
@@ -100,15 +100,6 @@ classdef omnibusLaserGLM
                 end
                 
                 D = getrow(D,D.repeatNum==1);
-                
-                %create laserIdx variable
-                [sites,~,ic] = unique(D.laserCoord,'rows');
-                nanIdx = find(isnan(sites(:,1)),1,'first');
-                inactivationSite = sites(1:nanIdx-1,:);
-                ic(ic>=nanIdx)=0;
-                D.laserIdx = ic;
-
-                obj.inactivationCoords{n} = inactivationSite;
                 obj.data{n} = D;
                 
                 tab = tabulate(D.response);
@@ -122,6 +113,22 @@ classdef omnibusLaserGLM
                 obj.bilateral_flag = 1;
             end
    
+            %match laserIdx over all subjects
+            %create laserIdx variable
+            allD = [obj.data{:}];
+            allLas = cat(1,allD.laserCoord);
+            [sites,~,ic] = unique(allLas,'rows');
+            nanIdx = find(isnan(sites(:,1)),1,'first');
+            inactivationSite = sites(1:nanIdx-1,:);
+            ic(ic>=nanIdx)=0;
+            
+            N=arrayfun(@(s)length(s.response),allD);
+            for n = 1:numSubjects
+                obj.data{n}.laserIdx = ic(1:N(1));
+                ic(1:N(1)) = [];
+                N(1)=[];
+            end
+            obj.inactivationCoords = inactivationSite;
             
         end
         
@@ -225,8 +232,11 @@ classdef omnibusLaserGLM
                 
                 %Then go through each inactivation location and fit
                 %extended models
-                p_L = []; loglik=[];
-                for site = 1:size(obj.inactivationCoords{n},1)
+                laserIdx = unique(obj.data{n}.laserIdx);
+                laserIdx(1) = []; %remove non-laser condition
+                
+                p_L = nan(size(obj.inactivationCoords,1),numP); loglik=[];
+                for site = unique(laserIdx)'
                     L_idx = obj.data{n}.laserIdx==site;
                     cont = obj.data{n}.contrast_cond(L_idx,:);
                     resp = obj.data{n}.response(L_idx);
@@ -336,10 +346,11 @@ classdef omnibusLaserGLM
             kimg=imread('\\basket.cortexlab.net\home\stuff\kirkcaldie_brain_BW.PNG');
             imX=image(-5:1:5,4:-1:-6,kimg); axis square; set(gca,'ydir','normal');
             set(imX,'alphadata',0.7); hold on;
-            numSites = size(obj.inactivationCoords{1},1);
+            numSites = size(obj.inactivationCoords,1);
             cols = [linspace(0,1,numSites)' linspace(1,0,numSites)' zeros(numSites,1) ];
-            cols(obj.inactivationCoords{1}(:,2)>0,3) = 1;
-            scatter(obj.inactivationCoords{1}(:,2),obj.inactivationCoords{1}(:,1),200,cols,'filled');
+            cols(obj.inactivationCoords(:,2)>0,3) = 1;
+            scatter(obj.inactivationCoords(:,2),obj.inactivationCoords(:,1),200,cols,'filled');
+            ylim([-6 6]);
             
             numSubjects = length(obj.names);
             numIter = 500;
@@ -472,11 +483,11 @@ classdef omnibusLaserGLM
             kimg=imread('\\basket.cortexlab.net\home\stuff\kirkcaldie_brain_BW.PNG');
             imX=image(-5:1:5,4:-1:-6,kimg); axis square; set(gca,'ydir','normal');
             set(imX,'alphadata',0.7); hold on;
-            numSites = size(obj.inactivationCoords{1},1);
+            numSites = size(obj.inactivationCoords,1);
             cols = [linspace(0,1,numSites)' linspace(1,0,numSites)' zeros(numSites,1) ];
-            cols(obj.inactivationCoords{1}(:,2)>0,3) = 1;
+            cols(obj.inactivationCoords(:,2)>0,3) = 1;
             %             cols(:,3) = obj.inactivationCoords{1}(:,2)/7 + .5;
-            scatter(obj.inactivationCoords{1}(:,2),obj.inactivationCoords{1}(:,1),200,cols,'filled');
+            scatter(obj.inactivationCoords(:,2),obj.inactivationCoords(:,1),200,cols,'filled');
             %             text(obj.inactivationCoords{1}(:,2),obj.inactivationCoords{1}(:,1),cellfun(@(c)num2str(c),num2cell(1:numSites),'uni',0));
             
             numLP = size(obj.fitData.paramsNull{1},2);
@@ -565,9 +576,12 @@ classdef omnibusLaserGLM
                     end
                     
                     %Now fit laser part to the training set
-                    p_L = cell(size(obj.inactivationCoords{n},1),length(laserModels));
+                    p_L = cell(size(obj.inactivationCoords,1),length(laserModels));
+                    laserIdx = unique(trainL);
+                    laserIdx(1) = []; %remove non-laser condition
+                
                     disp('LASER TRAIN LOGLIK RELATIVE TO GUESS');
-                    for site = 1:size(obj.inactivationCoords{n},1)
+                    for site = laserIdx'
                         disp(['Site ' num2str(site)]);
                         cont = trainC(trainL==site,:);
                         resp = trainR(trainL==site);
@@ -661,10 +675,15 @@ classdef omnibusLaserGLM
                 title(obj.names{n}); ylabel('CV loglik relative to guess');
                 
                 subplot(2,length(obj.names),n+length(obj.names));
+                logLik{n} = nan(size(obj.inactivationCoords,1),size(phat,2));
+                laserIdx = unique(obj.data{n}.laserIdx)';
+                laserIdx(1) = [];
                 for m = 1:size(phat,2)
-                    logLik{n}(:,m) = pivottable(obj.data{n}.laserIdx,[],log2(phat(:,m)),'nanmean');
+                    for site = laserIdx
+                        logLik{n}(site,m) = nanmean(log2(phat(obj.data{n}.laserIdx==site,m)));
+                    end
+%                     logLik{n}(:,m) = pivottable(obj.data{n}.laserIdx,[],log2(phat(:,m)),'nanmean');
                 end
-                logLik{n}(1,:) = [];
                 
                 %identify which was the winner among the models
                 [~,winner] = max(logLik{n},[],2);
@@ -672,8 +691,8 @@ classdef omnibusLaserGLM
                 delta_LL = logLik{n}(:,3) - logLik{n}(:,1);
                 %                 delta_LL(winner==1) = NaN;
                 
-                ap = obj.inactivationCoords{n}(:,1);
-                ml = obj.inactivationCoords{n}(:,2);
+                ap = obj.inactivationCoords(:,1);
+                ml = obj.inactivationCoords(:,2);
                 if obj.bilateral_flag==1
                     ap = [ap; ap];
                     ml = [ml; -ml];
@@ -681,6 +700,9 @@ classdef omnibusLaserGLM
                     delta_LL = [delta_LL;delta_LL];
                 end
                 
+                if n == 5
+                    keyboard
+                end
                 scatter(ml,ap,200,delta_LL,'s','filled'); caxis([-1 1]*max(abs(delta_LL)));
                 axis equal; set(gca,'xtick','','ytick','','xcolor','w','ycolor','w');
                 cmap = [ linspace(0,1,100)' ones(100,1) linspace(0,1,100)';
@@ -829,8 +851,8 @@ classdef omnibusLaserGLM
                 for i = 1:length(plotVal)
                     subplot(numSubjects,length(plotVal),length(plotVal)*n-length(plotVal) + i);
                     
-                    ap = obj.inactivationCoords{n}(:,1);
-                    ml = obj.inactivationCoords{n}(:,2);
+                    ap = obj.inactivationCoords(:,1);
+                    ml = obj.inactivationCoords(:,2);
                     dot = dotSize(:,i);
                     if obj.bilateral_flag==1
                         ap = [ap; ap];
@@ -871,7 +893,7 @@ classdef omnibusLaserGLM
             %             weight(1,1,:) = N/sum(N);
             %             weightedparams = bsxfun(@times,weight,cat(3,obj.fitData.params{:}));
             %             p_L = sum(weightedparams,3); %weighted average
-            p_L = mean(cat(3,obj.fitData.params{:}),3);
+            p_L = nanmean(cat(3,obj.fitData.params{:}),3);
             if size(p_L,2) == 2
                 plotVal = {p_L(:,1),p_L(:,2),p_L(:,1)-p_L(:,2), p_L(:,1)+p_L(:,2)};
                 param_labels = {'b_L','b_R','b_L-b_R','b_L+b_R'};
@@ -883,8 +905,8 @@ classdef omnibusLaserGLM
             for i = 1:length(plotVal)
                 subplot(1,length(plotVal),i);
                 
-                ap = obj.inactivationCoords{1}(:,1);
-                ml = obj.inactivationCoords{1}(:,2);
+                ap = obj.inactivationCoords(:,1);
+                ml = obj.inactivationCoords(:,2);
                 if obj.bilateral_flag==1
                     ap = [ap; ap];
                     ml = [ml; -ml];
@@ -1096,9 +1118,18 @@ classdef omnibusLaserGLM
                 
                 %Compute mean value over all laser sites, for each stimulus
                 %or response value separately
-                val_stim = pivottable(laser,stim,val,'nanmean');
-                val_resp = pivottable(laser,resp,val,'nanmean');
-                
+                val_stim = nan(size(obj.inactivationCoords,1)+1,4);
+                val_resp = nan(size(obj.inactivationCoords,1)+1,3);
+                for site = 1:(size(obj.inactivationCoords,1)+1)
+                    for s = 1:4
+                        val_stim(site,s) = nanmean(val(laser==(site-1) & stim==s));
+                    end
+                    
+                    for r = 1:3
+                        val_resp(site,r) = nanmean(val(laser==(site-1) & resp==r));
+                    end
+                end
+
                 %compute change in metric from nonLaser condition
                 val_stim = bsxfun(@minus,val_stim(2:end,:),val_stim(1,:));
                 val_resp = bsxfun(@minus,val_resp(2:end,:),val_resp(1,:));
@@ -1149,8 +1180,8 @@ classdef omnibusLaserGLM
                     val_stim = [val_stim, zeros(size(val_stim,1),1)];
                 end
                 
-                ap = obj.inactivationCoords{n}(:,1);
-                ml = obj.inactivationCoords{n}(:,2);
+                ap = obj.inactivationCoords(:,1);
+                ml = obj.inactivationCoords(:,2);
                 if obj.bilateral_flag==1
                     ap = [ap; ap];
                     ml = [ml; -ml];
@@ -1197,8 +1228,8 @@ classdef omnibusLaserGLM
             
             
             %Plot average over mice
-            ave_stim = mean(cat(3,val_stim_allSubj{:}),3);
-            ave_resp = mean(cat(3,val_resp_allSubj{:}),3);
+            ave_stim = nanmean(cat(3,val_stim_allSubj{:}),3);
+            ave_resp = nanmean(cat(3,val_resp_allSubj{:}),3);
             figString = [obj.expt ' Average delta ' what];
             figure('name',figString,'position',[1500 200 1060 550]);
             h=uicontrol('Style','text','String', figString,'Units','normalized','Position', [0 0.9 1 0.1]);
@@ -1237,14 +1268,14 @@ classdef omnibusLaserGLM
                 for r = 1:2
                     figString = [obj.names{n} ' ' choiceLabel{r}];
                     figure('name',figString,'color','w','WindowScrollWheelFcn',@callback_RTHIST);
-                    h=uicontrol('Style','text','String', figString,'Units','normalized','Position', [0 0.9 1 0.1]);
-                    set(h,'Foregroundcolor','r','FontSize',20,'Fontname','Helvetica','Fontweight','bold');
+%                     h=uicontrol('Style','text','String', figString,'Units','normalized','Position', [0 0.9 1 0.1]);
+%                     set(h,'Foregroundcolor','r','FontSize',20,'Fontname','Helvetica','Fontweight','bold');
                 
                     nonLaserRT = obj.data{n}.RT(obj.data{n}.laserIdx==0 & obj.data{n}.response==r);
-                    for site = 1:size(obj.inactivationCoords{n},1);
+                    for site = 1:size(obj.inactivationCoords,1);
                         
                         LaserRT = obj.data{n}.RT(obj.data{n}.laserIdx==site & obj.data{n}.response==r);
-                        posIn = obj.inactivationCoords{n}(site,1:2)/10 + [0.58 0.465];
+                        posIn = obj.inactivationCoords(site,1:2)/10 + [0.43 0.465];
                         axes; hold on;
                         h1 = histogram(nonLaserRT,'BinMethod','scott','DisplayStyle','stairs','Normalization','pdf');
                         h2 = histogram(LaserRT,'BinMethod','scott','DisplayStyle','stairs','Normalization','pdf');
@@ -1258,24 +1289,27 @@ classdef omnibusLaserGLM
                 end
             end
             
-            figure('name','POOLED TRIALS','color','w','WindowScrollWheelFcn',@callback_RTHIST);
             allRT = cellfun(@(s)(s.RT),obj.data,'uni',0)'; allRT = cat(1,allRT{:});
             allR = cellfun(@(s)(s.response),obj.data,'uni',0)'; allR = cat(1,allR{:});
             allL = cellfun(@(s)(s.laserIdx),obj.data,'uni',0)'; allL = cat(1,allL{:});
             nonLaserRT = allRT(allL==0 & allR==r);
-            for site = 1:size(obj.inactivationCoords{1},1);
-                
-                LaserRT = allRT(allL==site & allR==r);
-                posIn = obj.inactivationCoords{n}(site,1:2)/10 + [0.58 0.465];
-                axes; hold on;
-                h1 = histogram(nonLaserRT,'BinMethod','scott','DisplayStyle','stairs','Normalization','pdf');
-                h2 = histogram(LaserRT,'BinMethod','scott','DisplayStyle','stairs','Normalization','pdf');
-                h1.LineWidth=1;
-                h2.LineWidth=1;
-                
-                set(gca,'Position',[posIn(2) posIn(1) 0.07 0.07],'box','off','ytick','');
-                set(gca,'xtick','','ycolor','w','xcolor','w');
-                xlim([0 1]);
+            for r = 1:2
+                figString = ['POOLED TRIALS ' choiceLabel{r}];
+                figure('name',figString,'color','w','WindowScrollWheelFcn',@callback_RTHIST);
+                    
+                for site = 1:size(obj.inactivationCoords,1);
+                    LaserRT = allRT(allL==site & allR==r);
+                    posIn = obj.inactivationCoords(site,1:2)/10 + [0.43 0.465];
+                    axes; hold on;
+                    h1 = histogram(nonLaserRT,'BinMethod','scott','DisplayStyle','stairs','Normalization','pdf');
+                    h2 = histogram(LaserRT,'BinMethod','scott','DisplayStyle','stairs','Normalization','pdf');
+                    h1.LineWidth=1;
+                    h2.LineWidth=1;
+                    
+                    set(gca,'Position',[posIn(2) posIn(1) 0.07 0.07],'box','off','ytick','');
+                    set(gca,'xtick','','ycolor','w','xcolor','w');
+                    xlim([0 1]);
+                end
             end
             
         end
@@ -1304,11 +1338,19 @@ classdef omnibusLaserGLM
                 AX = [];
                 %Plot actual data
                 for r = 1:3
-                    val_stim = pivottable(laser,stim,resp==r,'mean');
-                    val_stim = bsxfun(@minus,val_stim(2:end,:),val_stim(1,:));
+                    val = (resp==r);
+                    val_stim = nan(size(obj.inactivationCoords,1)+1,4);
+                    for site = 1:(size(obj.inactivationCoords,1)+1)
+                        for s = 1:4
+                            val_stim(site,s) = nanmean(val(laser==(site-1) & stim==s));
+                        end
+                    end
                     
-                    ap = obj.inactivationCoords{n}(:,1);
-                    ml = obj.inactivationCoords{n}(:,2);
+                    %compute change in metric from nonLaser condition
+                    val_stim = bsxfun(@minus,val_stim(2:end,:),val_stim(1,:));
+
+                    ap = obj.inactivationCoords(:,1);
+                    ml = obj.inactivationCoords(:,2);
                     if obj.bilateral_flag==1
                         ap = [ap; ap];
                         ml = [ml; -ml];
@@ -1342,14 +1384,14 @@ classdef omnibusLaserGLM
                     c = cont(stim==s,:);
                     nonLaserP = mean(obj.calculatePhat(ZL,ZR,nonlaserparams,[0 0 0 0],c),1);
                     LaserP = [];
-                    for site = 1:size(obj.inactivationCoords{n},1)
+                    for site = 1:size(obj.inactivationCoords,1)
                         LaserP(site,:) = mean(obj.calculatePhat(ZL,ZR,nonlaserparams + obj.fitData.params{n}(site,:),[0 0 0 0],c),1);
                     end
                     
                     dP = bsxfun(@minus,LaserP,nonLaserP);
                     
-                    ap = obj.inactivationCoords{n}(:,1);
-                    ml = obj.inactivationCoords{n}(:,2);
+                    ap = obj.inactivationCoords(:,1);
+                    ml = obj.inactivationCoords(:,2);
                     if obj.bilateral_flag==1
                         ap = [ap; ap];
                         ml = [ml; -ml];
@@ -1518,23 +1560,7 @@ classdef omnibusLaserGLM
                 %                 pvalue{n} = double(sigFlag);
             end
         end
-        
-        function X = getNonLaserDesignMatrix(obj,subj,transformed_contrasts,sessionIDs)
-            numSessions = max(obj.data{subj}.sessionID);
-            X = zeros(size(transformed_contrasts,1),3*numSessions);
-            for t = 1:size(X,1)
-                sid = sessionIDs(t);
-                c = transformed_contrasts(t,:);
-                X(t,3*sid - 2) = 1;
-                X(t,3*sid - 1) = c(1);
-                X(t,3*sid - 0) = c(2);
-            end
-            
-            X=sparse(X);
-            
-            %             imagesc(X); drawnow;
-        end
-        
+
         function eRefs = getExpRefs(~,name,expt)
             try
                 load(['\\basket.cortexlab.net\home\omnibus_files\' expt '_' name '_EXPREFS.mat']);
