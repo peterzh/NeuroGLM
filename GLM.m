@@ -96,6 +96,13 @@ classdef GLM
                     obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
                     obj.ZL = @(P,in)(P(1) + P(2).*in(:,1)   );
                     obj.ZR = @(P,in)(P(3) + P(4).*in(:,2)  );
+                case 'C-subset-biasAsContrast'
+                    obj.parameterLabels = {'Bias_L','ScaleL_L','Bias_R','ScaleR_R'};
+                    obj.parameterBounds = [-inf -inf -inf -inf;
+                        +inf +inf +inf +inf];
+                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
+                    obj.ZL = @(P,in)( P(2).*(in(:,1) + P(1))   );
+                    obj.ZR = @(P,in)( P(4).*(in(:,2) + P(3))  );
                 case 'C'
                     obj.parameterLabels = {'Offset_L','ScaleL_L','ScaleR_L','Offset_R','ScaleL_R','ScaleR_R'};
                     obj.parameterBounds = [-inf -inf -inf -inf -inf -inf;
@@ -117,6 +124,13 @@ classdef GLM
                     obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
                     obj.ZL = @(P,in)(P(1) + P(2).*in(:,1).^P(5));
                     obj.ZR = @(P,in)(P(3) + P(4).*in(:,2).^P(5));
+                case 'C^N-subset-biasAsContrast'
+                    obj.parameterLabels = {'Bias_L','ScaleL_L','Bias_R','ScaleR_R','N'};
+                    obj.parameterBounds = [-inf -inf -inf -inf 0;
+                        +inf +inf +inf +inf 3];
+                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
+                    obj.ZL = @(P,in)( P(2).*(in(:,1).^P(5) + P(1)) );
+                    obj.ZR = @(P,in)( P(4).*(in(:,2).^P(5) + P(3)) );
                 case 'C^NL^NR-subset'
                     obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','N_L','N_R'};
                     obj.parameterBounds = [-inf -inf -inf -inf 0 0;
@@ -139,6 +153,22 @@ classdef GLM
                     obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
                     obj.ZL = @(P,in)(P(1) + P(2).*(in(:,1).^P(5))./(in(:,1).^P(5) + P(6)^P(5)));
                     obj.ZR = @(P,in)(P(3) + P(4).*(in(:,2).^P(5))./(in(:,2).^P(5) + P(6)^P(5)));
+                case 'C50-subset-biasAsContrast'
+                    obj.parameterLabels = {'Bias_L','ScaleL_L','Bias_R','ScaleR_R','N','C50'};
+                    obj.parameterBounds = [-inf -inf -inf -inf 0 0.001;
+                        +inf +inf +inf +inf 3 0.8];
+                    
+                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
+                    obj.ZL = @(P,in)( P(2).*((in(:,1).^P(5))./(in(:,1).^P(5) + P(6)^P(5)) + P(1) ) );
+                    obj.ZR = @(P,in)( P(4).*((in(:,2).^P(5))./(in(:,2).^P(5) + P(6)^P(5)) + P(3) ) );
+                case 'C50-subset-v1'
+                    obj.parameterLabels = {'Offset_L','Alpha_L','ScaleL_L','Offset_R','Alpha_R','ScaleR_R','N','C50'};
+                    obj.parameterBounds = [-inf -inf -inf -inf -inf -inf 0 0.001;
+                        +inf +inf +inf +inf +inf +inf 3 0.8];
+                    
+                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
+                    obj.ZL = @(P,in)( P(1) + P(3).*((in(:,1).^P(7))./(in(:,1).^P(7) + P(8)^P(7)) + P(2) ) );
+                    obj.ZR = @(P,in)( P(4) + P(6).*((in(:,2).^P(7))./(in(:,2).^P(7) + P(8)^P(7)) + P(5) ) );
                 case 'C50-subset-separate'
                     obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','N','C50'};
                     obj.parameterBounds = [-inf -inf -inf -inf -inf -inf;
@@ -496,14 +526,20 @@ classdef GLM
                     titles = {'p( Left | c)','p( Right | c)','p( NoGo | c)'};
                     for i=1:3
                         h(i)=subplot(2,3,i);
-                        imagesc(uniqueCR,uniqueCL,prop(:,:,i),[0 1]);
+%                         p_plot = prop(:,:,i);
+%                         p_plot = [p_plot; nan(1,length(uniqueCR))];
+%                         p_plot = [p_plot, nan(length(uniqueCL)+1,1)];
+%                         pcolor([uniqueCR; 1],[uniqueCL; 1],p_plot); caxis([0 1]); shading('flat');
+%                         set(gca,'box','off');
+%                         set(gca,'xtick',0:0.2:1,'ytick',0:0.2:1);
+                        imagesc(prop(:,:,i)); caxis([0 1]);
+                        set(gca,'xtick',1:length(uniqueCR),'ytick',1:length(uniqueCL),'xticklabels',uniqueCR,'yticklabels',uniqueCL);
                         set(gca,'YDir','normal','box','off');
-                        
 %                         xlabel('Contrast right');
 %                         ylabel('Contrast left');
                         title(titles{i});
                         axis square;
-                        set(gca,'XTick','','YTick',0:0.1:0.5);
+%                         set(gca,'XTick','','YTick',0:0.1:0.5);
                         if i > 1
                             set(gca,'XTick','','ytick','');
                         end
@@ -516,6 +552,109 @@ classdef GLM
             end
             
             set(gcf,'color','w');
+            
+        end
+        
+        function plotRT(obj,varargin)
+            if cell2mat(strfind(varargin,'log')) == 1
+                logFlag=1;
+                obj.data.RT = log(obj.data.RT);
+%                 fcn = @(rt)(log(rt));
+            else
+                logFlag=0;
+            end
+            
+            figure('color','w');
+            resplabel = {'Left choices','Right choices'};
+            
+            cVal = unique(obj.data.contrast_cond(:));
+            i=1;
+            meanRT = nan(length(cVal),length(cVal),2);
+            medianRT = nan(length(cVal),length(cVal),2);
+            for cl = 1:length(cVal)
+                for cr = 1:length(cVal)
+                    subplot(length(cVal),length(cVal),i);
+                    
+                    try
+                        idx = obj.data.contrast_cond(:,1) == cVal(cl) & obj.data.contrast_cond(:,2) == cVal(cr) & obj.data.response==1;
+                        distributionPlot(obj.data.RT(idx),'histOpt',0,'widthDiv',[2 1],'histOri','left','color','b','showMM',0,'globalNorm',2)
+                        meanRT(cl,cr,1) = mean(obj.data.RT(idx));
+                        medianRT(cl,cr,1) = median(obj.data.RT(idx));
+                    catch
+                    end
+                    
+                    try
+                        idx = obj.data.contrast_cond(:,1) == cVal(cl) & obj.data.contrast_cond(:,2) == cVal(cr) & obj.data.response==2;
+                        distributionPlot(obj.data.RT(idx),'histOpt',0,'widthDiv',[2 2],'histOri','right','color','r','showMM',0,'globalNorm',2)
+                        set(gca,'xtick','','xcolor','w','box','off','ytick','','ycolor','w');
+                        meanRT(cl,cr,2) = mean(obj.data.RT(idx));
+                        medianRT(cl,cr,2) = median(obj.data.RT(idx));
+                        %                     ylim([0 1.5]);
+                    catch
+                    end
+                    
+                    if cl == length(cVal)
+                        set(gca,'xcolor','k');
+                        xlabel(['CR=' num2str(cVal(cr))]);
+                    end
+                    
+                    if cr == 1
+                        set(gca,'ycolor','k','ytick',0:0.4:1.5);
+                        ylabel(['CL=' num2str(cVal(cl))]);
+                    end
+                    
+%                     if cr == length(cVal)
+%                         set(gca,'ycolor','k');
+%                         xlabel(['CR=' num2str(cVal(cr))]);
+%                     end
+%                     
+                    i=i+1;
+                end
+            end
+            
+            figure('color','w');
+            subplot(2,2,1);
+            imagesc(meanRT(:,:,1)); xlabel('CR'); ylabel('CL'); axis square; title('Left choices');
+            set(gca,'xtick',1:length(cVal),'xticklabels',cVal,'ytick',1:length(cVal),'yticklabels',cVal);
+            set(gca,'ydir','normal'); caxis([min(meanRT(:)) max(meanRT(:))]);
+            subplot(2,2,2);
+            imagesc(meanRT(:,:,2)); xlabel('CR'); ylabel('CL'); axis square; title('Right choices');
+            set(gca,'xtick',1:length(cVal),'xticklabels',cVal,'ytick',1:length(cVal),'yticklabels',cVal);
+            set(gca,'ydir','normal'); caxis([min(meanRT(:)) max(meanRT(:))]);
+            subplot(2,2,3);
+            imagesc(medianRT(:,:,1)); xlabel('CR'); ylabel('CL'); axis square; title('Left choices');
+            set(gca,'xtick',1:length(cVal),'xticklabels',cVal,'ytick',1:length(cVal),'yticklabels',cVal);
+            set(gca,'ydir','normal'); caxis([min(meanRT(:)) max(meanRT(:))]);
+            subplot(2,2,4);
+            imagesc(medianRT(:,:,2)); xlabel('CR'); ylabel('CL'); axis square; title('Right choices');
+            set(gca,'xtick',1:length(cVal),'xticklabels',cVal,'ytick',1:length(cVal),'yticklabels',cVal);
+            set(gca,'ydir','normal'); caxis([min(meanRT(:)) max(meanRT(:))]);
+            colormap(flipud(hot));
+            
+            
+            %Plot histograms at the 4 extreme contrast settings
+            figure('color','w');
+            cVal = cVal([1,end]);
+            labels = {'C=0','High CR','High CL','High CL&CR'};
+            choiceLab = {'Chose L','Chose R'};
+            for r = 1:2
+                subplot(1,2,r); hold on;
+                for cl = 1:length(cVal)
+                    for cr = 1:length(cVal)
+                        idx = obj.data.contrast_cond(:,1) == cVal(cl) & obj.data.contrast_cond(:,2) == cVal(cr) & obj.data.response==r;
+                        histogram(obj.data.RT(idx),'DisplayStyle','stairs');
+                    end
+                end
+                xlabel(['RT ' choiceLab{r}]);
+                legend(labels);
+            end
+%             for r = 1:2
+%                 subplot(1,2,r);
+%                 hist(obj.data.RT(obj.data.response==r));
+%                 xlim([0 1.5]);
+%                 title(resplabel{r});
+%                 set(gca,'box','off');
+%             end
             
         end
         
@@ -564,8 +703,10 @@ classdef GLM
                         h=obj.plotData;
                         fig=get(h(1),'Parent');
                         
-                        evalCL = linspace(0,max(obj.data.contrast_cond(:,1)),100);
-                        evalCR = linspace(0,max(obj.data.contrast_cond(:,1)),100);
+%                         evalCL = linspace(0,max(obj.data.contrast_cond(:,1)),100);
+%                         evalCR = linspace(0,max(obj.data.contrast_cond(:,1)),100);
+                        evalCL = linspace(0,1,100);
+                        evalCR = linspace(0,1,100);
                         prop=nan(length(evalCL),length(evalCR),3);
                         
                         for cl = 1:length(evalCL)
@@ -581,8 +722,8 @@ classdef GLM
 %                         titles = {'pred P( left | contrast)','pred P( right | contrast)','pred P( nogo | contrast)'};
                         for i=1:3
                             subplot(2,3,i+3);
-                            imagesc(evalCR,evalCL,prop(:,:,i),[0 1]);
-                            set(gca,'YDir','normal','box','off','YTick',0:0.1:0.5);
+                            imagesc(evalCR,evalCL,prop(:,:,i)); caxis([0 1]);
+                            set(gca,'YDir','normal','box','off','YTick',0:0.2:1);
                             
                             
                             if i > 1
@@ -598,6 +739,63 @@ classdef GLM
 %                             title(titles{i});
                             axis square;
                         end
+                        
+                        figure('color','w');
+                        cont = obj.data.contrast_cond;
+                        resp = obj.data.response;
+                        cVals = unique(cont(:));
+%                         numPedestals = length(cVals)-1;
+                        numPedestals = length(cVals);
+                        cols = [0 0.4470 0.7410;
+                            0.8500 0.3250 0.0980;
+                            0.4940    0.1840    0.5560];
+                        for ped = 1:numPedestals
+                            subplot(numPedestals,1,ped); hold on;
+                            
+                            set(gca,'colororder',cols);
+                            
+                            %Plot actual datapoints
+                            ped_idx = min(cont,[],2)==cVals(ped);
+                            ped_c_diff = diff(cont(ped_idx,:),[],2);
+                            ped_r = resp(ped_idx);
+                            uC = unique(ped_c_diff);
+                            ph=[];
+                            for c = 1:length(uC)
+                                r = ped_r(ped_c_diff==uC(c));
+                                [ph(c,:),pci] = binofit(sum([r==1 r==2 r==3],1),length(r));
+                                for ch=1:3
+                                    l(1)=line([1 1]*uC(c),pci(ch,:));
+                                    l(2)=line([uC(c)-0.03 uC(c)+0.03],[1 1]*pci(ch,1));
+                                    l(3)=line([uC(c)-0.03 uC(c)+0.03],[1 1]*pci(ch,2));
+                                    set(l,'Color',cols(ch,:),'Linewidth',0.5);
+                                    %                             l.Color = cols{ch};
+                                    %                             l.LineWidth=1;
+                                end
+                            end
+                            set(gca,'ColorOrderIndex',1);
+                            
+                            plot(uC,ph,'.','markersize',15);
+                            
+                            %Plot predictions
+                            testCont = [linspace(max(abs(uC))+0.1,0,100)' zeros(100,1); zeros(100,1) linspace(0,max(abs(uC))+0.1,100)'] + cVals(ped);
+                            p_hat = obj.calculatePhat(obj.parameterFits,testCont);
+                            set(gca,'ColorOrderIndex',1);
+                            h=plot(diff(testCont,[],2),p_hat,'linewidth',1);
+                            if ped == 1
+                                legend(h,{'L','R','NG'}); legend boxoff;
+                            end
+                            xlim([-1 1]*(max(cVals)+0.1)); ylim([0 1]);
+                            
+                            
+                            ylabel(['ped: ' num2str(cVals(ped))]);
+                            
+                            
+                            if ped ~= numPedestals
+                                set(gca,'xtick','','xcolor','w');
+                            end
+                            
+                        end
+                        
                         
                 end
             else
@@ -962,6 +1160,47 @@ classdef GLM
             this = fitted_p(1);
 %             this = 1- 1./(1+2*exp(this));
             line([this,this],[-1 1]);
+        end
+        
+        function plotPspace_mnrvsnested(obj)
+            %use mnrfit to fit rudimentary models MNR and NESTED and
+            %compare directly
+            cont = obj.data.contrast_cond;
+            resp = obj.data.response;
+            resp_nes = resp; resp_nes(resp_nes==3)=0; resp_nes=resp_nes+1;
+
+            B_mnr = mnrfit(cont,resp);
+            B_nes = mnrfit(cont,resp_nes,'model','hierarchical');
+            
+            cVals = linspace(0,0.54,1000);
+            [cr,cl]=meshgrid(cVals);
+            cont = [cl(:) cr(:)];
+            
+            P_mnr = mnrval(B_mnr,cont);
+            P_nes = mnrval(B_nes,cont,'model','hierarchical');
+            P_nes = [P_nes(:,2:3) P_nes(:,1)];
+            
+            %Plot
+            figure('color','w');
+            labels = {'pL','pR','pNG'};
+%             cVals=log(cVals);
+            for r = 1:3
+                subplot(1,3,r);
+                [~,ax]=contour(cVals,cVals,reshape(P_mnr(:,r),size(cl)));
+                ax.LineWidth=1; hold on;
+                [~,ax]=contour(cVals,cVals,reshape(P_nes(:,r),size(cl)));
+                ax.LineWidth=2;
+                ax.LineStyle=':';
+                
+                set(gca,'ydir','normal','box','off'); 
+                xlabel('CR'); ylabel('CL'); title(labels{r}); axis square; caxis([0 1]);
+%                 
+% %                 subplot(2,3,r+3);
+%                 imagesc(cVals,cVals,reshape(P_nes(:,r),size(cl)));
+%                 set(gca,'ydir','normal'); 
+%                 xlabel('CR'); ylabel('CL'); title(labels{r});axis square;  caxis([0 1]);
+            end
+%             keyboard;
         end
         
         function bootstrapFit(obj)

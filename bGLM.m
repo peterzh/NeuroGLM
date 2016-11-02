@@ -87,6 +87,11 @@ classdef bGLM
                     obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
                     obj.ZL = @(P,in)(P(1) + P(2).*in(:,1)   );
                     obj.ZR = @(P,in)(P(3) + P(4).*in(:,2)  );
+                case 'C'
+                    obj.parameterLabels = {'Offset_L','ScaleL_L','ScaleR_L','Offset_R','ScaleL_R','ScaleR_R'};
+                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
+                    obj.ZL = @(P,in)(P(1) + P(2).*in(:,1) + P(3).*in(:,2)   );
+                    obj.ZR = @(P,in)(P(4) + P(5).*in(:,2) + P(6).*in(:,2)  );
                 case 'AFC'
                     obj.parameterLabels = {'Offset','ScaleL','ScaleR'};
                     obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
@@ -111,6 +116,87 @@ classdef bGLM
                 obj.parameterStart = zeros(1,length(obj.parameterLabels));
             end
 
+        end
+        
+        function stan(obj,smObj)
+%             switch(modelString)
+%                 case '2auc-c-subset'
+                    
+                    %MULTINOMIAL
+                    stanCode = {
+                        'data {'
+                        '    int K;' %num classes (3)
+                        '    int N;' %num trials
+                        '    int D;' %num regressors
+                        '    int y[N];' %response
+                        '    vector[D] x[N];' %input (array of D-vectors)
+                        '}'
+                        'transformed data {'
+                        '    row_vector[D] zeros;'
+                        '    zeros = rep_row_vector(0, D);'
+                        '}'
+                        'parameters {'
+                        '    matrix[K - 1,D] beta_raw;'
+                        '}'
+                        'transformed parameters {'
+                        '    matrix[K, D] beta;'
+                        '    beta = append_row(beta_raw, zeros);'
+                        '}'
+                        'model {'
+                        '    to_vector(beta_raw) ~ normal(0, 50);'
+                        '    for (n in 1:N)'
+                        '        y[n] ~ categorical_logit(beta * x[n]);'
+                        '}'
+                        };
+                    
+                    dat = struct('K',max(obj.data.response),...
+                        'N',length(obj.data.response),...
+                        'D',3,...
+                        'y',obj.data.response,...
+                        'x',[ones(length(obj.data.response),1) obj.data.contrast_cond]);
+                    fit=stan('model_code',stanCode,'data',dat,'verbose',true);
+                    %takes about 15sec
+
+                    
+                    %LOGISTIC 2AFC
+                    stanCode = {
+                        'data {'
+                        '    int numTrials;'
+                        '    int y[numTrials];'
+                        '    real cl[numTrials];'
+                        '    real cr[numTrials];'
+                        '}'
+                        'parameters {'
+                        '    real b;'
+                        '    real sl;'
+                        '    real sr;'
+                        '}'
+                        'model {'
+                        '    for (n in 1:numTrials)'
+                        '        y[n] ~ bernoulli_logit( b + sl*cl[n] + sr*cr[n] );'
+                        '}'
+                        };
+                    
+                    D = getrow(obj.data,obj.data.response<3);
+                    dat = struct('numTrials',length(D.response),...
+                        'y',D.response-1,...
+                        'cl',D.contrast_cond(:,1),...
+                        'cr',D.contrast_cond(:,2));
+                    
+                    fit = smObj.sampling('data',dat,'verbose',true);
+%                     fit = stan('model_code',stanCode,'data',dat,'verbose',true);
+%                     while fit.is_running == 1
+%                         pause(0.5);
+%                     end
+                    
+                    keyboard;
+                    
+                    beta=fit.extract('permute',false).beta;
+                    beta(1,:) - beta(3,:)
+                    beta(2,:) - beta(3,:)
+%                     print(fit);
+                    
+            
         end
 
         function p = prior(~,w)
