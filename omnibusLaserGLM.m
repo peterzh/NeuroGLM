@@ -11,10 +11,10 @@ classdef omnibusLaserGLM
     end
     
     properties (Access=public)
-        cfn_parameters;
+%         cfn_parameters;
         significance_flag = 0;
         bilateral_flag = 0;
-        moreData = 1;
+        moreData = 0;
         nestedModel_flag = 0;
     end
     
@@ -68,17 +68,23 @@ classdef omnibusLaserGLM
                         L.laserCoordByTrial = [L.laserCoordByTrial zeros(size(L.laserCoordByTrial,1),1)];
                     end
                     
-                    d = struct('contrast_cond',[],'response',[],'repeatNum',[],'feedbackType',[],'RT',[]);
+                    d = struct('stimulus',[],'response',[],'repeatNum',[],'feedbackType',[],'RT',[]);
                     block = dat.loadBlock(eRef);
                     trials = block.trial;
                     
+                    hist=nan(block.numCompletedTrials,12);
                     for t=1:block.numCompletedTrials
-                        d.contrast_cond(t,:) = trials(t).condition.visCueContrast';
+                        d.stimulus(t,:) = trials(t).condition.visCueContrast';
                         d.response(t,1) = trials(t).responseMadeID';
                         d.repeatNum(t,1) = trials(t).condition.repeatNum;
                         d.feedbackType(t,1) = trials(t).feedbackType;
                         d.RT(t,1) = trials(t).responseMadeTime-trials(t).interactiveStartedTime;
+                        
+                        if t > 5
+                            hist(t,:) = [NaN d.response(t-5:t-1)' NaN d.feedbackType(t-5:t-1)'];
+                        end
                     end
+                    d.stimulus = [d.stimulus hist];
                     
                     d.laserCoord = L.laserCoordByTrial;
                     
@@ -137,15 +143,15 @@ classdef omnibusLaserGLM
             tab = tabulate(obj.data{numSubjects + 1}.response);
             tab = tab(:,3)/100;
             obj.guess_bpt(numSubjects + 1)=sum(tab.*log2(tab));
-            numSubjects = numSubjects + 1;
+%             numSubjects = numSubjects + 1;
             
-            %now fit c50 and n parameters for each subject's nonlaser data
-            obj.cfn_parameters = cell(1,numSubjects);
-            for n = 1:numSubjects
-                g=GLM(getrow(obj.data{n},obj.data{n}.laserIdx==0)).setModel('C50-subset').fit;
-                obj.cfn_parameters{n} = g.parameterFits(5:6);
-            end
-            obj.plotExptSummary;
+%             %now fit c50 and n parameters for each subject's nonlaser data
+%             obj.cfn_parameters = cell(1,numSubjects);
+%             for n = 1:numSubjects
+%                 g=GLM(getrow(obj.data{n},obj.data{n}.laserIdx==0)).setModel('C50-subset').fit;
+%                 obj.cfn_parameters{n} = g.parameterFits(5:6);
+%             end
+%             obj.plotExptSummary;
         end
         
         function plotExptSummary(obj)
@@ -162,95 +168,244 @@ classdef omnibusLaserGLM
             end
         end
         
-        function [ZL,ZR,numP,offsetMode] = getModel(obj,model,biasMode,subj)
-            cfn = @(c)(obj.cfn(c,subj));
+        function [ZL,ZR,LB,UB,pLabels] = getModel(obj,model,biasMode,subj)
+%             cfn = @(c)(obj.cfn(c,subj));
+            cfn = @(c,n,c50) ( (c.^n)./(c50.^n + c.^n) );
+%             histfcn = @(r,side)( (r==side)*1 - (r==3) );
+            
+            LB=[]; UB=[];
             switch(biasMode)
                 case 'biasAsOffset'
                     switch(model)
+                        %                         case 'offsetOnly'
+                        %                             ZL = @(p_offset,p,c)( p_offset(:,3).*(cfn(c(:,1)) + p_offset(:,1)) );
+                        %                             ZR = @(p_offset,p,c)( p_offset(:,4).*(cfn(c(:,2)) + p_offset(:,2)) );
+                        %                             numP = NaN;
+                        %                         case 'bias'
+                        %                             ZL = @(p_offset,p,c)( ( p_offset(:,3) ).*(cfn(c(:,1)) + p_offset(:,1) + p(1)) );
+                        %                             ZR = @(p_offset,p,c)( ( p_offset(:,4) ).*(cfn(c(:,2)) + p_offset(:,2) + p(2)) );
+                        %                             numP = 4;
+                        %                         case 'sub_sens'
+                        %                             ZL = @(p_offset,p,c)( ( p_offset(:,3) + p(3) ).*(cfn(c(:,1)) + p_offset(:,1) ) );
+                        %                             ZR = @(p_offset,p,c)( ( p_offset(:,4) + p(4) ).*(cfn(c(:,2)) + p_offset(:,2) ) );
+                        %                             numP = 4;
+                        
+                        %                         case 'bias+sub_sens'
+                        %                             ZL = @(p_offset,p,c)( (p_offset(:,3) + p(3)).*(cfn(c(:,1)) + p_offset(:,1) + p(1)) );
+                        %                             ZR = @(p_offset,p,c)( (p_offset(:,4) + p(4)).*(cfn(c(:,2)) + p_offset(:,2) + p(2)) );
+                        %                             numP = 4;
+                        
+%                         BASE non-laser models
+                        case 'base' %C50 and N shared
+                            ZL = @(p_offset,p,c)( p(1) + 10*p(3).*cfn(c(:,1),p(5),p(7))  );
+                            ZR = @(p_offset,p,c)( p(2) + 10*p(4).*cfn(c(:,2),p(5),p(7))  );
+                            LB = [-inf -inf -inf -inf 0.3 0 0 0]; %only used when doing non-laser fit
+                            UB = [+inf +inf +inf +inf 20 0 1 0]; %only used when doing non-laser fit
+                            pLabels = {'oL','oR','sL','sR','n','n','c50','c50'};
+  
                         case 'offsetOnly'
-                            ZL = @(off,p,c)(off(:,1) );
-                            ZR = @(off,p,c)(off(:,2) );
-                            numP = NaN;
+                            ZL = @(p_offset,p,c)( p_offset(:,1) + 10*p_offset(:,3).*cfn(c(:,1),p_offset(:,5),p_offset(:,7))  );
+                            ZR = @(p_offset,p,c)( p_offset(:,2) + 10*p_offset(:,4).*cfn(c(:,2),p_offset(:,6),p_offset(:,8))  );
+                            
                         case 'bias'
-                            ZL = @(off,p,c)(off(:,1) + p(1) );
-                            ZR = @(off,p,c)(off(:,2) + p(2) );
-                            numP = 4;
-                        case 'sens'
-                            ZL = @(off,p,c)(off(:,1) + p(3).*cfn(c(:,1)) + p(5).*cfn(c(:,2)) );
-                            ZR = @(off,p,c)(off(:,2) + p(4).*cfn(c(:,2)) + p(6).*cfn(c(:,1)) );
-                            numP = 6;
+                            ZL = @(p_offset,p,c)( p_offset(:,1) + p(1) + 10*(p_offset(:,3)).*cfn(c(:,1),p_offset(:,5),p_offset(:,7)) );
+                            ZR = @(p_offset,p,c)( p_offset(:,2) + p(2) + 10*(p_offset(:,4)).*cfn(c(:,2),p_offset(:,6),p_offset(:,8)) );
+                            LB = [1 1 0 0 0 0 0 0];
+                            
+                            
                         case 'sub_sens'
-                            ZL = @(off,p,c)(off(:,1) + p(3).*cfn(c(:,1)) );
-                            ZR = @(off,p,c)(off(:,2) + p(4).*cfn(c(:,2)) );
-                            numP = 4;
+                            ZL = @(p_offset,p,c)( p_offset(:,1) + 10*(p_offset(:,3) + p(3)).*cfn(c(:,1),p_offset(:,5),p_offset(:,7))  );
+                            ZR = @(p_offset,p,c)( p_offset(:,2) + 10*(p_offset(:,4) + p(4)).*cfn(c(:,2),p_offset(:,6),p_offset(:,8))  );
+                            LB = [0 0 1 1 0 0 0 0];
+                            
+                        case 'n'
+                            ZL = @(p_offset,p,c)( p_offset(:,1) + 10*p_offset(:,3).*cfn(c(:,1),p_offset(:,5)+p(5),p_offset(:,7))  );
+                            ZR = @(p_offset,p,c)( p_offset(:,2) + 10*p_offset(:,4).*cfn(c(:,2),p_offset(:,6)+p(6),p_offset(:,8))  );
+                            LB = [0 0 0 0 1 1 0 0];
+                            
+                        case 'c50'
+                            ZL = @(p_offset,p,c)( p_offset(:,1) + 10*p_offset(:,3).*cfn(c(:,1),p_offset(:,5),p_offset(:,7)+p(7))  );
+                            ZR = @(p_offset,p,c)( p_offset(:,2) + 10*p_offset(:,4).*cfn(c(:,2),p_offset(:,6),p_offset(:,8)+p(8))  );
+                            LB = [0 0 0 0 0 0 1 1];
+                            
+                        case 'n+c50'
+                            ZL = @(p_offset,p,c)( p_offset(:,1) + 10*p_offset(:,3).*cfn(c(:,1),p_offset(:,5)+p(5),p_offset(:,7)+p(7))  );
+                            ZR = @(p_offset,p,c)( p_offset(:,2) + 10*p_offset(:,4).*cfn(c(:,2),p_offset(:,6)+p(6),p_offset(:,8)+p(8))  );
+                            LB = [0 0 0 0 1 1 1 1];
+                            
                         case 'bias+sub_sens'
-                            ZL = @(off,p,c)(off(:,1) + p(1) + p(3).*cfn(c(:,1)) );
-                            ZR = @(off,p,c)(off(:,2) + p(2) + p(4).*cfn(c(:,2)) );
-                            numP = 4;
-                        case 'bias+sens'
-                            ZL = @(off,p,c)(off(:,1) + p(1) + p(3).*cfn(c(:,1)) + p(5).*cfn(c(:,2)) );
-                            ZR = @(off,p,c)(off(:,2) + p(2) + p(4).*cfn(c(:,2)) + p(6).*cfn(c(:,1)) );
-                            numP = 6;
+                            ZL = @(p_offset,p,c)( p_offset(:,1) + p(1) + 10*(p_offset(:,3) + p(3)).*cfn(c(:,1),p_offset(:,5),p_offset(:,7))  );
+                            ZR = @(p_offset,p,c)( p_offset(:,2) + p(2) + 10*(p_offset(:,4) + p(4)).*cfn(c(:,2),p_offset(:,6),p_offset(:,8))  );
+                            LB = [1 1 1 1 0 0 0 0];
+                            
+                        case 'bias+n'
+                            ZL = @(p_offset,p,c)( p_offset(:,1) + p(1) + 10*p_offset(:,3).*cfn(c(:,1),p_offset(:,5)+p(5),p_offset(:,7))  );
+                            ZR = @(p_offset,p,c)( p_offset(:,2) + p(2) + 10*p_offset(:,4).*cfn(c(:,2),p_offset(:,6)+p(6),p_offset(:,8))  );
+                            LB = [1 1 0 0 1 1 0 0];
+                            
+                        case 'bias+c50'
+                            ZL = @(p_offset,p,c)( p_offset(:,1) + p(1) + 10*p_offset(:,3).*cfn(c(:,1),p_offset(:,5),p_offset(:,7)+p(7))  );
+                            ZR = @(p_offset,p,c)( p_offset(:,2) + p(2) + 10*p_offset(:,4).*cfn(c(:,2),p_offset(:,6),p_offset(:,8)+p(8))  ); 
+                            LB = [1 1 0 0 0 0 1 1];
+                            
+                        case 'bias+n+c50'
+                            ZL = @(p_offset,p,c)( p_offset(:,1) + p(1) + 10*p_offset(:,3).*cfn(c(:,1),p_offset(:,5)+p(5),p_offset(:,7)+p(7))  );
+                            ZR = @(p_offset,p,c)( p_offset(:,2) + p(2) + 10*p_offset(:,4).*cfn(c(:,2),p_offset(:,6)+p(6),p_offset(:,8)+p(8))  );           
+                            LB = [1 1 0 0 1 1 1 1];
+                            
+                        case 'bias+sub_sens+n'
+                            ZL = @(p_offset,p,c)( p_offset(:,1) + p(1) + 10*(p_offset(:,3) + p(3)).*cfn(c(:,1),p_offset(:,5)+p(5),p_offset(:,7))  );
+                            ZR = @(p_offset,p,c)( p_offset(:,2) + p(2) + 10*(p_offset(:,4) + p(4)).*cfn(c(:,2),p_offset(:,6)+p(6),p_offset(:,8))  );
+                            LB = [1 1 1 1 1 1 0 0];
+                            
+                        case 'bias+sub_sens+c50'
+                            ZL = @(p_offset,p,c)( p_offset(:,1) + p(1) + 10*(p_offset(:,3) + p(3)).*cfn(c(:,1),p_offset(:,5),p_offset(:,7)+p(7))  );
+                            ZR = @(p_offset,p,c)( p_offset(:,2) + p(2) + 10*(p_offset(:,4) + p(4)).*cfn(c(:,2),p_offset(:,6),p_offset(:,8)+p(8))  );
+                            LB = [1 1 1 1 0 0 1 1];
+                            
+                        case 'bias+sub_sens+n+c50'
+                            ZL = @(p_offset,p,c)( p_offset(:,1) + p(1) + 10*(p_offset(:,3) + p(3)).*cfn(c(:,1),p_offset(:,5)+p(5),p_offset(:,7)+p(7))  );
+                            ZR = @(p_offset,p,c)( p_offset(:,2) + p(2) + 10*(p_offset(:,4) + p(4)).*cfn(c(:,2),p_offset(:,6)+p(6),p_offset(:,8)+p(8))  );                     
+                            LB = [1 1 1 1 1 1 1 1];
 
-                        case 'nested_bias+sub_sens' %hacky attempt at a nested model implementation
-                            ZL = @(off,p,c)( off(:,1) + p(1) + p(3)*max([cfn(c(:,1)) cfn(c(:,2))],[],2)  ); %actually pGO/pNG
-                            ZR = @(off,p,c)( off(:,2) + p(2) + p(4)*diff([cfn(c(:,1)) cfn(c(:,2))],[],2) ); %actually pL/pR given GO
-                            numP = 4;
-                        case 'nested_sub_sens' %hacky attempt at a nested model implementation
-                            ZL = @(off,p,c)( off(:,1) + p(3)*max([cfn(c(:,1)) cfn(c(:,2))],[],2)  ); %actually pGO/pNG
-                            ZR = @(off,p,c)( off(:,2) + p(4)*diff([cfn(c(:,1)) cfn(c(:,2))],[],2) ); %actually pL/pR given GO
-                            numP = 4;
-                        case 'nested_bias' %hacky attempt at a nested model implementation
-                            ZL = @(off,p,c)( off(:,1) + p(1) ); %actually pGO/pNG
-                            ZR = @(off,p,c)( off(:,2) + p(2) ); %actually pL/pR given GO
-                            numP = 4;
                     end
-                    offsetMode = 'Z';
+                    
                     
                 case 'biasAsContrast'
                     switch(model)
-                        case 'offsetOnly'
-                            ZL = @(p_offset,p,c)( p_offset(:,3).*(cfn(c(:,1)) + p_offset(:,1)) );
-                            ZR = @(p_offset,p,c)( p_offset(:,4).*(cfn(c(:,2)) + p_offset(:,2)) );
-                            numP = NaN;
-                        case 'bias+sub_sens'
-                            ZL = @(p_offset,p,c)( (p_offset(:,3) + p(3)).*(cfn(c(:,1)) + p_offset(:,1) + p(1)) );
-                            ZR = @(p_offset,p,c)( (p_offset(:,4) + p(4)).*(cfn(c(:,2)) + p_offset(:,2) + p(2)) );
-                            numP = 4;
-                        case 'bias'
-                            ZL = @(p_offset,p,c)( ( p_offset(:,3) ).*(cfn(c(:,1)) + p_offset(:,1) + p(1)) );
-                            ZR = @(p_offset,p,c)( ( p_offset(:,4) ).*(cfn(c(:,2)) + p_offset(:,2) + p(2)) );
-                            numP = 4;
-                        case 'sub_sens'
-                            ZL = @(p_offset,p,c)( ( p_offset(:,3) + p(3) ).*(cfn(c(:,1)) + p_offset(:,1) ) );
-                            ZR = @(p_offset,p,c)( ( p_offset(:,4) + p(4) ).*(cfn(c(:,2)) + p_offset(:,2) ) );
-                            numP = 4;
+                        %                         case 'offsetOnly'
+                        %                             ZL = @(p_offset,p,c)( p_offset(:,3).*(cfn(c(:,1)) + p_offset(:,1)) );
+                        %                             ZR = @(p_offset,p,c)( p_offset(:,4).*(cfn(c(:,2)) + p_offset(:,2)) );
+                        %                             numP = NaN;
+                        %                         case 'bias'
+                        %                             ZL = @(p_offset,p,c)( ( p_offset(:,3) ).*(cfn(c(:,1)) + p_offset(:,1) + p(1)) );
+                        %                             ZR = @(p_offset,p,c)( ( p_offset(:,4) ).*(cfn(c(:,2)) + p_offset(:,2) + p(2)) );
+                        %                             numP = 4;
+                        %                         case 'sub_sens'
+                        %                             ZL = @(p_offset,p,c)( ( p_offset(:,3) + p(3) ).*(cfn(c(:,1)) + p_offset(:,1) ) );
+                        %                             ZR = @(p_offset,p,c)( ( p_offset(:,4) + p(4) ).*(cfn(c(:,2)) + p_offset(:,2) ) );
+                        %                             numP = 4;
+                        
+                        %                         case 'bias+sub_sens'
+                        %                             ZL = @(p_offset,p,c)( (p_offset(:,3) + p(3)).*(cfn(c(:,1)) + p_offset(:,1) + p(1)) );
+                        %                             ZR = @(p_offset,p,c)( (p_offset(:,4) + p(4)).*(cfn(c(:,2)) + p_offset(:,2) + p(2)) );
+                        %                             numP = 4;
+                        
+%                         BASE non-laser models
+                        case 'base' %C50 and N shared
+                            ZL = @(p_offset,p,c)( 10*p(3).*(cfn(c(:,1),p(5),p(7)) + p(1)) );
+                            ZR = @(p_offset,p,c)( 10*p(4).*(cfn(c(:,2),p(5),p(7)) + p(2)) );
+                            LB = [-inf -inf -inf -inf 0.3 0 0 0]; %only used when doing non-laser fit
+                            UB = [+inf +inf +inf +inf 20 0 1 0]; %only used when doing non-laser fit
+                            pLabels = {'bL','bR','sL','sR','n','n','c50','c50'};
                             
+                        case 'baseLR' %Separate c50 and N for left and right
+                            ZL = @(p_offset,p,c)( 10*p(3).*(cfn(c(:,1),p(5),p(7)) + p(1) ) );
+                            ZR = @(p_offset,p,c)( 10*p(4).*(cfn(c(:,2),p(6),p(8)) + p(2) ) );
+                            LB = [-inf -inf -inf -inf 0.3 0.3 0 0]; %only used when doing non-laser fit
+                            UB = [+inf +inf +inf +inf 20    20    1 1]; %only used when doing non-laser fit     
+                            pLabels = {'bL','bR','sL','sR','nL','nR','c50L','c50R'};
+%                         
+
+%                         case 'baseHist'
+%                             ZL = @(p_offset,p,c)( 10*p(3).*(cfn(c(:,1),p(5),p(7)) + p(1)) + histfcn(c(:,6),1)*p(9) + histfcn(c(:,6),2)*p(11) );
+%                             ZR = @(p_offset,p,c)( 10*p(4).*(cfn(c(:,2),p(5),p(7)) + p(2)) + histfcn(c(:,6),1)*p(10) + histfcn(c(:,6),2)*p(12) );
+%                             LB = [-inf -inf -inf -inf 0.3 0 0 0 ones(1,4)*-3]; %only used when doing non-laser fit
+%                             UB = [+inf +inf +inf +inf 20 0 1 0 ones(1,4)*3]; %only used when doing non-laser fit
+%                             pLabels = {'bL','bR','sL','sR','n','n','c50','c50','Lt-1_L','Lt-1_R','Rt-1_L','Rt-1_R'};
+%                             
+%                             
+                            %LASER DELTA MODELS    
+  
+                        case 'offsetOnly'
+                            ZL = @(p_offset,p,c)( 10*p_offset(:,3).*(cfn(c(:,1),p_offset(:,5),p_offset(:,7)) + p_offset(:,1)) );
+                            ZR = @(p_offset,p,c)( 10*p_offset(:,4).*(cfn(c(:,2),p_offset(:,6),p_offset(:,8)) + p_offset(:,2)) );
+                            
+                        case 'bias'
+                            ZL = @(p_offset,p,c)( 10*(p_offset(:,3)).*(cfn(c(:,1),p_offset(:,5),p_offset(:,7)) + p_offset(:,1) + p(1)) );
+                            ZR = @(p_offset,p,c)( 10*(p_offset(:,4)).*(cfn(c(:,2),p_offset(:,6),p_offset(:,8)) + p_offset(:,2) + p(2)) );
+                            LB = [1 1 0 0 0 0 0 0];
+                            
+                            
+                        case 'sub_sens'
+                            ZL = @(p_offset,p,c)( 10*(p_offset(:,3) + p(3)).*(cfn(c(:,1),p_offset(:,5),p_offset(:,7)) + p_offset(:,1) ) );
+                            ZR = @(p_offset,p,c)( 10*(p_offset(:,4) + p(4)).*(cfn(c(:,2),p_offset(:,6),p_offset(:,8)) + p_offset(:,2) ) );
+                            LB = [0 0 1 1 0 0 0 0];
+                            
+                        case 'n'
+                            ZL = @(p_offset,p,c)( 10*(p_offset(:,3)).*(cfn(c(:,1),p_offset(:,5)+p(5),p_offset(:,7)) + p_offset(:,1) ) );
+                            ZR = @(p_offset,p,c)( 10*(p_offset(:,4)).*(cfn(c(:,2),p_offset(:,6)+p(6),p_offset(:,8)) + p_offset(:,2) ) );
+                            LB = [0 0 0 0 1 1 0 0];
+                            
+                        case 'c50'
+                            ZL = @(p_offset,p,c)( 10*(p_offset(:,3)).*(cfn(c(:,1),p_offset(:,5),p_offset(:,7)+p(7)) + p_offset(:,1) ) );
+                            ZR = @(p_offset,p,c)( 10*(p_offset(:,4)).*(cfn(c(:,2),p_offset(:,6),p_offset(:,8)+p(8)) + p_offset(:,2) ) );
+                            LB = [0 0 0 0 0 0 1 1];
+                            
+                        case 'n+c50'
+                            ZL = @(p_offset,p,c)( 10*(p_offset(:,3)).*(cfn(c(:,1),p_offset(:,5)+p(5),p_offset(:,7)+p(7)) + p_offset(:,1) ) );
+                            ZR = @(p_offset,p,c)( 10*(p_offset(:,4)).*(cfn(c(:,2),p_offset(:,6)+p(6),p_offset(:,8)+p(8)) + p_offset(:,2) ) );
+                            LB = [0 0 0 0 1 1 1 1];
+                            
+                        case 'bias+sub_sens'
+                            ZL = @(p_offset,p,c)( 10*(p_offset(:,3) + p(3)).*(cfn(c(:,1),p_offset(:,5),p_offset(:,7)) + p_offset(:,1) + p(1)) );
+                            ZR = @(p_offset,p,c)( 10*(p_offset(:,4) + p(4)).*(cfn(c(:,2),p_offset(:,6),p_offset(:,8)) + p_offset(:,2) + p(2)) );
+                            LB = [1 1 1 1 0 0 0 0];
+                            
+                        case 'bias+n'
+                            ZL = @(p_offset,p,c)( 10*p_offset(:,3).*(cfn(c(:,1),p(5)+p_offset(:,5),p_offset(:,7)) + p_offset(:,1) + p(1)) );
+                            ZR = @(p_offset,p,c)( 10*p_offset(:,4).*(cfn(c(:,2),p(6)+p_offset(:,6),p_offset(:,8)) + p_offset(:,2) + p(2)) );   
+                            LB = [1 1 0 0 1 1 0 0];
+                            
+                        case 'bias+c50'
+                            ZL = @(p_offset,p,c)( 10*p_offset(:,3).*(cfn(c(:,1),p_offset(:,5),p(7)+p_offset(:,7)) + p_offset(:,1) + p(1)) );
+                            ZR = @(p_offset,p,c)( 10*p_offset(:,4).*(cfn(c(:,2),p_offset(:,6),p(8)+p_offset(:,8)) + p_offset(:,2) + p(2)) );   
+                            LB = [1 1 0 0 0 0 1 1];
+                            
+                        case 'bias+n+c50'
+                            ZL = @(p_offset,p,c)( 10*p_offset(:,3).*(cfn(c(:,1),p(5)+p_offset(:,5),p(7)+p_offset(:,7)) + p_offset(:,1) + p(1)) );
+                            ZR = @(p_offset,p,c)( 10*p_offset(:,4).*(cfn(c(:,2),p(6)+p_offset(:,6),p(8)+p_offset(:,8)) + p_offset(:,2) + p(2)) );              
+                            LB = [1 1 0 0 1 1 1 1];
+                            
+                        case 'bias+sub_sens+n'
+                            ZL = @(p_offset,p,c)( 10*(p_offset(:,3) + p(3)).*(cfn(c(:,1),p(5)+p_offset(:,5),p_offset(:,7)) + p_offset(:,1) + p(1)) );
+                            ZR = @(p_offset,p,c)( 10*(p_offset(:,4) + p(4)).*(cfn(c(:,2),p(6)+p_offset(:,6),p_offset(:,8)) + p_offset(:,2) + p(2)) );
+                            LB = [1 1 1 1 1 1 0 0];
+                            
+                        case 'bias+sub_sens+c50'
+                            ZL = @(p_offset,p,c)( 10*(p_offset(:,3) + p(3)).*(cfn(c(:,1),p_offset(:,5),p(7)+p_offset(:,7)) + p_offset(:,1) + p(1)) );
+                            ZR = @(p_offset,p,c)( 10*(p_offset(:,4) + p(4)).*(cfn(c(:,2),p_offset(:,6),p(8)+p_offset(:,8)) + p_offset(:,2) + p(2)) );
+                            LB = [1 1 1 1 0 0 1 1];
+                            
+                        case 'bias+sub_sens+n+c50'
+                            ZL = @(p_offset,p,c)( 10*(p_offset(:,3) + p(3)).*(cfn(c(:,1),p(5)+p_offset(:,5),p(7)+p_offset(:,7)) + p_offset(:,1) + p(1)) );
+                            ZR = @(p_offset,p,c)( 10*(p_offset(:,4) + p(4)).*(cfn(c(:,2),p(6)+p_offset(:,6),p(8)+p_offset(:,8)) + p_offset(:,2) + p(2)) );                       
+                            LB = [1 1 1 1 1 1 1 1];
+
+                            
+                            %                         case 'nested_bias+sub_sens' %hacky attempt at a nested model implementation
+                            %                             ZL = @(p_offset,p,c)( (p_offset(:,3) + p(3)).*(max([cfn(c(:,1)) cfn(c(:,2))],[],2) + p_offset(:,1) + p(1) ) ); %actually pGO/pNG
+                            %                             ZR = @(p_offset,p,c)( (p_offset(:,4) + p(4)).*(diff([cfn(c(:,1)) cfn(c(:,2))],[],2) + p_offset(:,2) + p(2)) ); %actually pL/pR given GO
+                            %                             numP = 4;
                         case 'nested_bias+sub_sens' %hacky attempt at a nested model implementation
-                            ZL = @(p_offset,p,c)( (p_offset(:,3) + p(3)).*(max([cfn(c(:,1)) cfn(c(:,2))],[],2) + p_offset(:,1) + p(1) ) ); %actually pGO/pNG
-                            ZR = @(p_offset,p,c)( (p_offset(:,4) + p(4)).*(diff([cfn(c(:,1)) cfn(c(:,2))],[],2) + p_offset(:,2) + p(2)) ); %actually pL/pR given GO
-                            numP = 4;
-                        case 'nested_bias' %hacky attempt at a nested model implementation
-                            ZL = @(p_offset,p,c)( p_offset(:,3).*(max([cfn(c(:,1)) cfn(c(:,2))],[],2) + p_offset(:,1) + p(1) ) ); %actually pGO/pNG
-                            ZR = @(p_offset,p,c)( p_offset(:,4).*(diff([cfn(c(:,1)) cfn(c(:,2))],[],2) + p_offset(:,2) + p(2)) ); %actually pL/pR given GO
-                            numP = 4;
-                        case 'nested_sub_sens' %hacky attempt at a nested model implementation
-                            ZL = @(p_offset,p,c)( (p_offset(:,3) + p(3)).*(max([cfn(c(:,1)) cfn(c(:,2))],[],2) + p_offset(:,1) ) ); %actually pGO/pNG
-                            ZR = @(p_offset,p,c)( (p_offset(:,4) + p(4)).*(diff([cfn(c(:,1)) cfn(c(:,2))],[],2) + p_offset(:,2)) ); %actually pL/pR given GO
-                            numP = 4;
+                            ZL = @(p_offset,p,c)( (p_offset(:,3) + p(3)).*(max(c.^repmat(p_offset(:,5)+p(5),1,2),[],2) + p_offset(:,1) + p(1) ) ); %actually pGO/pNG
+                            ZR = @(p_offset,p,c)( (p_offset(:,4) + p(4)).*(diff(c.^repmat(p_offset(:,5)+p(5),1,2),[],2) + p_offset(:,2) + p(2)) ); %actually pL/pR given GO
+                            LB = [-inf -inf -inf -inf 0]; %only used when doing non-laser fit
+                            UB = [+inf +inf +inf +inf 1]; %only used when doing non-laser fit
+                            
                     end
-                    offsetMode = 'P';
                     
             end
             
         end
         
-        function obj = fit(obj,laserLambda)
-            f=figure;
-            obj.fitData.nonLaserModel = 'bias+sub_sens';
-            obj.fitData.laserModel = 'bias+sub_sens';
-            obj.fitData.biasMode = 'biasAsContrast';
-            obj.fitData.laserLambda = laserLambda;
+        function obj = fit(obj,lambda)
+%             f=figure;
+            obj.fitData.nonLaserModel = 'base';
+            obj.fitData.laserModel = 'bias+sub_sens+c50';
+            obj.fitData.biasMode = 'biasAsOffset';
+            obj.fitData.perSession = 1;
+            obj.fitData.lambda = lambda;
             
             if strcmp(obj.fitData.nonLaserModel(1:4),'nest'); %if nested model, set flag for use later
                 obj.nestedModel_flag = 1;
@@ -266,42 +421,80 @@ classdef omnibusLaserGLM
                 %First fit non-laser portion of the data
                 
                 %Manual optim method per-session
-                [ZL_nL,ZR_nL,numP,offsetMode] = obj.getModel(obj.fitData.nonLaserModel,obj.fitData.biasMode,n);
+                [ZL_nL,ZR_nL,LB,UB,pLabels] = obj.getModel(obj.fitData.nonLaserModel,obj.fitData.biasMode);
+                obj.fitData.pLabels = pLabels;
+                
                 nL = obj.data{n}.laserIdx==0;
-                
-                %                 %Define which parameters are to be regularised
-                %                 if numP == 4
-                %                                         reg = [3:4];
-                % %                     reg = 1:numP;
-                %                 else
-                %                     reg = 1:numP;
-                %                 end
-                
+               
                 sessions = unique(obj.data{n}.sessionID(nL));
-                p_nL = nan(length(sessions),numP);
-                for s = 1:length(sessions)
-                    cont = obj.data{n}.contrast_cond(nL & obj.data{n}.sessionID==sessions(s),:);
-                    resp = obj.data{n}.response(nL & obj.data{n}.sessionID==sessions(s));
-                    
-                    offset = zeros(length(resp),4);
-                    objective = @(PARAMETERS) (-obj.calculateLogLik(PARAMETERS,ZL_nL,ZR_nL,offset,cont,resp) + obj.fitData.laserLambda*sum(abs(PARAMETERS)) );
-                    
-                    switch(obj.fitMethod)
-                        case 'opti'
-                            options = optiset('display','final','solver','NOMAD');
-                            Opt = opti('fun',objective,'x0',zeros(1,numP),'options',options);
-                            p_nL(s,:) = Opt.solve';
-                            
-                        case 'fmincon'
-                            options = optimoptions('fmincon','UseParallel',0,'MaxFunEvals',100000,'MaxIter',10000);
-                            [p_nL(s,:),~,exitflag] = fmincon(objective,zeros(1,numP), [], [], [], [], [], [], [], options);
-                            
-                            if exitflag<1
-                                error('Fit error: did not converge');
-                                keyboard;
-                            end
+                if obj.fitData.perSession==1
+                    p_nL = nan(length(sessions),length(LB));
+                    for s = 1:length(sessions)
+                        cont = obj.data{n}.stimulus(nL & obj.data{n}.sessionID==sessions(s),:);
+                        resp = obj.data{n}.response(nL & obj.data{n}.sessionID==sessions(s));
+                        
+                        %                     offset = zeros(1,numP);
+                        objective = @(PARAMETERS) (-obj.calculateLogLik(PARAMETERS,ZL_nL,ZR_nL,[],cont,resp) + obj.fitData.lambda*sum(abs(PARAMETERS).^2) );
+                        
+                        switch(obj.fitMethod)
+                            case 'opti'
+                                options = optiset('display','final','solver','NOMAD');
+                                Opt = opti('fun',objective,'x0',zeros(1,length(LB)),'options',options);
+                                p_nL(s,:) = Opt.solve';
+                                
+                            case 'fmincon'
+                                options = optimoptions('fmincon','UseParallel',0,'MaxFunEvals',100000,'MaxIter',10000);
+                                [p_nL(s,:),~,exitflag] = fmincon(objective,zeros(1,length(LB)), [], [], [], [], LB, UB, [], options);
+                                
+                                if exitflag<1
+                                    warning('NON-LASER FIT ERROR: did not converge, trying Opti');
+                                    options = optiset('display','final','solver','NOMAD');
+                                    Opt = opti('fun',objective,'x0',zeros(1,length(LB)),'bounds',LB,UB,'options',options);
+                                    [pTemp,~,exitflag] = Opt.solve;
+                                    p_nL(s,:) = pTemp';
+                                end
+                                
+                                if exitflag<1
+                                    warning('Convergence problem. Fix this!');
+                                    keyboard;
+                                end
+                                
+                        end
                     end
+                else
+                    p_nL = nan(1,length(LB));
+                    cont = obj.data{n}.stimulus(nL,:);
+                    resp = obj.data{n}.response(nL);
+                    
+                    objective = @(PARAMETERS) (-obj.calculateLogLik(PARAMETERS,ZL_nL,ZR_nL,[],cont,resp) + obj.fitData.lambda*sum(abs(PARAMETERS).^2) );
+                    options = optimoptions('fmincon','UseParallel',0,'MaxFunEvals',100000,'MaxIter',10000);
+                    [p_nL(1,:),~,exitflag] = fmincon(objective,zeros(1,length(LB)), [], [], [], [], LB, UB, [], options);
+                    
+                    if exitflag<1
+                        warning('Convergence problem. Fix this!');
+                        keyboard;
+                    end
+                    
+                    p_nL = repmat(p_nL,length(sessions),1);
                 end
+                
+                if any(p_nL(:,3:8)<0)
+                    warning('Negative nonlaser shape parameters! somethings wrong');
+                    keyboard;
+                end
+                
+                %If the base model does not fit shape params on each
+                %side, make sure to copy the parameter used for each side
+                p_nL(:,LB==0 & UB==0) = p_nL(:,find(LB==0 & UB==0) - 1);
+                
+                %To ensure the shape parameters are never made negative,
+                %ensure the lower bound of the laser delta parameter
+                %estimates is the nonlaser value of that parameter
+                min_p_nL = min(p_nL,[],1);
+                p_L_lowerBound = -inf(1,size(p_nL,2));
+                
+                p_L_lowerBound(3:8) = -min_p_nL(3:8);
+                p_L_upperBound = inf(size(p_L_lowerBound));
                 
                 obj.fitData.nonLaserParams{n} = p_nL;
                 
@@ -309,45 +502,66 @@ classdef omnibusLaserGLM
                 %extended models
                 laserIdx = unique(obj.data{n}.laserIdx);
                 laserIdx(1) = []; %remove non-laser condition
-                [ZL,ZR,numP,offsetMode] = obj.getModel(obj.fitData.laserModel,obj.fitData.biasMode,n);
-                p_L = nan(size(obj.inactivationCoords,1),numP); loglik=[];
+                [ZL,ZR,pFlag] = obj.getModel(obj.fitData.laserModel,obj.fitData.biasMode,n);
+                
+                %Force UB and LB to be 0 for laser parameters which are NOT
+                %changed by the laser
+                p_L_lowerBound(~pFlag)=0;
+                p_L_upperBound(~pFlag)=0;
+%                 keyboard;
+                
+                p_L = nan(size(obj.inactivationCoords,1),length(UB)); loglik=[];
                 for site = unique(laserIdx)'
                     L_idx = obj.data{n}.laserIdx==site;
-                    cont = obj.data{n}.contrast_cond(L_idx,:);
+                    cont = obj.data{n}.stimulus(L_idx,:);
                     resp = obj.data{n}.response(L_idx);
                     sess = obj.data{n}.sessionID(L_idx);
                     
                     %Calculate offset from non-laser fit
-                    %Offset from optim method
-                    
-                    switch (offsetMode)
-                        case 'P'
-                            %offset on parameters
-                            offset = p_nL(sess,:);
-                        case 'Z'
-                            %offset on ZL and ZR
-                            offset = [];
-                            for t = 1:sum(L_idx)
-                                offset(t,:) = [ZL_nL([0 0],p_nL(sess(t),:),cont(t,:)),...
-                                    ZR_nL([0 0],p_nL(sess(t),:),cont(t,:)) ];
-                            end
-                    end
-                    
+                    %offset on parameters
+                    offset = p_nL(sess,:);
+
                     %Use that offset to manually fit a model at each
                     %inactivation site
-                    objective = @(PARAMETERS) ( -obj.calculateLogLik(PARAMETERS,ZL,ZR,offset,cont,resp) + obj.fitData.laserLambda*sum(abs(PARAMETERS)));
+                    objective = @(PARAMETERS) ( -obj.calculateLogLik(PARAMETERS,ZL,ZR,offset,cont,resp) + obj.fitData.lambda*sum(abs(PARAMETERS).^2) );
                     
                     switch(obj.fitMethod)
                         case 'opti'
-                            options = optiset('display','final','solver','NOMAD');
-                            Opt = opti('fun',objective,'x0',zeros(1,numP),'options',options);
-                            [p,loglik(site,1),~,~] = Opt.solve;
-                            p_L(site,:) = p';
+                            error('not implemented');
+%                             options = optiset('display','final','solver','NOMAD');
+%                             Opt = opti('fun',objective,'x0',zeros(1,numP),'options',options);
+%                             [p,loglik(site,1),~,~] = Opt.solve;
+%                             p_L(site,:) = p';
                             
                         case 'fmincon'
                             options = optimoptions('fmincon','UseParallel',0,'MaxFunEvals',100000,'MaxIter',10000);
-                            [p_L(site,:),~,~,~] = fmincon(objective,zeros(1,numP), [], [], [], [], [], [], [], options);
+                            [p_L(site,:),~,exitflag] = fmincon(objective,zeros(1,length(UB)), [], [], [], [], p_L_lowerBound, p_L_upperBound, [], options);
                     end
+%                     
+%                     if any(p_L(site,5:end)>2)
+%                         keyboard;
+%                     end
+                    
+                    if exitflag<1
+                        warning('LASER FIT ERROR: did not converge, trying Opti');
+                        options = optiset('display','final','solver','NOMAD');
+                        Opt = opti('fun',objective,'x0',zeros(1,length(LB)),'bounds',p_L_lowerBound,p_L_upperBound,'options',options);
+                        [pTemp,~,exitflag] = Opt.solve;
+                        p_L(site,:) = pTemp';
+                    end
+                    
+                    if exitflag<1
+                        warning('Convergence problem. Fix this!');
+                        keyboard;
+                    end
+                    
+                    
+                    p_tot = bsxfun(@plus,p_nL,p_L(site,:));
+                    if any(any(p_tot(:,3:8)<0))
+                        warning('Negative total shape parameters after laser! somethings wrong');
+                        keyboard;
+                    end
+                
                     
                     %                     obj.fitData.siteX{site,n} = X;
                     %                     obj.fitData.siteFit{site,n} = fit;
@@ -356,7 +570,7 @@ classdef omnibusLaserGLM
                 %                 obj.fitData.paramsLL{n} = -loglik;
             end
             
-            disp('Done!'); close(f);
+            disp('Done!'); %close(f);
         end
         
         function obj = mergeSites(obj)
@@ -423,7 +637,7 @@ classdef omnibusLaserGLM
                 for iter = 1:200
                     %                     nL_bootstrap = randsample(find(nL),sum(nL),true);
                     nL_bootstrap = randsample(find(nL),numTrialsToSample,true);
-                    cont = obj.data{n}.contrast_cond(nL_bootstrap,:);
+                    cont = obj.data{n}.stimulus(nL_bootstrap,:);
                     resp = obj.data{n}.response(nL_bootstrap);
                     
                     offset = zeros(length(resp),4);
@@ -486,7 +700,7 @@ classdef omnibusLaserGLM
                 subplot(1,numSubjects,n); title(obj.names{n}); hold on;
                 
                 numLP = size(obj.fitData.params{n},2);
-                if numLP == 4
+                if numLP > 2
                     scatter(obj.fitData.params{n}(:,1),obj.fitData.params{n}(:,3),30,cols,'filled');
                 elseif numLP == 2
                     scatter(obj.fitData.params{n}(:,1),obj.fitData.params{n}(:,2),30,cols,'filled');
@@ -512,7 +726,7 @@ classdef omnibusLaserGLM
                     %Of the remaining nonLaser trials, fit the nonLaser mod
                     
                     %Manual optim method per-session
-                    [ZL_nL,ZR_nL,numP,offsetMode] = obj.getModel(obj.fitData.nonLaserModel,obj.fitData.biasMode,n);
+                    [ZL_nL,ZR_nL,numP,LB,UB] = obj.getModel(obj.fitData.nonLaserModel,obj.fitData.biasMode,n);
                     %Define which parameters are to be regularised
                     %                     if numP == 4
                     %                         reg = [3:4];
@@ -523,11 +737,11 @@ classdef omnibusLaserGLM
                     sessions = unique(obj.data{n}.sessionID(nL));
                     p_nL = nan(length(sessions),numP);
                     for s = 1:length(sessions)
-                        cont = obj.data{n}.contrast_cond(nL & obj.data{n}.sessionID==sessions(s),:);
+                        cont = obj.data{n}.stimulus(nL & obj.data{n}.sessionID==sessions(s),:);
                         resp = obj.data{n}.response(nL & obj.data{n}.sessionID==sessions(s));
                         
-                        offset = zeros(length(resp),4);
-                        objective = @(PARAMETERS) (-obj.calculateLogLik(PARAMETERS,ZL_nL,ZR_nL,offset,cont,resp) + obj.fitData.laserLambda*sum(PARAMETERS.^2));
+                        offset = zeros(length(resp),numP);
+                        objective = @(PARAMETERS) (-obj.calculateLogLik(PARAMETERS,ZL_nL,ZR_nL,offset,cont,resp) + obj.fitData.laserLambda*sum(abs(PARAMETERS))  );
                         
                         switch(obj.fitMethod)
                             case 'opti'
@@ -537,29 +751,19 @@ classdef omnibusLaserGLM
                                 
                             case 'fmincon'
                                 options = optimoptions('fmincon','UseParallel',0,'MaxFunEvals',100000,'MaxIter',10000,'Display','off');
-                                p_nL(s,:) = fmincon(objective,zeros(1,numP), [], [], [], [], [], [], [], options);
+                                p_nL(s,:) = fmincon(objective,zeros(1,numP), [], [], [], [], LB, UB, [], options);
                         end
                     end
                     
-                    cont = obj.data{n}.contrast_cond(q_idx,:);
+                    cont = obj.data{n}.stimulus(q_idx,:);
                     resp = obj.data{n}.response(q_idx);
                     sess = obj.data{n}.sessionID(q_idx);
-                    
-                    switch (offsetMode)
-                        case 'P'
-                            %offset on parameters
-                            offset = p_nL(sess,:);
-                        case 'Z'
-                            %offset on ZL and ZR
-                            offset = [];
-                            for t = 1:length(q_idx)
-                                offset(t,:) = [ZL_nL([0 0],p_nL(sess(t),:),cont(t,:)),...
-                                    ZR_nL([0 0],p_nL(sess(t),:),cont(t,:)), 0, 0 ];
-                            end
-                    end
-                    
-                    [ZL,ZR,numP,offsetMode] = obj.getModel(obj.fitData.laserModel,obj.fitData.biasMode,n);
-                    objective = @(PARAMETERS) (-obj.calculateLogLik(PARAMETERS,ZL,ZR,offset,cont,resp) + obj.fitData.laserLambda*sum(PARAMETERS.^2));
+   
+                    %offset on parameters
+                    offset = p_nL(sess,:);
+
+                    [ZL,ZR,numP] = obj.getModel(obj.fitData.laserModel,obj.fitData.biasMode,n);
+                    objective = @(PARAMETERS) (-obj.calculateLogLik(PARAMETERS,ZL,ZR,offset,cont,resp) + obj.fitData.laserLambda*sum(abs(PARAMETERS)) );
                     switch(obj.fitMethod)
                         case 'opti'
                             options = optiset('display','final','solver','NOMAD');
@@ -572,7 +776,7 @@ classdef omnibusLaserGLM
                             [p,loglik(iter,1)] = fmincon(objective,zeros(1,numP), [], [], [], [], [], [], [], options);
                             obj.fitData.paramsNull{n}(iter,:) = p;
                     end
-                    if numLP == 4
+                    if numLP > 2
                         plot(p(1),p(3),'k.','markersize',10); drawnow; xlabel('B_L'); ylabel('S_L');
                     elseif numLP == 2
                         plot(p(1),p(2),'k.','markersize',10); drawnow; xlabel('B_L'); ylabel('B_R');
@@ -613,7 +817,7 @@ classdef omnibusLaserGLM
         function obj = clearNull(obj)
             obj.significance_flag=0;
             try
-                obj.fitData = rmfield(obj.fitData,{'paramsNull','paramsNullLL'});
+                obj.fitData = rmfield(obj.fitData,{'paramsNull'});
             catch
                 warning('Null data does not exist');
             end
@@ -669,243 +873,310 @@ classdef omnibusLaserGLM
         
         function crossval_nonLaser(obj)
             %For each mouse, assess different nonlaser models to account
-            %for behavioural data (only on nonlaser trials). Here I will
-            %test the following models
-            %             MNR
-            %             Nested logit
-            %             C
-            %             C50
-            %             In each case I will test these models on the entire dataset from each mouse
+            %for behavioural data (only on nonlaser trials). 
+            
             numFolds = 10;
             %             models = {'NONLASER_bias+sub_sens_C','NONLASER_bias+sub_sens_C50'};
-            models = {'dummy','unconstrained','nested B & C','nested B & C50','mnr B & C','mnr B & C50'};
+            models = {'mnr B & C','mnr B & C50','mnr B & C50LR'};
             numSubjects = length(obj.names);
-            figure('name','model comparison','color','w');
+            figure('name','model comparison','color','w'); 
+%             axes; hold on;
             for n = 1:numSubjects
                 numSessions = max(obj.data{n}.sessionID);
                 
                 logLik = nan(numSessions,length(models));
+
                 for s = 1:numSessions
-                    D = getrow(obj.data{n},obj.data{n}.laserIdx==0 & obj.data{n}.sessionID==s); %only look at non-laser data
+                    D = getrow(obj.data{n},obj.data{n}.sessionID==s & obj.data{n}.laserIdx==0);
+%                     D = getrow(obj.data{n},obj.data{n}.laserIdx==0 & obj.data{n}.sessionID==s); %only look at non-laser data
                     D.phat = nan(length(D.response),length(models));
-                    [cVal,~,cid] = unique(D.contrast_cond(:));
-                    cid = reshape(cid,size(D.contrast_cond));
+                    cont = D.stimulus(:,1:2);
+                    [cVal,~,cid] = unique(cont(:));
+                    cid = reshape(cid,size(cont));
                     
                     cv = cvpartition(D.response,'KFold',numFolds);
                     
                     for fold = 1:cv.NumTestSets
-                        trainC = D.contrast_cond(cv.training(fold),:);
+                        trainC = D.stimulus(cv.training(fold),1:2);
                         trainR = D.response(cv.training(fold));
-                        testC = D.contrast_cond(cv.test(fold),:);
+                        testC = D.stimulus(cv.test(fold),1:2);
                         testR = D.response(cv.test(fold));
-                        
-                        %                         p_nL = cell(1,length(models));
-                        %                         offset = zeros(length(trainR),4);
-                        %                         for m = 1:length(models)
-                        %                             [ZL,ZR,numP,~] = obj.getModel(models{m},obj.fitData.biasMode,n);
-                        %                             objective = @(PARAMETERS) (-obj.calculateLogLik(PARAMETERS,ZL,ZR,offset,trainC,trainR) + obj.fitData.laserLambda*sum(PARAMETERS.^2) );
-                        %                             options = optimoptions('fmincon','UseParallel',0,'MaxFunEvals',100000,'MaxIter',10000,'Display','off');
-                        %                             p_nL{m} = fmincon(objective,zeros(1,numP{1}), [], [], [], [], numP{2}(1,:), numP{2}(2,:), [], options);
-                        %
-                        %                             %test model
-                        %                             p = obj.calculatePhat(ZL,ZR,offset,p_nL{m},testC);
-                        % %                             p(p<0.001) = 0.001;
-                        %                             D.phat(cv.test(fold),m) = p(:,1).*(testR==1) + p(:,2).*(testR==2) + p(:,3).*(testR==3);
-                        %                         end
-                        
-                        %Test mnr B & C50 model
-                        %                         warning('c50 params from full dataset, unfair advantage here');
-                        E = struct;
-                        E.contrast_cond = trainC;
-                        E.response = trainR;
-                        g = GLM(E).setModel('C50-subset').fit;
-                        cp = g.parameterFits(5:6);
-                        cfn = @(c)( (c.^cp(1))./(c.^cp(1) + cp(2).^cp(1)) );
-                        
-                        %                         cfn = @(c)(obj.cfn(c,n));
-                        b = mnrfit(cfn(trainC),trainR);
-                        p = mnrval(b,cfn(testC));
-                        D.phat(cv.test(fold),6) = p(:,1).*(testR==1) + p(:,2).*(testR==2) + p(:,3).*(testR==3);
+
+                        cfn = @(c,n,c50) ( (c.^n)./(c50.^n + c.^n) );
                         
                         
-                        %Test naive offset only model
-                        %                         keyboard;
-                        p = sum([trainR==1 trainR==2 trainR==3])/length(trainR);
-                        D.phat(cv.test(fold),1) = p(:,1).*(testR==1) + p(:,2).*(testR==2) + p(:,3).*(testR==3);
-                        
-                        %                         keyboard;
-                        %Test nested b & c
-                        %                         Z_NG_G = mnrfit(trainC,categorical(trainR<3));
-                        Z_NG_G = mnrfit(max(trainC,[],2),categorical(trainR<3));
-                        %                         Z_L_R = mnrfit(trainC(trainR<3,:),trainR(trainR<3));
-                        Z_L_R = mnrfit(diff(trainC(trainR<3,:),[],2),trainR(trainR<3));
-                        %                         pNG = mnrval(Z_NG_G,testC);
-                        pNG = mnrval(Z_NG_G,max(testC,[],2));
-                        pNG = pNG(:,1);
-                        %                         pLR_G = mnrval(Z_L_R,testC);
-                        pLR_G = mnrval(Z_L_R,diff(testC,[],2));
-                        pLR = bsxfun(@times,1-pNG,pLR_G);
-                        p = [pLR pNG];
-                        D.phat(cv.test(fold),3) = p(:,1).*(testR==1) + p(:,2).*(testR==2) + p(:,3).*(testR==3);
-                        
-                        %test nested b & c50
-                        xformC = cfn(trainC);
-                        %                         Z_NG_G = mnrfit(xformC,categorical(trainR<3));
-                        Z_NG_G = mnrfit(max(xformC,[],2),categorical(trainR<3));
-                        %                         Z_L_R = mnrfit(xformC(trainR<3,:),trainR(trainR<3));
-                        Z_L_R = mnrfit(diff(xformC(trainR<3,:),[],2),trainR(trainR<3));
-                        %                         pNG = mnrval(Z_NG_G,cfn(testC)); pNG = pNG(:,1);
-                        pNG = mnrval(Z_NG_G,max(cfn(testC),[],2)); pNG = pNG(:,1);
-                        
-                        %                         pLR_G = mnrval(Z_L_R,cfn(testC));
-                        pLR_G = mnrval(Z_L_R,diff(cfn(testC),[],2));
-                        pLR = bsxfun(@times,1-pNG,pLR_G);
-                        p = [pLR pNG];
-                        D.phat(cv.test(fold),4) = p(:,1).*(testR==1) + p(:,2).*(testR==2) + p(:,3).*(testR==3);
-                        
-                        %Test mnr B & C model
-                        b = mnrfit(trainC,trainR);
-                        p = mnrval(b,testC);
-                        D.phat(cv.test(fold),5) = p(:,1).*(testR==1) + p(:,2).*(testR==2) + p(:,3).*(testR==3);
-                        
-                        
-                        %Test unconstrained model (lookup table of
-                        %empirical pL pR pNG values)
-                        trainCid = cid(cv.training(fold),:);
-                        testCid = cid(cv.test(fold),:);
-                        p = nan(length(cVal),length(cVal),3);
-                        for cl = 1:length(cVal)
-                            for cr = 1:length(cVal)
-                                r = trainR(trainCid(:,1)==cl & trainCid(:,2)==cr);
-                                p(cl,cr,:) = sum([r==1 r==2 r==3],1)/length(r);
+                        for m = 1:length(models)
+                            switch(m)
+%                                 case 1 %dummy
+%                                     ZL = @(p_offset,p,c)( repmat(p(1),size(c,1),1) );
+%                                     ZR = @(p_offset,p,c)( repmat(p(1),size(c,1),1) );
+%                                     LB = [-inf -inf ]; %only used when doing non-laser fit
+%                                     UB = [+inf +inf ]; %only used when doing non-laser fit
+%                                     pLabels = {'bL','bR'};
+%                                     obj.nestedModel_flag = 0;
+                                case 1 %mnr B & C
+                                    ZL = @(p_offset,p,c)( 10*p(3).*(c(:,1) + p(1)) );
+                                    ZR = @(p_offset,p,c)( 10*p(4).*(c(:,2) + p(2)) );
+                                    LB = [-inf -inf -inf -inf ]; %only used when doing non-laser fit
+                                    UB = [+inf +inf +inf +inf ]; %only used when doing non-laser fit
+                                    pLabels = {'bL','bR','sL','sR'};
+                                    obj.nestedModel_flag = 0;
+                                case 2 %mnr B & C50
+                                    ZL = @(p_offset,p,c)( 10*p(3).*(cfn(c(:,1),p(5),p(6)) + p(1)) );
+                                    ZR = @(p_offset,p,c)( 10*p(4).*(cfn(c(:,2),p(5),p(6)) + p(2)) );
+                                    LB = [-inf -inf -inf -inf 0.3 0]; %only used when doing non-laser fit
+                                    UB = [+inf +inf +inf +inf 20  1]; %only used when doing non-laser fit
+                                    pLabels = {'bL','bR','sL','sR','n','c50'};
+                                    obj.nestedModel_flag = 0;
+                                case 3 %mnr B & C50LR
+                                    ZL = @(p_offset,p,c)( 10*p(3).*(cfn(c(:,1),p(5),p(7)) + p(1)) );
+                                    ZR = @(p_offset,p,c)( 10*p(4).*(cfn(c(:,2),p(6),p(8)) + p(2)) );
+                                    LB = [-inf -inf -inf -inf 0.3 0.3 0 0]; %only used when doing non-laser fit
+                                    UB = [+inf +inf +inf +inf 20 20 1 1]; %only used when doing non-laser fit
+                                    pLabels = {'bL','bR','sL','sR','nL','nR','c50L','c50R'};
+                                    obj.nestedModel_flag = 0;
+%                                 case 5 %nested B & C
+%                                     ZL = @(p_offset,p,c)( 10*p(3).*(max(c,[],2) + p(1) ) ); %actually pGO/pNG
+%                                     ZR = @(p_offset,p,c)( 10*p(4).*(diff(c,[],2) + p(2)) ); %actually pL/pR given GO
+%                                     LB = [-inf -inf -inf -inf]; %only used when doing non-laser fit
+%                                     UB = [+inf +inf +inf +inf]; %only used when doing non-laser fit
+%                                     pLabels = {'bGO','bLR','sGO','sLR'};
+%                                     obj.nestedModel_flag = 1;
+%                                 case 6 %nested B & C50
+%                                     ZL = @(p_offset,p,c)( 10*p(3).*(max(cfn(c,p(5),p(6)),[],2) + p(1) ) ); %actually pGO/pNG
+%                                     ZR = @(p_offset,p,c)( 10*p(4).*(diff(cfn(c,p(5),p(6)),[],2) + p(2)) ); %actually pL/pR given GO
+%                                     LB = [-inf -inf -inf -inf 0.3 0]; %only used when doing non-laser fit
+%                                     UB = [+inf +inf +inf +inf 20 1]; %only used when doing non-laser fit
+%                                     pLabels = {'bGO','bLR','sGO','sLR','n','c50'};
+%                                     obj.nestedModel_flag = 1;
                             end
+                            
+                            LAMBDA = 0.0001;
+%                             LAMBDA = 0;
+                            objective = @(PARAMETERS) (-obj.calculateLogLik(PARAMETERS,ZL,ZR,[],trainC,trainR) + LAMBDA*sum(PARAMETERS.^2));
+                            options = optimoptions('fmincon','UseParallel',0,'MaxFunEvals',100000,'MaxIter',10000);
+                            [PARAM,~,exitflag] = fmincon(objective,zeros(1,length(LB)), [], [], [], [], LB, UB, [], options);
+                            if exitflag<0
+                                disp('Did not converge'); keyboard;
+                            end
+                            
+                            p = obj.calculatePhat(ZL,ZR,[],PARAM,testC);
+                            D.phat(cv.test(fold),m) = p(:,1).*(testR==1) + p(:,2).*(testR==2) + p(:,3).*(testR==3);
                         end
                         
-                        ph = [];
-                        for t = 1:length(testR)
-                            ph(t,1) = p(testCid(t,1),testCid(t,2),testR(t));
-                        end
-                        D.phat(cv.test(fold),2) = ph;
-                        
+%                         %Test unconstrained model (lookup table of
+%                         %empirical pL pR pNG values)
+%                         trainCid = cid(cv.training(fold),:);
+%                         testCid = cid(cv.test(fold),:);
+%                         p = nan(length(cVal),length(cVal),3);
+%                         for cl = 1:length(cVal)
+%                             for cr = 1:length(cVal)
+%                                 r = trainR(trainCid(:,1)==cl & trainCid(:,2)==cr);
+%                                 p(cl,cr,:) = sum([r==1 r==2 r==3],1)/length(r);
+%                             end
+%                         end
+%                         
+%                         ph = [];
+%                         for t = 1:length(testR)
+%                             ph(t,1) = p(testCid(t,1),testCid(t,2),testR(t));
+%                         end
+%                         D.phat(cv.test(fold),1) = ph;
+%                         
 %                         if any(isnan(D.phat(cv.test(fold),6)))
 %                             keyboard;
 %                         end
                     end
                     %                     tab = tabulate(D.response); tab = tab(:,3)/100;
                     %                     guessbpt=sum(tab.*log2(tab));
-                    D.phat(D.phat==0)=0.001;
-                    logLik(s,:) = nanmean(log2(D.phat),1);
+                    D.phat(D.phat==0)=0.0001;
+                    logLik(s,:) = nanmean(log2(D.phat),1) - obj.guess_bpt(n);
                     
 %                     if any(isnan(logLik(s,:)))
 %                         keyboard;
 %                     end
                 end
+                
                 subplot(2,round(numSubjects/2),n);
-                h=errorbar(1:length(models),mean(logLik),stderr(logLik));
-                h.LineStyle='none'; h.Marker='none'; h.LineWidth=3;
+%                 xshift = linspace(-0.25,0.25,numSubjects);
+                h=errorbar((1:(length(models))),mean(logLik,1),std(logLik,[],1));
+                h.LineStyle='none'; h.Marker='.'; h.MarkerSize=30; h.LineWidth=1;
                 %                 bar(logLik','stacked');
                 title(obj.names{n});
-                set(gca,'xtick',1:length(models),'XTickLabel',models,'XTickLabelRotation',90,'box','off');
                 
                 if n == 1
                     ylabel('CV Log_2 likelihood');
                 end
+                set(gca,'xtick',1:(length(models)),'XTickLabel',models,'XTickLabelRotation',45,'box','off');
                 drawnow;
                 
 %                 keyboard;
             end
+
         end
         
-        function crossval_LaserEffect(obj,n)
+        function crossval_LaserEffect(obj)
+           
+            n=length(obj.names);
+            
             img=imread('D:\kirkcaldie_brain_BW_outline.png');
             numFolds = 10;
-            laserModels = {'bias','sub_sens','bias+sub_sens'};
+            laserModels = {'bias','bias+sub_sens','bias+c50','bias+sub_sens+c50'};
             %             numSubjects = length(obj.names);
             
-            figure('name',[obj.names{n} ' ' num2str(numFolds) '-fold CV ' obj.fitData.biasMode],'color','w');
-            %             for n = 1:numSubjects
+%             figure('name',[obj.names{n} ' ' num2str(numFolds) '-fold CV ' obj.fitData.biasMode],'color','w');
             cv = cvpartition(obj.data{n}.response,'KFold',numFolds);
             phat = nan(length(obj.data{n}.response),length(laserModels)+1);
+            
+            LOGLIK = nan(cv.NumTestSets,length(laserModels),6);
             for fold = 1:cv.NumTestSets
                 
-                trainC = obj.data{n}.contrast_cond(cv.training(fold),:);
+                trainC = obj.data{n}.stimulus(cv.training(fold),1:2);
                 trainR = obj.data{n}.response(cv.training(fold));
-                trainL = obj.data{n}.laserIdx(cv.training(fold));
+%                 trainL = obj.data{n}.laserIdx(cv.training(fold));
+                trainL = obj.data{n}.areaIdx(cv.training(fold));
                 trainSID = obj.data{n}.sessionID(cv.training(fold));
                 
                 %Fit non-laser model to training set
-                [ZL_nL,ZR_nL,numP,offsetMode] = obj.getModel('bias+sub_sens',obj.fitData.biasMode,n);
-                nL = (trainL==0);
+                [ZL_nL,ZR_nL,LB,UB] = obj.getModel('base',obj.fitData.biasMode,n);
+%                 nL = (trainL==0);
+                nL = (trainL==999);
                 
                 sessions = unique(trainSID(nL));
-                p_nL = nan(length(sessions),numP);
                 disp('NON-LASER TRAIN LOGLIK RELATIVE TO GUESS');
-                for s = 1:length(sessions)
-                    cont = trainC(nL & trainSID==sessions(s),:);
-                    resp = trainR(nL & trainSID==sessions(s));
+                if obj.fitData.perSession==1
                     
-                    offset = zeros(length(resp),4);
-                    objective = @(PARAMETERS) (-obj.calculateLogLik(PARAMETERS,ZL_nL,ZR_nL,offset,cont,resp) + obj.fitData.laserLambda*sum(PARAMETERS.^2) );
-                    
-                    switch(obj.fitMethod)
-                        case 'opti'
-                            options = optiset('display','final','solver','NOMAD');
-                            Opt = opti('fun',objective,'x0',zeros(1,numP),'options',options);
-                            p_nL(s,:) = Opt.solve';
-                            
-                        case 'fmincon'
-                            options = optimoptions('fmincon','UseParallel',0,'MaxFunEvals',100000,'MaxIter',10000,'Display','off');
-                            p_nL(s,:) = fmincon(objective,zeros(1,numP), [], [], [], [], [], [], [], options);
-                    end
-                    
-                    %debug: check fits were of good quality
-                    p=obj.calculatePhat(ZL_nL,ZR_nL,offset,p_nL(s,:),cont);
-                    loglik=mean(log2(p(:,1).*(resp==1) + p(:,2).*(resp==2) + p(:,3).*(resp==3)))-obj.guess_bpt(n);
-                    disp(['Session ' num2str(s) ': ' num2str(loglik)]);
-                end
-                
-                %Now fit laser part to the training set
-                p_L = cell(size(obj.inactivationCoords,1),length(laserModels));
-                laserIdx = unique(trainL);
-                laserIdx(1) = []; %remove non-laser condition
-                
-                disp('LASER TRAIN LOGLIK RELATIVE TO GUESS');
-                for site = laserIdx'
-                    disp(['Site ' num2str(site)]);
-                    cont = trainC(trainL==site,:);
-                    resp = trainR(trainL==site);
-                    sid = trainSID(trainL==site);
-                    
-                    switch(offsetMode)
-                        case 'P'
-                            offset = p_nL(sid,:);
-                        case 'Z'
-                            [ZL,ZR,~,~] = obj.getModel(obj.fitData.nonLaserModel,obj.fitData.biasMode,n);
-                            offset = [];
-                            for t = 1:sum(trainL==site)
-                                offset(t,:) = [ZL([0 0],p_nL(sid(t),:),cont(t,:)),...
-                                    ZR([0 0],p_nL(sid(t),:),cont(t,:)),0,0];
-                            end
-                    end
-                    [ZL,ZR,~,~] = obj.getModel('offsetOnly',obj.fitData.biasMode,n);
-                    
-                    p = obj.calculatePhat(ZL,ZR,offset,[],cont);
-                    loglik=mean(log2(p(:,1).*(resp==1) + p(:,2).*(resp==2) + p(:,3).*(resp==3)))-obj.guess_bpt(n);
-                    disp(['    non-laser model : ' num2str(loglik)]);
-                    
-                    for model = 1:length(laserModels)
-                        [ZL,ZR,numP,offsetMode] = obj.getModel(laserModels{model},obj.fitData.biasMode,n);
-                        objective = @(PARAMETERS) (-obj.calculateLogLik(PARAMETERS,ZL,ZR,offset,cont,resp));
+                    p_nL = nan(length(sessions),length(LB));
+                    for s = 1:length(sessions)
+                        cont = trainC(nL & trainSID==sessions(s),:);
+                        resp = trainR(nL & trainSID==sessions(s));
+                        
+                        objective = @(PARAMETERS) (-obj.calculateLogLik(PARAMETERS,ZL_nL,ZR_nL,[],cont,resp) + obj.fitData.lambda*sum(abs(PARAMETERS).^2) );
                         
                         switch(obj.fitMethod)
                             case 'opti'
                                 options = optiset('display','final','solver','NOMAD');
-                                Opt = opti('fun',objective,'x0',zeros(1,numP),'options',options);
+                                Opt = opti('fun',objective,'x0',zeros(1,length(LB)),'bounds',LB,UB,'options',options);
+                                p_nL(s,:) = Opt.solve';
+                                
+                            case 'fmincon'
+                                options = optimoptions('fmincon','UseParallel',0,'MaxFunEvals',100000,'MaxIter',10000,'Display','off');
+                                [p_nL(s,:),~,exitflag] = fmincon(objective,zeros(1,length(LB)), [], [], [], [],  LB, UB, [], options);
+                                
+                                if exitflag<1
+                                    warning('Fit error: did not converge, trying Opti');
+                                    options = optiset('display','final','solver','NOMAD');
+                                    Opt = opti('fun',objective,'x0',zeros(1,length(LB)),'bounds',LB,UB,'options',options);
+                                    [pTemp,~,exitflag] = Opt.solve;
+                                    p_nL(s,:) = pTemp';
+                                end
+                                
+                                if exitflag<1
+                                    warning('Convergence problem. Fix this!');
+                                    p_nL(s,:) = nan(size(p_nL(s,:)));
+                                    %                                 keyboard;
+                                end
+                        end
+                        
+                        
+                        %debug: check fits were of good quality
+                        p=obj.calculatePhat(ZL_nL,ZR_nL,[],p_nL(s,:),cont);
+                        loglik=mean(log2(p(:,1).*(resp==1) + p(:,2).*(resp==2) + p(:,3).*(resp==3)))-obj.guess_bpt(n);
+                        disp(['Session ' num2str(s) ': ' num2str(loglik)]);
+                    end
+                else
+                    cont = trainC(nL,:);
+                    resp = trainR(nL);
+                    
+                    objective = @(PARAMETERS) (-obj.calculateLogLik(PARAMETERS,ZL_nL,ZR_nL,[],cont,resp) + obj.fitData.lambda*sum(abs(PARAMETERS).^2) );
+                    
+                    switch(obj.fitMethod)
+                        case 'opti'
+                            options = optiset('display','final','solver','NOMAD');
+                            Opt = opti('fun',objective,'x0',zeros(1,length(LB)),'bounds',LB,UB,'options',options);
+                            p_nL = Opt.solve';
+                            
+                        case 'fmincon'
+                            options = optimoptions('fmincon','UseParallel',0,'MaxFunEvals',100000,'MaxIter',10000,'Display','off');
+                            [p_nL,~,exitflag] = fmincon(objective,zeros(1,length(LB)), [], [], [], [],  LB, UB, [], options);
+                            
+                            if exitflag<1
+                                warning('Fit error: did not converge, fix this');
+                                keyboard;
+                            end
+                            
+                    end
+                    %debug: check fits were of good quality
+                    p=obj.calculatePhat(ZL_nL,ZR_nL,[],p_nL,cont);
+                    loglik=mean(log2(p(:,1).*(resp==1) + p(:,2).*(resp==2) + p(:,3).*(resp==3)))-obj.guess_bpt(n);
+                    disp(['Pooled-session: ' num2str(loglik)]);
+                    
+                    p_nL = repmat(p_nL,length(sessions),1);
+
+                end
+                
+                %If the base model does not fit shape params on each
+                %side, make sure to copy the parameter used for each side
+                p_nL(:,LB==0 & UB==0) = p_nL(:,find(LB==0 & UB==0) - 1);
+                
+                %To ensure the shape parameters are never made negative,
+                %ensure the lower bound of the laser delta parameter
+                %estimates is the nonlaser value of that parameter
+                min_p_nL = min(p_nL,[],1);
+                p_L_lowerBound = [-inf -inf -min_p_nL(3:end)];
+                
+                
+                %Now fit laser part to the training set
+%                 p_L = cell(size(obj.inactivationCoords,1),length(laserModels));
+                p_L = cell(6,length(laserModels));
+
+%                 laserIdx = unique(trainL);
+%                 laserIdx(1) = []; %remove non-laser condition
+                if obj.bilateral_flag==0
+                    laserIdx=1:6;
+                else
+                    laserIdx=[2 4 6];
+                end
+
+                disp('LASER TRAIN LOGLIK RELATIVE TO GUESS');
+                for site = laserIdx
+                    disp(['Site ' num2str(site)]);
+                    cont = trainC(trainL==site,1:2);
+                    resp = trainR(trainL==site);
+                    sid = trainSID(trainL==site);
+                    
+                
+                    offset = p_nL(sid,:); 
+                    [ZL,ZR] = obj.getModel('offsetOnly',obj.fitData.biasMode,n);
+                    
+                    p = obj.calculatePhat(ZL,ZR,offset,[],cont);
+                    loglik=nanmean(log2(p(:,1).*(resp==1) + p(:,2).*(resp==2) + p(:,3).*(resp==3)))-obj.guess_bpt(n);
+                    disp(['    non-laser model : ' num2str(loglik)]);
+                    
+                    for model = 1:length(laserModels)
+                        [ZL,ZR] = obj.getModel(laserModels{model},obj.fitData.biasMode,n);
+                        objective = @(PARAMETERS) (-obj.calculateLogLik(PARAMETERS,ZL,ZR,offset,cont,resp) + obj.fitData.lambda*sum(abs(PARAMETERS).^2) );
+                        
+                        switch(obj.fitMethod)
+                            case 'opti'
+                                options = optiset('display','final','solver','NOMAD');
+                                Opt = opti('fun',objective,'x0',zeros(1,length(LB)),'options',options);
                                 p_L{site,model} = Opt.solve';
                                 
                             case 'fmincon'
                                 options = optimoptions('fmincon','UseParallel',0,'MaxFunEvals',100000,'MaxIter',10000,'Display','off');
-                                p_L{site,model} = fmincon(objective,zeros(1,numP), [], [], [], [], [], [], [], options);
+                                p_L{site,model} = fmincon(objective,zeros(1,length(LB)), [], [], [], [], p_L_lowerBound, [], [], options);
+                        end
+                        
+                        if exitflag<1
+                            warning('Convergence problem on laser delta param estimation!');
+%                                 p_nL(s,:) = nan(size(p_nL(s,:)));
+                                keyboard;
+                        end
+                        
+                        p_tot = bsxfun(@plus,p_nL,p_L{site,model});
+                        if any(any(p_tot(:,3:end)<0))
+                            warning('Negative total shape parameters after laser! somethings wrong');
+                            keyboard;
                         end
                         
                         %debug: check fits were of good quality
@@ -917,114 +1188,195 @@ classdef omnibusLaserGLM
                 
                 %Now test these fits at the sites in the test set
                 testIdx = find(cv.test(fold));
-                testC = obj.data{n}.contrast_cond(testIdx,:);
+                testC = obj.data{n}.stimulus(testIdx,1:2);
                 testR = obj.data{n}.response(testIdx);
-                testL = obj.data{n}.laserIdx(testIdx);
+%                 testL = obj.data{n}.laserIdx(testIdx);
+                testL = obj.data{n}.areaIdx(testIdx);
                 testSID = obj.data{n}.sessionID(testIdx);
                 
+                %For each areaID, compute loglik on test set
+                for a = laserIdx
+                    cont = testC(testL==a,:);
+                    resp = testR(testL==a);
+                    sid = testSID(testL==a);
+                    
+                    offset = p_nL(sid,:);
+                    
+                    [ZL,ZR] = obj.getModel('offsetOnly',obj.fitData.biasMode,n);
+                    p = obj.calculatePhat(ZL,ZR,offset,[],cont);
+                    p = (resp==1).*p(:,1) + (resp==2).*p(:,2) + (resp==3).*p(:,3);
+                    nonLaserLogLik = mean(log2(p));
+%                     LOGLIK(fold,1,a)=mean(log2(p));
+                    
+                    
+                    for model = 1:length(laserModels)
+                        [ZL,ZR,~] = obj.getModel(laserModels{model},obj.fitData.biasMode,n);
+                        p = obj.calculatePhat(ZL,ZR,offset,p_L{a,model},cont);
+                        p = (resp==1).*p(:,1) + (resp==2).*p(:,2) + (resp==3).*p(:,3);
+                        LOGLIK(fold,model,a)=mean(log2(p)) - nonLaserLogLik;
+                    end
+                        
+                    
+                end
+                
+                
                 %go through each trial in the test set
-                for t = 1:length(testR)
-                    cont = testC(t,:);
-                    resp = testR(t);
-                    las = testL(t);
-                    sid = testSID(t);
-                    
-                    switch(offsetMode)
-                        case 'P'
-                            offset = p_nL(sid,:);
-                        case 'Z'
-                            [ZL,ZR,~,~] = obj.getModel(obj.fitData.nonLaserModel,obj.fitData.biasMode,n);
-                            offset = [ZL([0 0],p_nL(sid,:),cont),...
-                                ZR([0 0],p_nL(sid,:),cont),0,0];
-                    end
-                    [ZL,ZR,~,~] = obj.getModel('offsetOnly',obj.fitData.biasMode,n);
-                    
-                    
-                    %Test the prediction of each laser model on that
-                    %trial (if a laser trial)
-                    if las>0
-                        %non-laser model
-                        
-                        p = obj.calculatePhat(ZL,ZR,offset,[],cont);
-                        phat(testIdx(t),1) = (resp==1)*p(1) + (resp==2)*p(2) + (resp==3)*p(3);
-                        
-                        %other laser models
-                        for model = 1:length(laserModels)
-                            [ZL,ZR,~,offsetMode] = obj.getModel(laserModels{model},obj.fitData.biasMode,n);
-                            p = obj.calculatePhat(ZL,ZR,offset,p_L{las,model},cont);
-                            phat(testIdx(t),model+1) = (resp==1)*p(1) + (resp==2)*p(2) + (resp==3)*p(3);
-                        end
-                    end
-                end
+%                 for t = 1:length(testR)
+%                     cont = testC(t,:);
+%                     resp = testR(t);
+%                     las = testL(t);
+%                     sid = testSID(t);
+% 
+%                     offset = p_nL(sid,:);   
+%                     [ZL,ZR] = obj.getModel('offsetOnly',obj.fitData.biasMode,n);
+%                     
+%                     
+%                     %Test the prediction of each laser model on that
+%                     %trial (if a laser trial)
+% %                     if las>0
+%                     if las<7
+%                         %non-laser model
+%                         
+%                         p = obj.calculatePhat(ZL,ZR,offset,[],cont);
+%                         
+%                         phat(testIdx(t),1) = (resp==1)*p(1) + (resp==2)*p(2) + (resp==3)*p(3);
+%                         
+%                         %other laser models
+%                         for model = 1:length(laserModels)
+%                             [ZL,ZR,~] = obj.getModel(laserModels{model},obj.fitData.biasMode,n);
+%                             p = obj.calculatePhat(ZL,ZR,offset,p_L{las,model},cont);
+%                             phat(testIdx(t),model+1) = (resp==1)*p(1) + (resp==2)*p(2) + (resp==3)*p(3);
+%                         end
+%                         
+%                         if any(~isreal(phat(testIdx(t),:)))
+%                             warning('img numbers');
+%                             keyboard;
+%                         end
+%                     end
+%                 end
             end
             
-            phat(phat==0)=0.001;
+            labels = [laserModels];
             
-            %                 subplot(3,length(obj.names),n);
-            %                 subplot(3,1,1);
-            %                 bar(nanmean(log2(phat))-obj.guess_bpt(n));
-            %                 set(gca,'XTickLabel',['noLaser' laserModels],'XTickLabelRotation',90,'box','off');
-            %                 title(obj.names{n}); ylabel('CV loglik relative to guess');
-            
-            logLik = nan(size(obj.inactivationCoords,1),size(phat,2));
-            laserIdx = unique(obj.data{n}.laserIdx)';
-            laserIdx(1) = [];
-            for m = 1:size(phat,2)
-                for site = laserIdx
-                    logLik(site,m) = nanmean(log2(phat(obj.data{n}.laserIdx==site,m)));
-                end
-                %                     logLik{n}(:,m) = pivottable(obj.data{n}.laserIdx,[],log2(phat(:,m)),'nanmean');
+            if obj.bilateral_flag==0
+                areas = {'Left vis','Right vis','Left S1','Right S1','Left m2','Right m2'};
+            else
+                areas = {'vis','S1','m2'};
             end
             
-            %Plot loglik comparisons
-            plotLabels = {'Bias v NoLaser',...
-                'Sens v NoLaser',...
-                'Bias+Sens v NoLaser',...
-                'Bias+Sens v Bias',...
-                'Bias+Sens v Sens'};
-            plotVal = {logLik(:,2) - logLik(:,1),...
-                logLik(:,3) - logLik(:,1),...
-                logLik(:,4) - logLik(:,1),...
-                logLik(:,4) - logLik(:,2),...
-                logLik(:,4) - logLik(:,3)};
-            for p = 1:length(plotVal)
-                %                     subplot(3,length(obj.names),n+(p*length(obj.names)));
-                subplot(round(length(plotVal)/2),2,p); hold on;
-                imX=imagesc(linspace(-4.5,4.5,100),linspace(3.75,-5.2,100),img);
-                set(gca,'ydir','normal');
-                set(imX,'alphadata',0.7);
+            figure('color','w');
+            ii=1;
+            for a = laserIdx
+                h(a)=subplot(1,length(areas),ii);
+%                 boxplot(LOGLIK(:,:,a)-obj.guess_bpt(n),'plotstyle','compact','labels',labels);
+%                 ax=errorbar(1:length(labels),nanmean(LOGLIK(:,:,a),1),nanstd(LOGLIK(:,:,a),[],1)/sqrt(numFolds));
+                mean_ll = mean(LOGLIK(:,:,a),1);
+                stder_ll = std(LOGLIK(:,:,a),[],1)/sqrt(numFolds);
+
+                ax=bar(mean_ll);
+                ax.BarWidth=0.95; ax.EdgeAlpha=0; ax.FaceAlpha=0.7;
+               
                 
-                delta_LL = plotVal{p};
-                ap = obj.inactivationCoords(:,1);
-                ml = obj.inactivationCoords(:,2);
-                if obj.bilateral_flag==1
-                    ap = [ap; ap];
-                    ml = [ml; -ml];
-                    delta_LL = [delta_LL;delta_LL];
+                hold on;
+                for m=1:length(labels)
+                    l=line([m m],[mean_ll(m)-stder_ll(m) mean_ll(m)+stder_ll(m)]);
+                    l.LineWidth=5; l.Color=[0 0 0.5];
                 end
+                hold off;
                 
-                h=scatter(ml,ap,200,delta_LL,'s','filled'); caxis([-1 1]*max(abs(cat(1,plotVal{:}))));
-                h.MarkerEdgeColor=[1 1 1]*0.95;
-                axis equal; set(gca,'xtick','','ytick','','xcolor','w','ycolor','w');
-                cmap = [ linspace(0,1,100)' ones(100,1) linspace(0,1,100)';
-                    linspace(1,0,100)' linspace(1,0,100)' ones(100,1)];
-                colormap(flipud(cmap)); colorbar; title(plotLabels{p});
-                drawnow;
+                
+                
+                set(gca,'xticklabels',labels,'xticklabelrotation',45,'xtick',1:length(labels),'box','off'); 
+                title(areas{ii}); 
+                
+                if ii==1
+                    ylabel('log lik relative to nonlaser model');
+                end
+%                 ax.Marker='.'; ax.LineStyle='none'; ax.MarkerSize=20;
+                
+                ii=ii+1;
+%                 subplot(2,length(areas),a+length(areas));
+%                 ll = nanmean(log2(phat(obj.data{n}.areaIdx==a,:)),1);
+%                 bar(ll - obj.guess_bpt(n)); set(gca,'xlim',[0 length(labels)+1],'xticklabels',labels,'xticklabelrotation',90);
             end
+%             linkaxes(h,'y');
+            
+%             keyboard;
+%             
+% %             phat(phat==0)=0.001;
+%             
+%             %                 subplot(3,length(obj.names),n);
+%             %                 subplot(3,1,1);
+%             %                 bar(nanmean(log2(phat))-obj.guess_bpt(n));
+%             %                 set(gca,'XTickLabel',['noLaser' laserModels],'XTickLabelRotation',90,'box','off');
+%             %                 title(obj.names{n}); ylabel('CV loglik relative to guess');
+%             
+% %             logLik = nan(size(obj.inactivationCoords,1),size(phat,2));
+%             logLik = nan(6,size(phat,2));
+%             laserIdx = 1:6;
+% %             laserIdx = unique(obj.data{n}.laserIdx)';
+% %             laserIdx(1) = [];
+%             for m = 1:size(phat,2)
+%                 for site = laserIdx
+%                     logLik(site,m) = nanmean(log2(phat(obj.data{n}.areaIdx==site,m)));
+%                 end
+%                 %                     logLik{n}(:,m) = pivottable(obj.data{n}.laserIdx,[],log2(phat(:,m)),'nanmean');
+%             end
+%             
+%             
+%             compar = nchoosek(1:(length(laserModels)+1),2);
+%             
+%             figure('color','w');
+%             bar(logLik-obj.guess_bpt(n)); set(gca,'XTickLabel',{'Left V1','Right V1','Left S1','Right S1','Left M2','Right M2'});
+%             legend(labels); set(gca,'box','off');
+            
+%             for p = 1:size(compar,1)
+%                 %                     subplot(3,length(obj.names),n+(p*length(obj.names)));
+%                 subplot(round(size(compar,1)/2),2,p); hold on;
+%                 imX=imagesc(linspace(-4.5,4.5,100),linspace(3.75,-5.2,100),img);
+%                 set(gca,'ydir','normal');
+%                 set(imX,'alphadata',0.7);
+%                 
+%                 delta_LL = logLik(:,compar(p,2)) - logLik(:,compar(p,1));
+%                 ap = obj.inactivationCoords(:,1);
+%                 ml = obj.inactivationCoords(:,2);
+%                 if obj.bilateral_flag==1
+%                     ap = [ap; ap];
+%                     ml = [ml; -ml];
+%                     delta_LL = [delta_LL;delta_LL];
+%                 end
+%                 
+%                 h=scatter(ml,ap,200,delta_LL,'s','filled'); caxis([-1 1]*0.5);
+%                 h.MarkerEdgeColor=[1 1 1]*0.95;
+%                 axis equal; set(gca,'xtick','','ytick','','xcolor','w','ycolor','w');
+%                 cmap = [ linspace(0,1,100)' ones(100,1) linspace(0,1,100)';
+%                     linspace(1,0,100)' linspace(1,0,100)' ones(100,1)];
+%                 colormap(flipud(cmap)); colorbar; title([labels{compar(p,2)} ' v ' labels{compar(p,1)}]);
+%                 drawnow;
+%             end
             
             %             end
         end
         
         function plotFit_NonLaserOneSession(obj,n,sess)
-            p_nL = obj.fitData.nonLaserParams{n}(sess,:);
-            idx = obj.data{n}.laserIdx==0 & obj.data{n}.sessionID==sess;
-            [ZL_nL,ZR_nL,numP,offsetMode] = obj.getModel(obj.fitData.nonLaserModel,obj.fitData.biasMode,n);
+            if isempty(sess)
+                p_nL = median(obj.fitData.nonLaserParams{n},1);
+                idx = obj.data{n}.laserIdx==0;
+                if obj.fitData.perSession==1
+                    warning('Model fits cannot be visualised well here as this requires averaging nonlaser params');
+                end
+            else
+                p_nL = obj.fitData.nonLaserParams{n}(sess,:);
+                idx = obj.data{n}.laserIdx==0 & obj.data{n}.sessionID==sess;
+            end
+           
+            [ZL_nL,ZR_nL,LB,~] = obj.getModel(obj.fitData.nonLaserModel,obj.fitData.biasMode,n);
             
-            cont = obj.data{n}.contrast_cond(idx,:);
+            cont = obj.data{n}.stimulus(idx,1:2);
             resp = obj.data{n}.response(idx);
             
             cVals = unique(cont(:));
-            numPedestals = length(cVals)-1;
+            numPedestals = length(cVals);
             
             figure('name',[obj.names{n} ' session ' num2str(sess)],'color','w');
             %psych curve: 2D representation
@@ -1034,32 +1386,35 @@ classdef omnibusLaserGLM
                 for cr = 1:length(cVals)
                     r = resp(cont(:,1) == cVals(cl) & cont(:,2) == cVals(cr));
                     p(cl,cr,:) = sum([r==1 r==2 r==3],1)/length(r);
-                    p_pred(cl,cr,:) = obj.calculatePhat(ZL_nL,ZR_nL,zeros(1,4),p_nL,[cVals(cl) cVals(cr)]);
+                    p_pred(cl,cr,:) = obj.calculatePhat(ZL_nL,ZR_nL,zeros(1,length(LB)),p_nL,[cVals(cl) cVals(cr)]);
                 end
             end
             
-            labels = {'pL','pR','pNG'};
-            for r = 1:3
-                subplot(3,4,r);
-                imagesc(p(:,:,r)); set(gca,'ydir','normal'); title(['Actual ' labels{r}]);
-                caxis([0 1]);
-                set(gca,'xtick',1:length(cVals),'ytick',1:length(cVals),'xticklabels',cVals,'yticklabels',cVals);
-                xlabel('CR'); ylabel('CL');
-                subplot(3,4,r+4);
-                imagesc(p_pred(:,:,r)); set(gca,'ydir','normal'); title(['Pred ' labels{r}]);
-                caxis([0 1]);
-                set(gca,'xtick',1:length(cVals),'ytick',1:length(cVals),'xticklabels',cVals,'yticklabels',cVals);
-            end
-            axis(get(gcf,'children'),'square');
+%             labels = {'pL','pR','pNG'};
+%             for r = 1:3
+%                 subplot(3,4,r);
+%                 imagesc(p(:,:,r)); set(gca,'ydir','normal'); title(['Actual ' labels{r}]);
+%                 caxis([0 1]);
+%                 set(gca,'xtick',1:length(cVals),'ytick',1:length(cVals),'xticklabels',cVals,'yticklabels',cVals);
+%                 xlabel('CR'); ylabel('CL');
+%                 subplot(3,4,r+4);
+%                 imagesc(p_pred(:,:,r)); set(gca,'ydir','normal'); title(['Pred ' labels{r}]);
+%                 caxis([0 1]);
+%                 set(gca,'xtick',1:length(cVals),'ytick',1:length(cVals),'xticklabels',cVals,'yticklabels',cVals);
+%             end
+%             axis(get(gcf,'children'),'square');
             %             set(get(gcf,'children'),'ytick',cVals,'xtick',cVals);
             
             
             %pych curve: pedestal representation
-            cols = {[0 0.4470 0.7410],...
-                [0.8500 0.3250 0.0980],...
-                [0.9290 0.6940 0.1250]};
+            
+            
+            cols = [0 0.4470 0.7410;
+                0.8500 0.3250 0.0980;
+                0.4940    0.1840    0.5560];
             for ped = 1:numPedestals
-                subplot(numPedestals,4,ped*4); hold on;
+                subplot(1,numPedestals+2,ped); hold on;
+                set(gca,'colororder',cols);
                 %Plot actual datapoints
                 ped_idx = min(cont,[],2)==cVals(ped);
                 ped_c_diff = diff(cont(ped_idx,:),[],2);
@@ -1073,7 +1428,7 @@ classdef omnibusLaserGLM
                         l(1)=line([1 1]*uC(c),pci(ch,:));
                         l(2)=line([uC(c)-0.03 uC(c)+0.03],[1 1]*pci(ch,1));
                         l(3)=line([uC(c)-0.03 uC(c)+0.03],[1 1]*pci(ch,2));
-                        set(l,'Color',cols{ch},'Linewidth',0.5);
+                        set(l,'Color',cols(ch,:),'Linewidth',0.5);
                         %                             l.Color = cols{ch};
                         %                             l.LineWidth=1;
                     end
@@ -1083,17 +1438,20 @@ classdef omnibusLaserGLM
                 
                 %Plot predictions
                 testCont = [linspace(max(abs(uC))+0.1,0,100)' zeros(100,1); zeros(100,1) linspace(0,max(abs(uC))+0.1,100)'] + cVals(ped);
-                p_hat = obj.calculatePhat(ZL_nL,ZR_nL,zeros(length(testCont),4),p_nL,testCont);
+                p_hat = obj.calculatePhat(ZL_nL,ZR_nL,zeros(1,length(LB)),p_nL,testCont);
                 set(gca,'ColorOrderIndex',1);
                 plot(diff(testCont,[],2),p_hat,'linewidth',0.5);
                 xlim([-1 1]*(max(cVals)+0.1)); ylim([0 1]);
                 
                 
-                ylabel(['ped: ' num2str(cVals(ped))]);
-                
-                
-                if ped ~= numPedestals
-                    set(gca,'xtick','','xcolor','w');
+                title(['pedestal= ' num2str(cVals(ped))]);
+                axis square;
+                if ped == 1
+                    ylabel('Choice probability');
+                    xlabel('\Delta contrast from pedestal');
+                end
+                if ped > 1
+                    set(gca,'ytick','','ycolor','w');
                 end
                 
             end
@@ -1103,12 +1461,17 @@ classdef omnibusLaserGLM
             %             keyboard;
             CL = (cont(:,1) > cont(:,2)) & resp==1;
             CR = (cont(:,1) < cont(:,2)) & resp==2;
-            subplot(3,4,9);
-            hist(rt(CL)); xlabel('RT left');
-            subplot(3,4,10);
-            hist(rt(CR)); xlabel('RT right');
-            
+            hist1=subplot(1,numPedestals+2,numPedestals+1);
+%             hist(rt(CL)); 
+            distributionPlot(rt(CL),'histOpt',1,'histOri','right','xyOri','flipped','showMM',0); axis square;
+            xlabel('RT correct left [sec]'); set(gca,'ytick','','ycolor','w');
+            hist2=subplot(1,numPedestals+2,numPedestals+2);
+%             hist(rt(CR)); 
+            distributionPlot(rt(CR),'histOpt',1,'histOri','right','xyOri','flipped','showMM',0); axis square;
+            xlabel('RT correct right [sec]'); set(gca,'ytick','','ycolor','w');
+            linkaxes([hist1 hist2],'xy');
             set(get(gcf,'children'),'box','off');
+            xlim([0 1]);
         end
         
         function plotFit_NonLaser(obj)
@@ -1133,7 +1496,7 @@ classdef omnibusLaserGLM
                 title(obj.names{n});
                 if n == numSubjects
                     xlabel('Session number');
-                    legend('B_L','B_R','S_L','S_R');
+                    legend(obj.fitData.pLabels);
                 end
                 %                 keyboard;
             end
@@ -1146,14 +1509,14 @@ classdef omnibusLaserGLM
             pCorrect = cell(1,numSubjects);
             for n = 1:numSubjects
                 figure('name',[obj.names{n} ' non-laser predictions against actual psychometric data']);
-                [ZL_nL,ZR_nL,numP,offsetMode] = obj.getModel(obj.fitData.nonLaserModel,obj.fitData.biasMode,n);
+                [ZL_nL,ZR_nL,LB] = obj.getModel(obj.fitData.nonLaserModel,obj.fitData.biasMode,n);
                 
                 numSessions = max(obj.data{n}.sessionID);
                 for s = 1:numSessions
                     p_nL = obj.fitData.nonLaserParams{n}(s,:);
                     idx = obj.data{n}.laserIdx==0 & obj.data{n}.sessionID==s;
                     
-                    cont = obj.data{n}.contrast_cond(idx,:);
+                    cont = obj.data{n}.stimulus(idx,1:2);
                     resp = obj.data{n}.response(idx);
                     
                     cVals = unique(cont(:));
@@ -1167,7 +1530,7 @@ classdef omnibusLaserGLM
                         
                         %Plot actual datapoints
                         ped_idx = min(cont,[],2)==cVals(ped);
-                        ped_c_diff = diff(cont(ped_idx,:),[],2);
+                        ped_c_diff = diff(cont(ped_idx,1:2),[],2);
                         ped_r = resp(ped_idx);
                         uC = unique(ped_c_diff);
                         ph=[];
@@ -1188,7 +1551,7 @@ classdef omnibusLaserGLM
                         
                         %Plot predictions
                         testCont = [linspace(max(abs(uC))+0.1,0,100)' zeros(100,1); zeros(100,1) linspace(0,max(abs(uC))+0.1,100)'] + cVals(ped);
-                        p_hat = obj.calculatePhat(ZL_nL,ZR_nL,zeros(length(testCont),4),p_nL,testCont);
+                        p_hat = obj.calculatePhat(ZL_nL,ZR_nL,zeros(1,length(LB)),p_nL,testCont);
                         set(gca,'ColorOrderIndex',1);
                         plot(diff(testCont,[],2),p_hat,'linewidth',0.5);
                         xlim([-1 1]*(max(cVals)+0.1)); ylim([0 1]);
@@ -1206,7 +1569,7 @@ classdef omnibusLaserGLM
                     end
                     
                     % calculate % correct classification in the dataset
-                    p_hat = obj.calculatePhat(ZL_nL,ZR_nL,zeros(size(cont,1),4),p_nL,cont);
+                    p_hat = obj.calculatePhat(ZL_nL,ZR_nL,zeros(1,length(LB)),p_nL,cont);
                     classify = nan(length(resp),1);
                     for t = 1:length(resp)
                         [~,rhat] = max(p_hat(t,:));
@@ -1225,24 +1588,25 @@ classdef omnibusLaserGLM
             end
             
             figure('name','model classification accuracy','color','w');
-            for n = 1:numSubjects
-                subplot(1,numSubjects,n);
-                plot(100*pCorrect{n},'o--'); ylim([0 100]);
-                title(obj.names{n});
-                set(gca,'box','off');
-                
-                if n~=1
-                    set(gca,'ytick','','ycolor','w');
-                else
-                    ylabel('% correct'); xlabel('Session');
-                end
+            axes; hold on;
+            for n = 1:(numSubjects-1)
+%                 subplot(1,numSubjects-1,n);
+                ax=plot(100*pCorrect{n},'.:'); 
+                ax.MarkerSize=20;
+       
             end
+            ylim([0 100]); set(gca,'box','off'); ylabel('% correct'); xlabel('Session number');
+            legend(obj.names(1:end-1));
+
         end
         
         function plotFit_Laser(obj)
             numSubjects = length(obj.names);
-            
+                       
             img=imread('D:\kirkcaldie_brain_BW_outline.png');
+            cols = {[0 0.4470 0.7410],...
+                [0.8500 0.3250 0.0980],...
+                [0.9290 0.6940 0.1250]};
             
             %Plot laser parameter maps
             figure('name','Laser parameter maps','color','w');
@@ -1250,20 +1614,25 @@ classdef omnibusLaserGLM
                 p_L = obj.fitData.params{n};
                 
                 P_old_mag = abs(mean(obj.fitData.nonLaserParams{n},1));
-                plotVal = {p_L(:,1),p_L(:,2),p_L(:,3),p_L(:,4)};
-%                                 plotVal = {p_L(:,1)/P_old_mag(1),p_L(:,2)/P_old_mag(2),p_L(:,3)/P_old_mag(3),p_L(:,4)/P_old_mag(4)};
+                plotVal = cell(1,size(p_L,2));
+                for p = 1:size(p_L,2)
+                    plotVal{p} = p_L(:,p);
+% %                     plotVal{p} = plotVal{p}/std(obj.fitData.paramsNull{n}(:,p));
+%                     plotVal{p} = (P_old_mag(p) + plotVal{p})./P_old_mag(p);
+                end
+%                 keyboard;
 
-                param_labels = {'b_L','b_R','s_L','s_R'};
+                param_labels = obj.fitData.pLabels;
                 
                 if obj.significance_flag == 1
                     pvalue = obj.sig{n};
                     dotSize = 35 + (pvalue<0.05)*80 + (pvalue<0.01)*100;
                 else
-                    dotSize = ones(size(p_L))*200;
+                    dotSize = ones(size(p_L))*150;
                 end
                 
-                for i = 1:length(plotVal)
-                    subplot(numSubjects,length(plotVal),length(plotVal)*n-length(plotVal) + i);
+                for i = 1:size(plotVal,2)
+                    subplot(numSubjects,size(plotVal,2),size(plotVal,2)*n-size(plotVal,2) + i);
                     
                     ap = obj.inactivationCoords(:,1);
                     ml = obj.inactivationCoords(:,2);
@@ -1297,7 +1666,7 @@ classdef omnibusLaserGLM
                         ylabel(obj.names{n});
                     end
                     if n==1
-                        title(param_labels{i});
+                        title(['\Delta ' param_labels{i}]);
                     end
                 end
                 
@@ -1308,95 +1677,148 @@ classdef omnibusLaserGLM
             
 %             %Plot psych curves showing the laser effect at a few sites, for
 %             %each mouse separately
+            if obj.fitData.perSession==1
+                error('psych-curve method not good for per-session fits because I have to average nonlaser params over sessions');
+            end
 %             
-%             if obj.bilateral_flag==0
-%                 siteLabels = {'Left V1','Right V1','Left M2','Right M2','Left Barrel','Right Barrel'};
-%                 siteID = [10 15 48 49 25 32];
-%             elseif obj.bilateral_flag==1
-%                 siteLabels = {'V1','M2','Barrel'};
-%                 siteID = [7 24 16];
-%             end
-%             
-%             for n = 1:numSubjects
-%                 figure('name',[obj.names{n} ' laser psych effects']);
-%                 [ZL_nL,ZR_nL,~,offsetMode] = obj.getModel(obj.fitData.nonLaserModel,obj.fitData.biasMode,n);
-%                 
-%                 for site = 1:length(siteID)
-%                     %Plot non-laser curve, use SESSION AVERAGE of parameters for now
-%                     p_nL = mean(obj.fitData.nonLaserParams{n});
-%                     p_L = obj.fitData.params{n}(siteID(site),:);
-%                     
-%                     cont = obj.data{n}.contrast_cond;
-%                     cVals = unique(cont(:));
-%                     numPedestals = length(cVals)-1;
-%                     
-%                     for ped = 1:numPedestals
-%                         subplot(numPedestals,length(siteID),(ped-1)*length(siteID) + site); hold on;
-%                         
-%                         %Plot non-laser predictions
-%                         uC = unique(diff(cont(min(cont,[],2)==cVals(ped),:),[],2));
-%                         testCont = [linspace(max(abs(uC))+0.1,0,100)' zeros(100,1); zeros(100,1) linspace(0,max(abs(uC))+0.1,100)'] + cVals(ped);
-%                         p_hat = obj.calculatePhat(ZL_nL,ZR_nL,zeros(length(testCont),4),p_nL,testCont);
-%                         set(gca,'ColorOrderIndex',1);
-%                         plot(diff(testCont,[],2),p_hat,'linewidth',0.5);
-%                         
-%                         %Try plotting NULL LASER psych bounds
-%                         try
-%                             p_null = obj.fitData.paramsNull{n};
-%                             if size(p_null,2)==2
-%                                 p_null = [p_null, zeros(size(p_null))];
-%                             end
-%                             
-%                             p_totalNull = bsxfun(@plus,p_nL,p_null);
-%                             numIter = size(p_totalNull,1);
-%                             p_hat = nan(size(testCont,1),3,numIter);
-%                             for i = 1:numIter
-%                                 p_hat(:,:,i) = obj.calculatePhat(ZL_nL,ZR_nL,zeros(length(testCont),4),p_totalNull(i,:),testCont);
-%                             end
-%                             
-%                             ci95 = quantile(p_hat,[0.025 0.975],3);
-%                             cols = get(gca,'ColorOrder');
-%                             for r = 1:3
-%                                 h=fill([diff(testCont,[],2);flipud(diff(testCont,[],2))],[ci95(:,r,1);flipud(ci95(:,r,2))],'b');
-%                                 h.EdgeColor=[1 1 1];
-%                                 h.FaceAlpha=0.5;
-%                                 %                                 h.EdgeAlpha=h.FaceAlpha;
-%                                 h.FaceColor=cols(r,:);
-%                                 %                                 h.EdgeColor=cols(r,:);
-%                             end
-%                         catch
-%                             warning('Skipping plotting null laser effect bounds');
-%                         end
-%                         
-%                         if site == 1
-%                             ylabel(['ped: ' num2str(cVals(ped))]);
-%                         else
-%                             set(gca,'ytick','','ycolor','w');
-%                         end
-%                         
-%                         if ped ~= numPedestals
-%                             set(gca,'xtick','','xcolor','w');
-%                         end
-%                         
-%                         if ped == 1
-%                             title(siteLabels{site})
-%                         end
-%                         
-%                         %Overlay laser predictions
-%                         if length(p_L)==2
-%                             p_L = [p_L 0 0];
-%                         end
-%                         p_Total = p_nL + p_L;
-%                         p_hat = obj.calculatePhat(ZL_nL,ZR_nL,zeros(length(testCont),4),p_Total,testCont);
-%                         set(gca,'ColorOrderIndex',1);
-%                         plot(diff(testCont,[],2),p_hat,'linewidth',3);
-%                         xlim([-1 1]*(max(cVals)+0.1)); ylim([0 1]);
-%                     end
-%                     
-%                 end
-%                 
-%                 set(gcf,'color','w');
-%             end
+            if obj.bilateral_flag==0
+                siteLabels = {'Left V1','Right V1','Left M2','Right M2'};%,'Left Barrel','Right Barrel'};
+                siteID = [10 15 48 49 ];%25 32];
+            elseif obj.bilateral_flag==1
+                siteLabels = {'V1','M2','Barrel'};
+                siteID = [7 24 16];
+            end
+            
+            for n = 1:numSubjects
+                figure('name',[obj.names{n} ' laser psych effects']);
+                [ZL_nL,ZR_nL] = obj.getModel(obj.fitData.laserModel,obj.fitData.biasMode,n);
+                
+                p_nL = mean(obj.fitData.nonLaserParams{n});
+                
+                cont = obj.data{n}.stimulus(:,1:2);
+                resp = obj.data{n}.response;
+                cVals = unique(unique(cont(:,1:2)));
+                numPedestals = length(cVals)-1;
+                
+                nL_idx = obj.data{n}.laserIdx==0;
+                
+                for site = 1:length(siteID)
+                    %Plot non-laser curve, use SESSION AVERAGE of parameters for now
+                    p_L = obj.fitData.params{n}(siteID(site),:);
+                    L_idx = obj.data{n}.laserIdx==siteID(site);
+                    
+                    for ped = 1:numPedestals
+                        subplot(numPedestals,length(siteID),(ped-1)*length(siteID) + site); hold on;
+                        
+                        %Plot non-laser predictions
+                        cnt = cont(nL_idx,1:2);
+                        res = resp(nL_idx);
+                        uC = unique(diff(cnt(min(cnt,[],2)==cVals(ped),:),[],2));
+                        testCont = [linspace(max(abs(uC))+0.1,0,100)' zeros(100,1); zeros(100,1) linspace(0,max(abs(uC))+0.1,100)'] + cVals(ped);
+                        p_hat = obj.calculatePhat(ZL_nL,ZR_nL,p_nL,zeros(1,length(p_L)),testCont);
+                        set(gca,'ColorOrderIndex',1);
+                        plot(diff(testCont,[],2),p_hat,'linewidth',0.5);
+                        
+                        %Plot pooled data as well
+                        ped_idx = min(cnt,[],2)==cVals(ped);
+                        ped_c_diff = diff(cnt(ped_idx,:),[],2);
+                        ped_r = res(ped_idx);
+                        uC = unique(ped_c_diff);
+                        ph=[];
+                        for c = 1:length(uC)
+                            r = ped_r(ped_c_diff==uC(c));
+                            [ph(c,:),pci] = binofit(sum([r==1 r==2 r==3],1),length(r));
+                            for ch=1:3
+                                l(1)=line([1 1]*uC(c),pci(ch,:));
+                                l(2)=line([uC(c)-0.03 uC(c)+0.03],[1 1]*pci(ch,1));
+                                l(3)=line([uC(c)-0.03 uC(c)+0.03],[1 1]*pci(ch,2));
+                                set(l,'Color',cols{ch},'Linewidth',0.5);
+                                %                             l.Color = cols{ch};
+                                %                             l.LineWidth=1;
+                            end
+                        end
+                        set(gca,'ColorOrderIndex',1);
+                        plot(uC,ph,'o','markersize',4);
+                        
+                        
+                        %Try plotting NULL LASER psych bounds
+                        try
+                            p_null = obj.fitData.paramsNull{n};
+                            if size(p_null,2)==2
+                                p_null = [p_null, zeros(size(p_null))];
+                            end
+                            
+                            p_totalNull = bsxfun(@plus,p_nL,p_null);
+                            numIter = size(p_totalNull,1);
+                            p_hat = nan(size(testCont,1),3,numIter);
+                            for i = 1:numIter
+                                p_hat(:,:,i) = obj.calculatePhat(ZL_nL,ZR_nL,zeros(length(testCont),4),p_totalNull(i,:),testCont);
+                            end
+                            
+                            ci95 = quantile(p_hat,[0.025 0.975],3);
+                            cols = get(gca,'ColorOrder');
+                            for r = 1:3
+                                h=fill([diff(testCont,[],2);flipud(diff(testCont,[],2))],[ci95(:,r,1);flipud(ci95(:,r,2))],'b');
+                                h.EdgeColor=[1 1 1];
+                                h.FaceAlpha=0.5;
+                                %                                 h.EdgeAlpha=h.FaceAlpha;
+                                h.FaceColor=cols(r,:);
+                                %                                 h.EdgeColor=cols(r,:);
+                            end
+                        catch
+                            warning('Skipping plotting null laser effect bounds');
+                        end
+                        
+                        if site == 1
+                            ylabel(['ped: ' num2str(cVals(ped))]);
+                        else
+                            set(gca,'ytick','','ycolor','w');
+                        end
+                        
+                        if ped ~= numPedestals
+                            set(gca,'xtick','','xcolor','w');
+                        end
+                        
+                        if ped == 1
+                            title(siteLabels{site})
+                        end
+                        
+                        %Overlay laser predictions
+                        p_hat = obj.calculatePhat(ZL_nL,ZR_nL,p_nL,p_L,testCont);
+                        set(gca,'ColorOrderIndex',1);
+                        plot(diff(testCont,[],2),p_hat,'linewidth',3);
+                        xlim([-1 1]*(max(cVals)+0.1)); ylim([0 1]);
+                        
+                        %And actual laser data
+%                         keyboard
+                        cnt = cont(L_idx,:);
+                        res = resp(L_idx);
+                        ped_idx = min(cnt,[],2)==cVals(ped);
+                        ped_c_diff = diff(cnt(ped_idx,:),[],2);
+                        ped_r = res(ped_idx);
+                        uC = unique(ped_c_diff);
+                        ph=[];
+                        for c = 1:length(uC)
+                            r = ped_r(ped_c_diff==uC(c));
+                            [ph(c,:),pci] = binofit(sum([r==1 r==2 r==3],1),length(r));
+                            for ch=1:3
+                                l(1)=line([1 1]*uC(c),pci(ch,:));
+                                l(2)=line([uC(c)-0.03 uC(c)+0.03],[1 1]*pci(ch,1));
+                                l(3)=line([uC(c)-0.03 uC(c)+0.03],[1 1]*pci(ch,2));
+                                set(l,'Color',cols{ch},'Linewidth',0.5);
+                                %                             l.Color = cols{ch};
+                                %                             l.LineWidth=1;
+                            end
+                        end
+                        set(gca,'ColorOrderIndex',1);
+                        plot(uC,ph,'.','markersize',15);
+                        
+                    end
+                    
+                end
+                
+                set(gcf,'color','w');
+            end
             
         end
         
@@ -1423,27 +1845,27 @@ classdef omnibusLaserGLM
                 %Get metric of interest for different stimuli and responses
                 
                 %                 %corner conditions
-                %                 maxC = max(obj.data{n}.contrast_cond);
-                %                 c_0 = sum(obj.data{n}.contrast_cond,2)==0;
-                %                 c_L = obj.data{n}.contrast_cond(:,1) == maxC(1) & obj.data{n}.contrast_cond(:,2) == 0;
-                %                 c_R = obj.data{n}.contrast_cond(:,2) == maxC(2) & obj.data{n}.contrast_cond(:,1) == 0;
-                %                 c_LR = obj.data{n}.contrast_cond(:,1) == maxC(1) & obj.data{n}.contrast_cond(:,2) == maxC(2);
+                %                 maxC = max(obj.data{n}.stimulus);
+                %                 c_0 = sum(obj.data{n}.stimulus,2)==0;
+                %                 c_L = obj.data{n}.stimulus(:,1) == maxC(1) & obj.data{n}.stimulus(:,2) == 0;
+                %                 c_R = obj.data{n}.stimulus(:,2) == maxC(2) & obj.data{n}.stimulus(:,1) == 0;
+                %                 c_LR = obj.data{n}.stimulus(:,1) == maxC(1) & obj.data{n}.stimulus(:,2) == maxC(2);
                 %                 stim = c_0 + 2*c_L + 3*c_R + 4*c_LR;
                 %                 stim_labels = {'C=[0 0]','High CL','High CR','High CL&CR'};
                 
                 % % %                 %quadrant conditions
-                %                 c_0 = sum(obj.data{n}.contrast_cond,2)==0;
-                %                 c_L = obj.data{n}.contrast_cond(:,1) > obj.data{n}.contrast_cond(:,2);
-                %                 c_R = obj.data{n}.contrast_cond(:,2) > obj.data{n}.contrast_cond(:,1);
-                %                 c_LR = ( obj.data{n}.contrast_cond(:,1) == obj.data{n}.contrast_cond(:,2) ) & ~c_0;
+                %                 c_0 = sum(obj.data{n}.stimulus,2)==0;
+                %                 c_L = obj.data{n}.stimulus(:,1) > obj.data{n}.stimulus(:,2);
+                %                 c_R = obj.data{n}.stimulus(:,2) > obj.data{n}.stimulus(:,1);
+                %                 c_LR = ( obj.data{n}.stimulus(:,1) == obj.data{n}.stimulus(:,2) ) & ~c_0;
                 %                 stim = c_0 + 2*c_L + 3*c_R + 4*c_LR;
                 %                 stim_labels = {'C=[0 0]','CL > CR','CL < CR','CL = CR'};
                 % %
                 %Detection + CL=CR conditions
-                c_0 = sum(obj.data{n}.contrast_cond,2)==0;
-                c_L = obj.data{n}.contrast_cond(:,1) > 0 & obj.data{n}.contrast_cond(:,2)==0;
-                c_R = obj.data{n}.contrast_cond(:,2) > 0 & obj.data{n}.contrast_cond(:,1)==0;
-                c_LR = ( obj.data{n}.contrast_cond(:,1) == obj.data{n}.contrast_cond(:,2) ) & ~c_0;
+                c_0 = sum(obj.data{n}.stimulus,2)==0;
+                c_L = obj.data{n}.stimulus(:,1) > 0 & obj.data{n}.stimulus(:,2)==0;
+                c_R = obj.data{n}.stimulus(:,2) > 0 & obj.data{n}.stimulus(:,1)==0;
+                c_LR = ( obj.data{n}.stimulus(:,1) == obj.data{n}.stimulus(:,2) ) & ~c_0;
                 stim = 4*c_0 + 1*c_L + 2*c_R + 3*c_LR;
                 stim_labels = {'CL only','CR only','CL = CR','C=[0 0]'};
                 
@@ -1490,7 +1912,7 @@ classdef omnibusLaserGLM
                         %simulate data from model fits
                         [ZL,ZR] = obj.getModel(obj.fitData.nonLaserModel,obj.fitData.biasMode,n);
                         offset = obj.fitData.nonLaserParams{n}(obj.data{n}.sessionID,:);
-                        cont = obj.data{n}.contrast_cond;
+                        cont = obj.data{n}.stimulus;
                         resp = nan(length(cont),1);
                         for t = 1:size(cont,1)
                             if laser(t)==0
@@ -1718,11 +2140,11 @@ classdef omnibusLaserGLM
                 for s = 1:numSessions
                     D = getrow(obj.data{n},obj.data{n}.sessionID==s & obj.data{n}.laserIdx==0);
                     
-                    cVal = unique(D.contrast_cond(:));
+                    cVal = unique(unique(D.stimulus(:,1:2)));
                     prop = nan(4,4,3);
                     for cl = 1:length(cVal)
                         for cr = 1:length(cVal)
-                            r = D.response(D.contrast_cond(:,1)==cVal(cl) & D.contrast_cond(:,2)==cVal(cr));
+                            r = D.response(D.stimulus(:,1)==cVal(cl) & D.stimulus(:,2)==cVal(cr));
                             prop(cl,cr,:) = sum([r==1 r==2 r==3],1)/length(r);
                         end
                     end
@@ -1764,11 +2186,11 @@ classdef omnibusLaserGLM
             C = cvpartition(DAT.response,'kfold',5);
             for f = 1:C.NumTestSets
                 D = getrow(DAT,C.training(f));
-                cVal = unique(D.contrast_cond(:));
+                cVal = unique(unique(D.stimulus(:,1:2)));
                 p=nan(length(cVal),length(cVal),3);
                 for cl = 1:length(cVal)
                     for cr = 1:length(cVal)
-                        r = D.response(D.contrast_cond(:,1)==cVal(cl) & D.contrast_cond(:,2)==cVal(cr));
+                        r = D.response(D.stimulus(:,1)==cVal(cl) & D.stimulus(:,2)==cVal(cr));
                         p(cl,cr,:) = sum([r==1 r==2 r==3],1)/length(r);
                     end
                 end
@@ -1811,7 +2233,7 @@ classdef omnibusLaserGLM
                 %based on the training set
                 testidx = find(C.test(f));
                 D = getrow(DAT,testidx);
-                [~,~,cValIdx]=unique(D.contrast_cond);
+                [~,~,cValIdx]=unique(D.stimulus(:,1:2));
                 cValIdx = reshape(cValIdx,length(D.response),2);
 %                 mat = arrayfun(@(r)(phat_mnr(:,:,r)),D.response,'uni',0);
                 
@@ -1860,7 +2282,7 @@ classdef omnibusLaserGLM
             figure('color','w');
             for area=1:size(areaList,1)
                 laserIdxs = areaList{area,2};
-                cVal = unique(D.contrast_cond(:));
+                cVal = unique(D.stimulus(:));
                 
                 p=nan(length(cVal),length(cVal),3);
                 pLas=nan(length(cVal),length(cVal),3);
@@ -1870,7 +2292,7 @@ classdef omnibusLaserGLM
                 for cl = 1:length(cVal)
                     for cr = 1:length(cVal)
                         C(cl,cr,:) = cVal([cl cr]);
-                        r = D.response(D.contrast_cond(:,1)==cVal(cl) & D.contrast_cond(:,2)==cVal(cr) & D.laserIdx==0);
+                        r = D.response(D.stimulus(:,1)==cVal(cl) & D.stimulus(:,2)==cVal(cr) & D.laserIdx==0);
                         p(cl,cr,:) = sum([r==1 r==2 r==3],1)/length(r);
                         
                         psim = squeeze(p(cl,cr,:));
@@ -1884,7 +2306,7 @@ classdef omnibusLaserGLM
                         psimDraws_LR = bsxfun(@rdivide,psimDraws(:,1:2),sum(psimDraws(:,1:2),2));
                         ZLRG_ci(cl,cr,:) = quantile(log(psimDraws_LR(:,1)./psimDraws_LR(:,2)),[0.025 0.975]);
                         
-                        r = D.response(D.contrast_cond(:,1)==cVal(cl) & D.contrast_cond(:,2)==cVal(cr) & arrayfun(@(l)(any(l==laserIdxs)),D.laserIdx));
+                        r = D.response(D.stimulus(:,1)==cVal(cl) & D.stimulus(:,2)==cVal(cr) & arrayfun(@(l)(any(l==laserIdxs)),D.laserIdx));
                         pLas(cl,cr,:) = sum([r==1 r==2 r==3],1)/length(r);
                         
                     end
@@ -1977,27 +2399,22 @@ classdef omnibusLaserGLM
                         ezplot('2*exp(y)=1+exp(x)+exp(y)');
                         ezplot('2=1+exp(x)+exp(y)');
                     end
-                    pNL = mean(obj.fitData.nonLaserParams{subj},1);
-                    pL = mean(obj.fitData.params{subj}(laserIdxs,:),1);
+                    pNL = median(obj.fitData.nonLaserParams{subj},1);
+                    pL = median(obj.fitData.params{subj}(laserIdxs,:),1);
                     
                     for i = 1:length(cSet)
                         [cr,cl]=meshgrid(cSet{i});
                         cr = cr(:); cl = cl(:);
                         
-                        [ZLfcn,ZRfcn] = obj.getModel(obj.fitData.nonLaserModel,obj.fitData.biasMode,subj);
-                        ZL = ZLfcn([0 0 0 0],pNL,[cl cr]); %ZL = reshape(ZL,length(cVal),length(cVal));
-                        ZR = ZRfcn([0 0 0 0],pNL,[cl cr]); %ZR = reshape(ZR,length(cVal),length(cVal));
+                        [ZLfcn,ZRfcn,numP] = obj.getModel(obj.fitData.nonLaserModel,obj.fitData.biasMode,subj);
+                        ZL = ZLfcn(zeros(1,numP),pNL,[cl cr]); %ZL = reshape(ZL,length(cVal),length(cVal));
+                        ZR = ZRfcn(zeros(1,numP),pNL,[cl cr]); %ZR = reshape(ZR,length(cVal),length(cVal));
                         
                         [ZLfcn,ZRfcn] = obj.getModel(obj.fitData.laserModel,obj.fitData.biasMode,subj);
                         
-                        switch(obj.fitData.biasMode)
-                            case 'biasAsOffset' %offset is Z
-                                offset = [ZL(:) ZR(:)];
-                            case 'biasAsContrast' %offset is params
-                                offset = repmat(pNL,length(cl),1);
-                        end
-                        ZLLas = ZLfcn(offset,pL,[cl cr]); %ZLLas = reshape(ZLLas,length(cVal),length(cVal));
-                        ZRLas = ZRfcn(offset,pL,[cl cr]); %ZRLas = reshape(ZRLas,length(cVal),length(cVal));
+%                         offset = repmat(pNL,length(cl),1);
+                        ZLLas = ZLfcn(pNL,pL,[cl cr]); %ZLLas = reshape(ZLLas,length(cVal),length(cVal));
+                        ZRLas = ZRfcn(pNL,pL,[cl cr]); %ZRLas = reshape(ZRLas,length(cVal),length(cVal));
                         
                         if i ==1 
                             scatter(ZR(:),ZL(:),50,'o','filled');
@@ -2085,53 +2502,57 @@ classdef omnibusLaserGLM
             fisherExactP = nan(4,6,2,numSubjects);
             for n = 1:numSubjects
  
-                cont = obj.data{n}.contrast_cond;
+                cont = obj.data{n}.stimulus(:,1:2);
                 c_0 = sum(cont,2)==0;
                 c_L = cont(:,1) > 0 & cont(:,2)==0;
                 c_R = cont(:,2) > 0 & cont(:,1)==0;
                 c_LR = ( cont(:,1) == cont(:,2) ) & ~c_0;
+%                 c_L = cont(:,1) == 0.54 & cont(:,2)==0;
+%                 c_R = cont(:,2) == 0.54 & cont(:,1)==0;
+%                 c_LR = ( cont(:,1) == 0.54 & cont(:,2)== 0.54 ) & ~c_0;
                 stim = 4*c_0 + 1*c_L + 2*c_R + 3*c_LR;
                 stim_labels = {'CL only','CR only','CL=CR','C=[0 0]'};
-                col_labels = {'Chose Left','Chose Right','Chose Either'};
+%                 stim_labels = {'High CL','High CR','High CL&CR','C=[0 0]'};
+                col_labels = {'Chose Left','Chose Right','NoGo'};
                 resp = obj.data{n}.response;
                 laser = obj.data{n}.laserIdx;
+                sess = obj.data{n}.sessionID;
                 
 %                 %Print Chi2 test for laser effects (collapsing over
 %                 %stimuli, area, choices)
-%                 areaLabels = {'Left V1','Right V1','Left S1','Right S1','Left M2','Right M2'};
-%                 sigString = {'ns','*','**','***','****'};
-%                 disp(obj.names{n});
-%                 for a = 1:6
-%                     disp(['    ' areaLabels{a}]);
-%                     for s = 1:4 %test each area
-%                         idx = (obj.data{n}.areaIdx==a | obj.data{n}.areaIdx==7); %& (stim==s);
-%                         P=[];
-%                         [c1,~,P(1)] = crosstab(obj.data{n}.response(idx)==1,obj.data{n}.areaIdx(idx));
-%                         [c2,~,P(2)] = crosstab(obj.data{n}.response(idx)==2,obj.data{n}.areaIdx(idx));
-% %                         [c3,~,P(3)] = crosstab(obj.data{n}.response(idx),obj.data{n}.areaIdx(idx));
-% %                         [c4,~,P(4)] = crosstab(obj.data{n}.response(idx)<3,obj.data{n}.areaIdx(idx));
-%                         numStars = 1 + (P(:) < 0.0001) + (P(:) < 0.001) + (P(:) < 0.01) + (P(:) < 0.05);
-%                         
-%                         [~,P(1),~] = fishertest(c1);
-%                         [~,P(2),~] = fishertest(c2);
-%                         
-%                         disp(['    ' '    ' stim_labels{s}]);
-%                         disp(['    ' '    ' '    ' '2x2 (R+NG)/L vs Laser/noLaser : ' sigString{numStars(1)} ' ' num2str(P(1))]);
-%                         disp(['    ' '    ' '    ' '2x2 (L+NG)/R vs Laser/noLaser : ' sigString{numStars(2)} ' ' num2str(P(2))]);
-%                         %                     disp(['    ' '    ' '3x2   L/R/NG vs Laser/noLaser : ' sigString{numStars(3)} ' ' num2str(P(a,3))]);
-%                         %                     disp(['    ' '    ' '2x2 testGO: ' sigString{numStars(4)} ' ' num2str(P(a,4))]);
-%                         
-%                         fisherExactP(s,a,1,n) = P(1);
-%                         fisherExactP(s,a,2,n) = P(2);
-%                     end
-%                 end
-%                 disp(' ');
+                areaLabels = {'Left V1','Right V1','Left S1','Right S1','Left M2','Right M2'};
+                sigString = {'ns','*','**','***','****'};
+                disp(obj.names{n});
+                for a = 1:6
+                    disp(['    ' areaLabels{a}]);
+                    idx = (obj.data{n}.areaIdx==a | obj.data{n}.areaIdx==999);
+                    
+                    %If left hemisphere, then test Left+NoGo/Right on
+                    %trials with CR>CL
+                    if mod(a,2) == 1
+                        idx = idx & (cont(:,2)>cont(:,1));
+                        [c,~,p]=crosstab(obj.data{n}.response(idx)==2,obj.data{n}.areaIdx(idx));
+                        txt = 'L+NG/R vs Lsr/NoLsr';
+                    else
+                         %If right hemisphere, test Right+Nogo/Left on trials
+                        %with CL>CR
+                        idx = idx & (cont(:,1)>cont(:,2));
+                        [c,~,p]=crosstab(obj.data{n}.response(idx)==1,obj.data{n}.areaIdx(idx));
+                        txt = 'R+NG/L vs Lsr/NoLsr';
+                    end
+                    
+                    [~,p,~] = fishertest(c);
+                    numStars = 1 + (p < 0.0001) + (p < 0.001) + (p < 0.01) + (p < 0.05);
+                    disp(['    ' '    ' txt ' ' sigString{numStars} ' ' num2str(p)]);
+                end
+                disp(' ');
                 
                 
                 fx1=figure('name',obj.names{n},'color','w');
                 resp(stim==0) = [];
                 laser(stim==0) = [];
                 cont(stim==0,:) = [];
+                sess(stim==0)=[];
                 stim(stim==0)= [];
                 
                 AX = [];
@@ -2140,16 +2561,19 @@ classdef omnibusLaserGLM
                 for r = 1:3
                     val = (resp==r);
                     val_stim = nan(size(obj.inactivationCoords,1)+1,4);
-                    for site = 1:(size(obj.inactivationCoords,1)+1)
-                        for s = 1:4
-                            val_stim(site,s) = nanmean(val(laser==(site-1) & stim==s));
+%                     for session=1:max(sess)
+                        for site = 1:(size(obj.inactivationCoords,1)+1)
+                            for s = 1:4
+                                val_stim(site,s) = nanmean(val(laser==(site-1) & stim==s));
+                            end
                         end
-                    end
+%                     end
+%                     val_stim = nanmean(val_stim,3);
                     
-                    %Change pNoGo to pGo
-                    if r==3
-                        val_stim = 1 - val_stim;
-                    end
+%                     %Change pNoGo to pGo
+%                     if r==3
+%                         val_stim = 1 - val_stim;
+%                     end
                     
                     %compute change in metric from nonLaser condition
                     val_stim_diff = bsxfun(@minus,val_stim(2:end,:),val_stim(1,:));
@@ -2196,29 +2620,27 @@ classdef omnibusLaserGLM
                     end
                 end
                 
-                %Plot predictions (ONLY WORKS FOR P OFFSETS CURRENTLY (bias
-                %as contrast)
                 try
-                    nonlaserparams = mean(obj.fitData.nonLaserParams{n},1);
-                    laserparams = obj.fitData.params{n};
-                    if size(laserparams,2) == 2
-                        laserparams = [laserparams zeros(size(laserparams))];
-                    end
                     
-                    [ZL,ZR,numP,offsetMode] = obj.getModel(obj.fitData.nonLaserModel,obj.fitData.biasMode,n);
+                    
+                    nonlaserparams = median(obj.fitData.nonLaserParams{n},1);
+                    laserparams = obj.fitData.params{n};
+                    
+                    [ZL,ZR] = obj.getModel(obj.fitData.nonLaserModel,obj.fitData.biasMode,n);
+                    [ZL_las,ZR_las] = obj.getModel(obj.fitData.laserModel,obj.fitData.biasMode,n);
                     nonLaserP = [];
                     LaserP = [];
                     dR = [];
                     for s = 1:4
                         c = cont(stim==s,:);
-                        nonLaserP(:,:,s) = mean(obj.calculatePhat(ZL,ZR,nonlaserparams,[0 0 0 0],c),1);
+                        nonLaserP(:,:,s) = mean(obj.calculatePhat(ZL,ZR,[],nonlaserparams,c),1);
                         for site = 1:size(obj.inactivationCoords,1)
-                            LaserP(site,:,s) = mean(obj.calculatePhat(ZL,ZR,laserparams(site,:)+nonlaserparams,[0 0 0 0],c),1);
+                            LaserP(site,:,s) = mean(obj.calculatePhat(ZL_las,ZR_las,nonlaserparams,laserparams(site,:),c),1);
                         end
                         
-                        %flip pNG to pG
-                        nonLaserP(:,3,s) = 1-nonLaserP(:,3,s);
-                        LaserP(:,3,s) = 1-LaserP(:,3,s);
+%                         %flip pNG to pG
+%                         nonLaserP(:,3,s) = 1-nonLaserP(:,3,s);
+%                         LaserP(:,3,s) = 1-LaserP(:,3,s);
                                                 
                         dP = bsxfun(@minus,LaserP(:,:,s),nonLaserP(:,:,s));
                         dR = [dR, dP(:,2)];
@@ -2464,42 +2886,42 @@ classdef omnibusLaserGLM
                 %                 set(gca,'Position',[0.8 0.8 0.07 0.07],'box','off'); axis square; xlim([0 max(cVal)]); ylim([0 max(cVal)]);
             end
             
-            %Plot results of significance testing as maps
-%             keyboard;
-            figure('color','w');
-            titles={'(R+NG)/L vs Laser/noLaser','(L+NG)/R vs Laser/noLaser'};
-            for n = 1:numSubjects
-                
-                for i=1:2
-                    subplot(numSubjects,2,2*n -2 + i);
-                    imagesc((fisherExactP(:,:,i,n)<0.05) + (fisherExactP(:,:,i,n)<0.01) + (fisherExactP(:,:,i,n)<0.001)); axis square;
-                    
-                    if n<numSubjects
-                        set(gca,'xtick','','ytick','');
-                    else
-                        set(gca,'xtick',1:6,'XTickLabel',areaLabels,'xticklabelrotation',45,'ytick',1:4,'yticklabel',stim_labels);
-                    end
-                    
-                    if n ==1
-                        title(titles{i});
-                    end
-                    
-                    if i == 1
-                        ylabel(obj.names{n});
-                    end
-                end
-            end
-            
-            colormap('gray');
-            
-            %false alarm plots
-            %             figure('color','w');
-            %             subplot(1,2,1);
-            %             plot(FA_L(1:end-1),CR_pL(1:end-1),'o'); xlabel('False alarm left choices'); ylabel('max pL during CR with inactivation');
-            %             xlim([0 1]); ylim([0 1]); axis square;
-            %             subplot(1,2,2);
-            %             plot(FA_R(1:end-1),CL_pR(1:end-1),'o'); xlabel('False alarm right choices'); ylabel('max pR during CL with inactivation');
-            %             xlim([0 1]); ylim([0 1]); axis square;
+%             %Plot results of significance testing as maps
+% %             keyboard;
+%             figure('color','w');
+%             titles={'(R+NG)/L vs Laser/noLaser','(L+NG)/R vs Laser/noLaser'};
+%             for n = 1:numSubjects
+%                 
+%                 for i=1:2
+%                     subplot(numSubjects,2,2*n -2 + i);
+%                     imagesc((fisherExactP(:,:,i,n)<0.05) + (fisherExactP(:,:,i,n)<0.01) + (fisherExactP(:,:,i,n)<0.001)); axis square;
+%                     
+%                     if n<numSubjects
+%                         set(gca,'xtick','','ytick','');
+%                     else
+%                         set(gca,'xtick',1:6,'XTickLabel',areaLabels,'xticklabelrotation',45,'ytick',1:4,'yticklabel',stim_labels);
+%                     end
+%                     
+%                     if n ==1
+%                         title(titles{i});
+%                     end
+%                     
+%                     if i == 1
+%                         ylabel(obj.names{n});
+%                     end
+%                 end
+%             end
+%             
+%             colormap('gray');
+%             
+%             %false alarm plots
+%             %             figure('color','w');
+%             %             subplot(1,2,1);
+%             %             plot(FA_L(1:end-1),CR_pL(1:end-1),'o'); xlabel('False alarm left choices'); ylabel('max pL during CR with inactivation');
+%             %             xlim([0 1]); ylim([0 1]); axis square;
+%             %             subplot(1,2,2);
+%             %             plot(FA_R(1:end-1),CL_pR(1:end-1),'o'); xlabel('False alarm right choices'); ylabel('max pR during CL with inactivation');
+%             %             xlim([0 1]); ylim([0 1]); axis square;
         end
         
         
@@ -2840,7 +3262,9 @@ classdef omnibusLaserGLM
             %                 keyboard;
             %             end
             
-            logLik = mean(log2(p));
+            logLik = nanmean(log2(p));
+            
+%             disp(logLik);
         end
         
         function phat = calculatePhat(obj,ZL,ZR,offset,testParams,inputs)
@@ -2862,6 +3286,11 @@ classdef omnibusLaserGLM
             end
             
             phat = [pL pR pNG];
+            
+%             if any(~isreal(phat(:)))
+%                 warning('complex values, something is wrong');
+% %                 keyboard;
+%             end
         end
         
         function areaID = identifyArea(~,laserCoord)
@@ -2870,15 +3299,20 @@ classdef omnibusLaserGLM
             for t = 1:length(areaID)
                 pos = laserCoord(t,1:2);
                 
-                if pos(1) <= -2
+                if pos(1) <= -2 && abs(pos(2))>1
                     areaID(t) = (pos(2)<0)*1 + (pos(2)>0)*2;
                 elseif -1 <= pos(1) && pos(1) <= 1
                     areaID(t) = (pos(2)<0)*3 + (pos(2)>0)*4;
-                elseif -2 <= pos(1) && pos(1) <= 3
+                elseif 2 <= pos(1) && pos(1) <= 3
                     areaID(t) = (pos(2)<0)*5 + (pos(2)>0)*6;
                 else
                     areaID(t) = 7;
                 end
+                
+                if isnan(pos(1)) && isnan(pos(2))
+                    areaID(t) = 999;
+                end
+                
             end
         end
         

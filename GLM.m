@@ -27,6 +27,10 @@ classdef GLM
                 %                 -contrast_cond
                 %                 -response
                 %                 -repeatNum
+                if isfield(inputData,'stimulus')
+                    inputData.contrast_cond=inputData.stimulus(:,1:2);
+                end
+                
                 obj.data = inputData;
                 obj.expRef = 'none';
                 
@@ -703,10 +707,10 @@ classdef GLM
                         h=obj.plotData;
                         fig=get(h(1),'Parent');
                         
-%                         evalCL = linspace(0,max(obj.data.contrast_cond(:,1)),100);
-%                         evalCR = linspace(0,max(obj.data.contrast_cond(:,1)),100);
-                        evalCL = linspace(0,1,100);
-                        evalCR = linspace(0,1,100);
+                        evalCL = linspace(0,max(obj.data.contrast_cond(:,1)),100);
+                        evalCR = linspace(0,max(obj.data.contrast_cond(:,1)),100);
+%                         evalCL = linspace(0,1,100);
+%                         evalCR = linspace(0,1,100);
                         prop=nan(length(evalCL),length(evalCR),3);
                         
                         for cl = 1:length(evalCL)
