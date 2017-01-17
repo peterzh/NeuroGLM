@@ -337,7 +337,7 @@ classdef GLM
             
             %Remove trials with repeats
 %             obj.data = obj.getrow(obj.data,obj.data.repeatNum==1);
-            options = optimoptions('fmincon','UseParallel',0,'MaxFunEvals',100000,'MaxIter',10000);
+            options = optimoptions('fmincon','algorithm','interior-point','MaxFunEvals',100000,'MaxIter',10000);
             
             responses = obj.data.response;
             
