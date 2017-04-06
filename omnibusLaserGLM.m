@@ -196,15 +196,48 @@ classdef omnibusLaserGLM
                     
                 case 'BO_NC50'
                     m.cfn = @(c,n,c50)((c.^n)./(c.^n + c50.^n));
-%                     m.cfn = @(c,varargin)((c.^varargin{1})./(c.^varargin{1} + varargin{2}.^varargin{1}));
                     m.ZL = @(p_offset,p,c)( p(1) + 10*p(3).*m.cfn(c(:,1),p(5),p(7)) );
                     m.ZR = @(p_offset,p,c)( p(2) + 10*p(4).*m.cfn(c(:,2),p(5),p(7)) );
                     m.LB = [-inf -inf 0 0 0.3 0 0.001 0]; %only used when doing non-laser fit
                     m.UB = [+inf +inf +inf +inf 20 0 3 0]; %only used when doing non-laser fit
                     m.pLabels = {'oL','oR','sL','sR','nL','nR','c50L','c50R'};
-                    
+
                     m.deltaZL = @(p_offset,p,c)( p_offset(:,1) + p(1) + 10*(p_offset(:,3)*2^p(3)).*m.cfn(c(:,1),p_offset(:,5)*2^p(5),p_offset(:,7)*2^p(7)) );
                     m.deltaZR = @(p_offset,p,c)( p_offset(:,2) + p(2) + 10*(p_offset(:,4)*2^p(4)).*m.cfn(c(:,2),p_offset(:,6)*2^p(6),p_offset(:,8)*2^p(8))  );
+
+                case 'BO_NC50_DISTORTION'
+                    m.cfn = @(c,n,c50)((c.^n)./(c.^n + c50.^n));
+                    m.ZL = @(p_offset,p,c)( p(1) + 10*p(3).*( m.cfn(c(:,1),p(5),p(7)) - m.cfn(c(:,2),p(5),p(7)).*(m.cfn(c(:,1),p(5),p(7)) - p(9))*1/3 ) );
+                    m.ZR = @(p_offset,p,c)( p(2) + 10*p(4).*( m.cfn(c(:,2),p(5),p(7)) - m.cfn(c(:,1),p(5),p(7)).*(m.cfn(c(:,2),p(5),p(7)) - p(10))*1/3 ) );
+                    m.LB = [-inf -inf 0 0 0.3 0 0.001 0 0 0]; %only used when doing non-laser fit
+                    m.UB = [+inf +inf +inf +inf 20 0 3 0 1 1]; %only used when doing non-laser fit
+                    m.pLabels = {'oL','oR','sL','sR','nL','nR','c50L','c50R','phiL','phiR'};
+ 
+                    m.deltaZL = @(p_offset,p,c)( p_offset(:,1) + p(1) + 10*(p_offset(:,3)*2.^p(3)).*( m.cfn(c(:,1),p_offset(:,5)*2^p(5),p_offset(:,7)*2^p(7)) - m.cfn(c(:,2),p_offset(:,6)*2^p(6),p_offset(:,8)*2^p(8)).*(m.cfn(c(:,1),p_offset(:,5)*2^p(5),p_offset(:,7)*2^p(7)) - (p_offset(:,9)+p(9)) )*1/3 ) );
+                    m.deltaZR = @(p_offset,p,c)( p_offset(:,2) + p(2) + 10*(p_offset(:,4)*2.^p(4)).*( m.cfn(c(:,2),p_offset(:,6)*2^p(6),p_offset(:,8)*2^p(8)) - m.cfn(c(:,1),p_offset(:,5)*2^p(5),p_offset(:,7)*2^p(7)).*(m.cfn(c(:,2),p_offset(:,6)*2^p(6),p_offset(:,8)*2^p(8)) - (p_offset(:,10)+p(10)) )*1/3 ) );
+                    
+                case 'BO_NC50_NORMALISATION'
+                    m.cfn = @(c,n,c50)((c.^n)./(c.^n + c50.^n));
+                    m.ZL = @(p_offset,p,c)( p(1) + 10*p(9).*m.cfn(c(:,1),p(5),p(7)) + 10*p(3).*m.cfn(c(:,1),p(5),p(7))./(m.cfn(c(:,1),p(5),p(7)) + m.cfn(c(:,2),p(5),p(7))) );
+                    m.ZR = @(p_offset,p,c)( p(2) + 10*p(10).*m.cfn(c(:,2),p(5),p(7)) + 10*p(4).*m.cfn(c(:,2),p(5),p(7))./(m.cfn(c(:,1),p(5),p(7)) + m.cfn(c(:,2),p(5),p(7))) );
+                    m.LB = [-inf -inf 0 0 0.3 0 0.001 0 0 0]; %only used when doing non-laser fit
+                    m.UB = [+inf +inf +inf +inf 20 0 3 0 +inf +inf]; %only used when doing non-laser fit
+                    m.pLabels = {'oL','oR','snL','snR','nL','nR','c50L','c50R','sL','sR'};
+ 
+                    m.deltaZL = @(p_offset,p,c)( p_offset(:,1) + p(1) + 10*(p_offset(:,3)*2.^p(3)).*m.cfn(c(:,1),p_offset(:,5)*2^p(5),p_offset(:,7)*2^p(7))./(m.cfn(c(:,1),p_offset(:,5)*2^p(5),p_offset(:,7)*2^p(7)) + m.cfn(c(:,2),p_offset(:,6)*2^p(6),p_offset(:,8)*2^p(8)))  );
+                    m.deltaZR = @(p_offset,p,c)( p_offset(:,2) + p(2) + 10*(p_offset(:,4)*2.^p(4)).*m.cfn(c(:,2),p_offset(:,6)*2^p(6),p_offset(:,8)*2^p(8))./(m.cfn(c(:,1),p_offset(:,5)*2^p(5),p_offset(:,7)*2^p(7)) + m.cfn(c(:,2),p_offset(:,6)*2^p(6),p_offset(:,8)*2^p(8)))  );
+                    
+                    
+                case 'BO_NC50_2SIDE'
+                    m.cfn = @(c,n,c50)((c.^n)./(c.^n + c50.^n));
+                    m.ZL = @(p_offset,p,c)( p(1) + 10*p(3).*m.cfn(c(:,1),p(5),p(7)) + 10*p(5).*m.cfn(c(:,2),p(5),p(7)) );
+                    m.ZR = @(p_offset,p,c)( p(2) + 10*p(4).*m.cfn(c(:,2),p(5),p(7)) + 10*p(6).*m.cfn(c(:,1),p(5),p(7)) );
+                    m.LB = [-inf -inf 0 0 0 0 0.3 0 0.001 0]; %only used when doing non-laser fit
+                    m.UB = [+inf +inf +inf +inf +inf +inf 20 0 3 0]; %only used when doing non-laser fit
+                    m.pLabels = {'oL','oR','sL','sR','sL.','sR.','nL','nR','c50L','c50R'};
+                    
+                    m.deltaZL = @(p_offset,p,c)( p_offset(:,1) + p(1) + 10*(p_offset(:,3)*2^p(3)).*m.cfn(c(:,1),p_offset(:,5)*2^p(5),p_offset(:,7)*2^p(7)) + 10*(p_offset(:,5)*2^p(5)).*m.cfn(c(:,2),p_offset(:,5),p_offset(:,7)) );
+                    m.deltaZR = @(p_offset,p,c)( p_offset(:,2) + p(2) + 10*(p_offset(:,4)*2^p(4)).*m.cfn(c(:,2),p_offset(:,6)*2^p(6),p_offset(:,8)*2^p(8)) + 10*(p_offset(:,6)*2^p(6)).*m.cfn(c(:,1),p_offset(:,6),p_offset(:,8)) );
                     
                 case 'BC_NC50'
                     m.cfn = @(c,n,c50)((c.^n)./(c.^n + c50.^n));
@@ -217,6 +250,18 @@ classdef omnibusLaserGLM
                     
                     m.deltaZL = @(p_offset,p,c)( 10*(p_offset(:,3)*2^p(3)).*(m.cfn(c(:,1),p_offset(:,5)*2^p(5),p_offset(:,7)*2^p(7)) + p_offset(:,1) + p(1)) );
                     m.deltaZR = @(p_offset,p,c)( 10*(p_offset(:,4)*2^p(4)).*(m.cfn(c(:,2),p_offset(:,6)*2^p(6),p_offset(:,8)*2^p(8)) + p_offset(:,2) + p(2)) );
+                    
+                case 'BO_NC50_NESTED'
+                    m.cfn = @(c,n,c50)((c.^n)./(c.^n + c50.^n));
+                    m.ZL = @(p_offset,p,c)( p(1) + p(3).*max([m.cfn(c(:,1),p(5),p(7)) m.cfn(c(:,2),p(5),p(7))],[],2) ); %actually ZGnG
+                    m.ZR = @(p_offset,p,c)( p(2) + p(4).*diff([m.cfn(c(:,1),p(5),p(7)) m.cfn(c(:,2),p(5),p(7))],[],2) ); %actually ZLR
+                    m.LB = [-inf -inf -inf -inf 0.3 0 0.001 0]; %only used when doing non-laser fit
+                    m.UB = [+inf +inf +inf +inf 20 0 3 0]; %only used when doing non-laser fit
+                    m.pLabels = {'oGO','oLR','sGO','sLR','nL','nR','c50L','c50R'};
+                    
+                    m.deltaZL = @(p_offset,p,c)( p_offset(:,1) + p(1) + (p_offset(:,3)*2^p(3)).*max([m.cfn(c(:,1),p_offset(:,5)*2^p(5),p_offset(:,7)*2^p(7)) m.cfn(c(:,2),p_offset(:,5)*2^p(5),p_offset(:,7)*2^p(7))],[],2) ); %actually ZGnG
+                    m.deltaZR = @(p_offset,p,c)( p_offset(:,2) + p(2) + (p_offset(:,4)*2^p(4)).*diff([m.cfn(c(:,1),p_offset(:,6)*2^p(6),p_offset(:,8)*2^p(8)) m.cfn(c(:,2),p_offset(:,6)*2^p(6),p_offset(:,8)*2^p(8))],[],2) ); %actually ZLR
+
                     
 %                 case 'BO_C50'
 %                     N=1;
@@ -259,15 +304,16 @@ classdef omnibusLaserGLM
                         m.deltaP(3:4) = 1;
                     end
                     
-                    if any(strfind(deltaStr,'shape')) %shape is taken to be the last 2 parameters
-                        m.deltaP(end-1:end) = 1;
+                    if any(strfind(deltaStr,'shape')) 
+%                         m.deltaP(end-1:end) = 1;
+                        m.deltaP(5:end) = 1;
                     end
                     
                     if any(strfind(deltaStr,'^n'))
                         m.deltaP(5:6) = 1;
                     end
                     
-                    if any(strfind(deltaStr,'c50'))
+                    if any(strfind(deltaStr,'^c50'))
                         m.deltaP(7:8) = 1;
                     end
                     
@@ -657,12 +703,12 @@ classdef omnibusLaserGLM
             obj.fitData.groupAreas = 0;
             obj.fitData.lambda = 0.0001;
             
-%             if strcmp(obj.fitData.nonLaserModel(1:4),'nest'); %if nested model, set flag for use later
-%                 obj.nestedModel_flag = 1;
-%             else
-%                 obj.nestedModel_flag = 0;
-%             end
-%             
+            if strcmp(nonLaserModel(end-5:end),'NESTED')
+                obj.nestedModel_flag = 1;
+            else
+                obj.nestedModel_flag = 0;
+            end
+                         
             numSubjects = length(obj.names);
             obj.fitData.params = cell(1,numSubjects);
             obj.fitData.deltaParams = cell(1,numSubjects);
@@ -739,6 +785,7 @@ classdef omnibusLaserGLM
             end
             
             disp('Done!'); %close(f);
+            
         end
         
         function obj = mergeSites(obj)
@@ -856,9 +903,10 @@ classdef omnibusLaserGLM
             ylim([-6 6]);
             
             numSubjects = length(obj.names);
-            numIter = 600;
+            numIter = 300;
             
-            obj.fitData.paramsNull = cell(1,numSubjects);
+%             obj.fitData.paramsNULL = cell(1,numSubjects);
+            obj.fitData.deltaParamsNULL = cell(1,numSubjects);
             figure('name','Sampling from null distribution of laser parameters');
             for n = 1:numSubjects
                 %Get all non-laser trials
@@ -869,9 +917,9 @@ classdef omnibusLaserGLM
                 
                 numLP = size(obj.fitData.params{n},2);
                 if numLP > 2
-                    scatter(obj.fitData.params{n}(:,1),obj.fitData.params{n}(:,3),30,cols,'filled');
+                    scatter(obj.fitData.deltaParams{n}(:,1),obj.fitData.deltaParams{n}(:,3),30,cols,'filled');
                 elseif numLP == 2
-                    scatter(obj.fitData.params{n}(:,1),obj.fitData.params{n}(:,2),30,cols,'filled');
+                    scatter(obj.fitData.deltaParams{n}(:,1),obj.fitData.deltaParams{n}(:,2),30,cols,'filled');
                 end
                 
                 loglik = [];
@@ -894,56 +942,30 @@ classdef omnibusLaserGLM
                     %Of the remaining nonLaser trials, fit the nonLaser mod
                     
                     %Manual optim method per-session
-                    [ZL_nL,ZR_nL,numP,LB,UB] = obj.getModel(obj.fitData.nonLaserModel,obj.fitData.biasMode,n);
-                    %Define which parameters are to be regularised
-                    %                     if numP == 4
-                    %                         reg = [3:4];
-                    %                     else
-                    %                         reg = 1:numP;
-                    %                     end
-                    
                     sessions = unique(obj.data{n}.sessionID(nL));
-                    p_nL = nan(length(sessions),numP);
+                    p_nL = nan(length(sessions),length(obj.model.pLabels));
                     for s = 1:length(sessions)
-                        cont = obj.data{n}.stimulus(nL & obj.data{n}.sessionID==sessions(s),:);
+                        cont = obj.data{n}.stimulus(nL & obj.data{n}.sessionID==sessions(s),1:2);
                         resp = obj.data{n}.response(nL & obj.data{n}.sessionID==sessions(s));
                         
-                        offset = zeros(length(resp),numP);
-                        objective = @(PARAMETERS) (-obj.calculateLogLik(PARAMETERS,ZL_nL,ZR_nL,offset,cont,resp) + obj.fitData.laserLambda*sum(abs(PARAMETERS))  );
-                        
-                        switch(obj.fitMethod)
-                            case 'opti'
-                                options = optiset('display','final','solver','NOMAD');
-                                Opt = opti('fun',objective,'x0',zeros(1,numP),'options',options);
-                                p_nL(s,:) = Opt.solve';
-                                
-                            case 'fmincon'
-                                options = optimoptions('fmincon','UseParallel',0,'MaxFunEvals',100000,'MaxIter',10000,'Display','off');
-                                p_nL(s,:) = fmincon(objective,zeros(1,numP), [], [], [], [], LB, UB, [], options);
-                        end
+                        p_nL(s,:) = obj.util_optim(obj.model.ZL,obj.model.ZR,[],cont,resp,obj.model.LB,obj.model.UB);
                     end
+                    p_nL(:,obj.model.LB==0 & obj.model.UB==0) = p_nL(:,find(obj.model.LB==0 & obj.model.UB==0) - 1);
+                                    
+                    LB = -inf(1,length(obj.model.pLabels));
+                    UB = inf(1,length(obj.model.pLabels));
+                    LB(~obj.model.deltaP)=0;
+                    UB(~obj.model.deltaP)=0;
                     
-                    cont = obj.data{n}.stimulus(q_idx,:);
+                    cont = obj.data{n}.stimulus(q_idx,1:2);
                     resp = obj.data{n}.response(q_idx);
                     sess = obj.data{n}.sessionID(q_idx);
    
                     %offset on parameters
                     offset = p_nL(sess,:);
-
-                    [ZL,ZR,numP] = obj.getModel(obj.fitData.laserModel,obj.fitData.biasMode,n);
-                    objective = @(PARAMETERS) (-obj.calculateLogLik(PARAMETERS,ZL,ZR,offset,cont,resp) + obj.fitData.laserLambda*sum(abs(PARAMETERS)) );
-                    switch(obj.fitMethod)
-                        case 'opti'
-                            options = optiset('display','final','solver','NOMAD');
-                            Opt = opti('fun',objective,'x0',zeros(1,numP),'options',options);
-                            [p,loglik(iter,1)] = Opt.solve;
-                            obj.fitData.paramsNull{n}(iter,:) = p';
-                            
-                        case 'fmincon'
-                            options = optimoptions('fmincon','UseParallel',0,'MaxFunEvals',100000,'MaxIter',10000,'Display','off');
-                            [p,loglik(iter,1)] = fmincon(objective,zeros(1,numP), [], [], [], [], [], [], [], options);
-                            obj.fitData.paramsNull{n}(iter,:) = p;
-                    end
+                    p = obj.util_optim(obj.model.deltaZL,obj.model.deltaZR,offset,cont,resp,LB,UB);
+                    obj.fitData.deltaParamsNULL{n}(iter,:) = p;
+                    
                     if numLP > 2
                         plot(p(1),p(3),'k.','markersize',10); drawnow; xlabel('B_L'); ylabel('S_L');
                     elseif numLP == 2
@@ -1044,7 +1066,7 @@ classdef omnibusLaserGLM
             
             
             numFolds = 20;
-            models = {'mnr B','mnr B & C','mnr B & C^N','mnr B & C50','nes B','nes B & C','nes B & C^N','nes B & C50'};
+            models = {'B','B & C','B & C^N','B & NR'};%,'nes B','nes B & C','nes B & C^N','nes B & NR'};
             numSubjects = length(obj.names);
             figure('name','model comparison','color','w'); 
             cfn = @(c,n,c50) ( (c.^n)./(c50.^n + c.^n) );
@@ -1096,7 +1118,7 @@ classdef omnibusLaserGLM
                                     %                                     UB = [+inf +inf +inf +inf 1 1]; %only used when doing non-laser fit
                                     %                                     pLabels = {'bL','bR','sL','sR','nL','nR'};
                                     %                                     obj.nestedModel_flag = 0;
-                                case 4 %mnr B & C50
+                                case 4 %mnr B & NR
                                     ZL = @(p_offset,p,c)( p(1) + 10*p(3).*cfn(c(:,1),p(5),p(6)) );
                                     ZR = @(p_offset,p,c)( p(2) + 10*p(4).*cfn(c(:,2),p(5),p(6))  );
                                     LB = [-inf -inf 0 0 0.3 0.001]; %only used when doing non-laser fit
@@ -1133,7 +1155,7 @@ classdef omnibusLaserGLM
                                     UB = [+inf +inf +inf +inf 1]; %only used when doing non-laser fit
                                     pLabels = {'bGO','bLR','sGO','sLR','n'};
                                     obj.nestedModel_flag = 1;
-                                case 8 %nested B & C50
+                                case 8 %nested B & NR
                                     ZL = @(p_offset,p,c)( p(1) + 10*p(3).*(max(cfn(c,p(5),p(6)),[],2)  ) ); %actually pGO/pNG
                                     ZR = @(p_offset,p,c)( p(2) + 10*p(4).*(diff(cfn(c,p(5),p(6)),[],2) ) ); %actually pL/pR given GO
                                     LB = [-inf -inf -inf -inf 0.3 0]; %only used when doing non-laser fit
@@ -1154,7 +1176,13 @@ classdef omnibusLaserGLM
                 end
 
                 subplot(2,round(numSubjects/2),n);
-                notBoxPlot(logLik_perSession);
+                ax=notBoxPlot(logLik_perSession);     
+                for i = 1:length(models)
+                    ax(i).data.MarkerSize=3;
+                    ax(i).data.MarkerFaceColor=[1 1 1]*0.2;
+                    ax(i).data.MarkerEdgeColor=[1 1 1]*0.2;
+                end
+                
                 title(obj.names{n});
                 
                 if n == 1
@@ -1171,19 +1199,19 @@ classdef omnibusLaserGLM
         function obj = crossval_LaserEffect(obj,n)
            
 %             n=length(obj.names);
-            baseModels = {'BO_C^N','BC_C^N','BO_NC50','BC_NC50'};
-            laserModels = {'bias','sens','shape'};
+%             baseModels = {'BO_C^N','BC_C^N','BO_NC50','BC_NC50'};
+            baseModels = {'BO_NC50'};
+            laserModels = {'bias','sens','^c50'};
+% %             laserModels = {'bias','sens','shape'};
             numLas = 2^length(laserModels) - 1;
 
             
             img=imread('D:\kirkcaldie_brain_BW_outline.png');
-            numFolds = 60;
-%             laserModels = {'bias','bias+sub_sens_M','bias+c50_M','bias+sub_sens_M','bias+sub_sens+c50_M'};
-%             laserModels = {'bias','sub_sens_M','C^N_M','bias+C^N_M','bias+sub_sens_M','bias+sub_sens+C^N_M'};
-            %             numSubjects = length(obj.names);
-            
-%             figure('name',[obj.names{n} ' ' num2str(numFolds) '-fold CV ' obj.fitData.biasMode],'color','w');
+            numFolds = 20;
+            numFolds = 100;
+
             cv = cvpartition(obj.data{n}.sessionID,'KFold',numFolds);
+            
             obj.fitData.phat{n} = nan(length(obj.data{n}.response),length(numLas)+1);
 
 %             LOGLIK = nan(cv.NumTestSets,length(laserModels),6);
@@ -1236,18 +1264,24 @@ classdef omnibusLaserGLM
                     
                     p_nL(:,m.LB==0 & m.UB==0) = p_nL(:,find(m.LB==0 & m.UB==0) - 1);
                     
+%                     
                     %FIT LASER PART OF TRAINING SET
                     if obj.bilateral_flag==0
-                        laserIdx=1:6;
+                        laserIdx=[1 2 5 6];
                     else
-                        laserIdx=[2 4 6];
+                        laserIdx=[2 6];
                     end                  
                     
+
                     for site=laserIdx
                         disp(['Site ' num2str(site)]);
-                        cont = trainC(trainL==site,1:2);
-                        resp = trainR(trainL==site);
-                        sid = trainSID(trainL==site);
+                        
+                        trainidx = (trainL==site);
+                        testidx = (testL==site);
+                        
+                        cont = trainC(trainidx,1:2);
+                        resp = trainR(trainidx);
+                        sid = trainSID(trainidx);
                         offset = p_nL(sid,:);
                         
                         %fit non laser model onto laser trials
@@ -1256,7 +1290,7 @@ classdef omnibusLaserGLM
                         disp(['    non-laser model : ' num2str(loglik)]);
                                
                         %Test set log lik on nonlaser model
-                        loglikNL=obj.calculateLogLik(zeros(1,length(m.pLabels)),m.deltaZL,m.deltaZR,p_nL(testSID(testL==site),:),testC(testL==site,:),testR(testL==site));
+                        loglikNL=obj.calculateLogLik(zeros(1,length(m.pLabels)),m.deltaZL,m.deltaZR,p_nL(testSID(testidx),:),testC(testidx,:),testR(testidx));
                         
                         for las = 1:numLas
                             lasIdx = find(decimalToBinaryVector(las,length(laserModels)));
@@ -1275,7 +1309,7 @@ classdef omnibusLaserGLM
                             disp(['    ' laserString ' : ' num2str(loglik)]);
                         
                             %now test on set set at the same site
-                            LOGLIK(fold,base,las,site)=obj.calculateLogLik(p,m.deltaZL,m.deltaZR,p_nL(testSID(testL==site),:),testC(testL==site,:),testR(testL==site)) - loglikNL;
+                            LOGLIK(fold,base,las,site)=obj.calculateLogLik(p,m.deltaZL,m.deltaZR,p_nL(testSID(testidx),:),testC(testidx,:),testR(testidx)) - loglikNL;
                         end
                     end
                 end
@@ -1287,10 +1321,21 @@ classdef omnibusLaserGLM
       
             labels = [laserModels];
             
+            if obj.bilateral_flag==0 %if unilateral, average between hemispheres
+                vis = mean(LOGLIK(:,:,:,1:2),4);
+                m2 = mean(LOGLIK(:,:,:,5:6),4);
+                LOGLIK(:,:,:,1) = vis;
+                LOGLIK(:,:,:,2) = vis;
+                LOGLIK(:,:,:,5) = m2;
+                LOGLIK(:,:,:,6) = m2;
+            end
+            
+            areas = {'vis','m2'};
+            
             if obj.bilateral_flag==0
-                areas = {'Left vis','Right vis','Left S1','Right S1','Left m2','Right m2'};
+                areas = {'Left vis','Right vis','Left m2','Right m2'};
             else
-                areas = {'vis','S1','m2'};
+                areas = {'vis','m2'};
             end
             
             figure('name',obj.names{n},'color','w');
@@ -1302,12 +1347,12 @@ classdef omnibusLaserGLM
                 mean_ll = mean(LOGLIK(:,:,:,a),1);
                 stder_ll = std(LOGLIK(:,:,:,a),[],1)/sqrt(numFolds);
 
-                mean_ll = squeeze(mean_ll);
-                stder_ll = squeeze(stder_ll);
+                mean_ll = permute(mean_ll,[2 3 1]);
+                stder_ll = permute(stder_ll,[2 3 1]);
                 
                 jj=1;
                 hold on;
-                Cols = get(gca,'colororder');
+                Cols = repmat(get(gca,'colororder'),5,1);
                 alpha = linspace(0.4,1,length(baseModels));
 
                 for las = 1:numLas
@@ -1319,8 +1364,8 @@ classdef omnibusLaserGLM
 %                         ax.FaceAlpha=0.7;
                         ax.FaceAlpha = alpha(base);
                         
-                        l=line([jj jj],[mean_ll(base,las)-stder_ll(base,las) mean_ll(base,las)+stder_ll(base,las)]);
-                        l.LineWidth=0.5; l.Color=Cols(las,:);
+%                         l=line([jj jj],[mean_ll(base,las)-stder_ll(base,las) mean_ll(base,las)+stder_ll(base,las)]);
+%                         l.LineWidth=0.5; l.Color=Cols(las,:);
                         
                         jj=jj+1;
                     end
@@ -1536,7 +1581,7 @@ classdef omnibusLaserGLM
                 0.8500 0.3250 0.0980;
                 0.4940    0.1840    0.5560];
             for ped = 1:numPedestals
-                subplot(1,numPedestals+2,ped); hold on;
+                subplot(numPedestals,1,ped); hold on;
                 set(gca,'colororder',cols);
                 %Plot actual datapoints
                 ped_idx = min(cont,[],2)==cVals(ped);
@@ -1549,8 +1594,8 @@ classdef omnibusLaserGLM
                     [ph(c,:),pci] = binofit(sum([r==1 r==2 r==3],1),length(r));
                     for ch=1:3
                         l(1)=line([1 1]*uC(c),pci(ch,:));
-                        l(2)=line([uC(c)-0.03 uC(c)+0.03],[1 1]*pci(ch,1));
-                        l(3)=line([uC(c)-0.03 uC(c)+0.03],[1 1]*pci(ch,2));
+%                         l(2)=line([uC(c)-0.03 uC(c)+0.03],[1 1]*pci(ch,1));
+%                         l(3)=line([uC(c)-0.03 uC(c)+0.03],[1 1]*pci(ch,2));
                         set(l,'Color',cols(ch,:),'Linewidth',0.5);
                         %                             l.Color = cols{ch};
                         %                             l.LineWidth=1;
@@ -1569,32 +1614,32 @@ classdef omnibusLaserGLM
                 
                 title(['pedestal= ' num2str(cVals(ped))]);
                 axis square;
-                if ped == 1
+                if ped == numPedestals
                     ylabel('Choice probability');
                     xlabel('\Delta contrast from pedestal');
                 end
-                if ped > 1
-                    set(gca,'ytick','','ycolor','w');
+                if ped < numPedestals
+                    set(gca,'xtick','','xcolor','w');
                 end
                 
             end
             
-            %chronometry: RTs
-            rt = obj.data{n}.RT(idx);
-            %             keyboard;
-            CL = (cont(:,1) > cont(:,2)) & resp==1;
-            CR = (cont(:,1) < cont(:,2)) & resp==2;
-            hist1=subplot(1,numPedestals+2,numPedestals+1);
-%             hist(rt(CL)); 
-            distributionPlot(rt(CL),'histOpt',1,'histOri','right','xyOri','flipped','showMM',0); axis square;
-            xlabel('RT correct left [sec]'); set(gca,'ytick','','ycolor','w');
-            hist2=subplot(1,numPedestals+2,numPedestals+2);
-%             hist(rt(CR)); 
-            distributionPlot(rt(CR),'histOpt',1,'histOri','right','xyOri','flipped','showMM',0); axis square;
-            xlabel('RT correct right [sec]'); set(gca,'ytick','','ycolor','w');
-            linkaxes([hist1 hist2],'xy');
-            set(get(gcf,'children'),'box','off');
-            xlim([0 1]);
+%             %chronometry: RTs
+%             rt = obj.data{n}.RT(idx);
+%             %             keyboard;
+%             CL = (cont(:,1) > cont(:,2)) & resp==1;
+%             CR = (cont(:,1) < cont(:,2)) & resp==2;
+%             hist1=subplot(numPedestals+2,1,numPedestals+1);
+% %             hist(rt(CL)); 
+%             distributionPlot(rt(CL),'histOpt',1,'histOri','right','xyOri','flipped','showMM',0); axis square;
+%             xlabel('RT correct left [sec]'); set(gca,'ytick','','ycolor','w');
+%             hist2=subplot(numPedestals+2,1,numPedestals+2);
+% %             hist(rt(CR)); 
+%             distributionPlot(rt(CR),'histOpt',1,'histOri','right','xyOri','flipped','showMM',0); axis square;
+%             xlabel('RT correct right [sec]'); set(gca,'ytick','','ycolor','w');
+%             linkaxes([hist1 hist2],'xy');
+%             set(get(gcf,'children'),'box','off');
+%             xlim([0 1]);
         end
         
         function plotFit_NonLaser(obj)
@@ -1602,27 +1647,31 @@ classdef omnibusLaserGLM
             
             %Plot session-by-session bias and sensitivity parameters
             figure('name','Session by session non-laser bias and sensitivity changes','color','w');
-            for n = 1:numSubjects
-                subplot(numSubjects,1,n);
-                p_nL = obj.fitData.params{n};
+            i=1;
+            for p = [1 2 3 4 5 7]
+                h(i)=subplot(3,2,i); hold on;
                 
-                %                 if exist('obj.fitData.nonLaserParamsSTD')
-                try
-                    errorbar(p_nL,obj.fitData.nonLaserParamsSTD{n});
-                catch
-                    plot(p_nL,'o-');
+                for n = 1:(length(obj.names)-1)
+                    numSessions = length(obj.expRefs{n});
+%                     ax=notBoxPlot(obj.fitData.params{n}(:,p),n,'jitter',0.5,'markMedian',true);
+%                     ax.data.MarkerSize=3;
+%                     ax.data.MarkerFaceColor=[1 1 1]*0.2;
+%                     ax.data.MarkerEdgeColor=[1 1 1]*0.2;
+                    boxplot(obj.fitData.params{n}(:,p),'positions',ones(numSessions,1)*n,'plotstyle','compact');
                 end
-                %                 else
-                %                     plot(p_nL);
-                %                 end
+%                 set(gca,'XTickLabel',obj.names(1:end-1),'xtick',1:(length(obj.names)-1),'xticklabelrotation',45);
+                set(gca,'xtick','','xcolor','w');
                 set(gca,'box','off');
-                title(obj.names{n});
-                if n == numSubjects
-                    xlabel('Session number');
-                    legend(obj.model.pLabels);
+                
+                if i>1
+%                     set(gca,'ytick','','ycolor','w');
                 end
-                %                 keyboard;
+                xlim([0.5 5.5]);
+                i=i+1;
+                title(obj.model.pLabels{p})
             end
+%             linkaxes(h,'y'); ylim([-6 3]);
+            
             
             %Plot non-laser predictions against actual psychometric data.
             cols = {[0 0.4470 0.7410],...
@@ -1739,7 +1788,7 @@ classdef omnibusLaserGLM
                 [0.8500 0.3250 0.0980],...
                 [0.4940    0.1840    0.5560]};
             
-            if obj.fitData.groupAreas==0
+            if obj.fitData.groupAreas==0 && length(subjID)>1
                 %Plot laser parameter maps
                 figure('name','Laser parameter maps','color','w');
                 for n = 1:length(obj.names)
@@ -1808,6 +1857,72 @@ classdef omnibusLaserGLM
                     colormap(flipud(cmap));
                 end
             end
+            
+            figure('color','w','name','ALLSUBJ');
+            for p = 1:size(plotVal,2)
+                subplot(size(plotVal,2)/2,2,p);
+                imX=imagesc(linspace(-4.5,4.5,100),linspace(3.75,-5.2,100),img);
+                set(gca,'ydir','normal');
+                        set(imX,'alphadata',0.7); hold on;
+                        
+                scatter(ml,ap,dot,plotVal{p},'s','filled'); axis equal;
+                caxis([-1 1]*max(abs(plotVal{p}))); colorbar;
+                set(gca,'box','off','ytick','','xtick','','xcolor','w','ycolor','w');
+                ylim([-6,4]);
+            end
+            cmap = [ones(100,1) linspace(0,1,100)' linspace(0,1,100)';
+                        linspace(1,0,100)' linspace(1,0,100)' ones(100,1)];
+                    colormap(flipud(cmap));
+            
+            if obj.fitData.groupAreas==0 && length(subjID)==1
+                figure('name',['Laser parameter maps' obj.names{subjID}],'color','w');
+                p_L = obj.fitData.deltaParams{subjID};
+                param_labels = obj.model.pLabels;
+                plotVal = cell(1,size(p_L,2));
+                for p = 1:size(p_L,2)
+                    plotVal{p} = p_L(:,p);
+                end
+                dotSize = ones(size(p_L))*150;
+                for i = 1:size(plotVal,2)
+                    subplot(size(plotVal,2)/2,2,i);
+                    
+                    ap = obj.inactivationCoords(:,1);
+                    ml = obj.inactivationCoords(:,2);
+                    dot = dotSize(:,i);
+                    if obj.bilateral_flag==1
+                        ap = [ap; ap];
+                        ml = [ml; -ml];
+                        plotVal{i} = [plotVal{i}; plotVal{i}];
+                        dot = [dot;dot];
+                    end
+                    
+                    imX=imagesc(linspace(-4.5,4.5,100),linspace(3.75,-5.2,100),img);
+                    set(gca,'ydir','normal');
+                    set(imX,'alphadata',0.7); hold on;
+                    
+                    
+                    scatter(ml,ap,dot,plotVal{i},'s','filled'); axis equal;
+                    %                     if obj.significance_flag == 1
+                    %                         pvalue = obj.sig{n};
+                    %                         dotSize = 35 + (pvalue<0.05)*80 + (pvalue<0.01)*100;
+                    %                         scatter(ml,ap,dotSize,plotVal{i},'s','filled'); axis equal;
+                    %                     else
+                    %                         scatter(ml,ap,200,plotVal{i},'s','filled'); axis equal;
+                    %                     end
+                    
+                    caxis([-1 1]*max(abs(plotVal{i}))); colorbar;
+                    set(gca,'box','off','ytick','','xtick','','xcolor','w','ycolor','w');
+                    ylim([-6,4]);
+
+                    title(['\Delta ' param_labels{i}]);
+                end
+                
+                cmap = [ones(100,1) linspace(0,1,100)' linspace(0,1,100)';
+                    linspace(1,0,100)' linspace(1,0,100)' ones(100,1)];
+                colormap(flipud(cmap));
+            end
+        
+            
 %             %Plot psych curves showing the laser effect at a few sites, for
 %             %each mouse separately
             if obj.fitData.perSession==1
@@ -1839,7 +1954,7 @@ classdef omnibusLaserGLM
                     cont = obj.data{n}.stimulus(:,1:2);
                     resp = obj.data{n}.response;
                     cVals = unique(unique(cont(:,1:2)));
-                    numPedestals = length(cVals)-1;
+                    numPedestals = length(cVals);
                     
                     p_nL = mean(obj.fitData.params{n});
                     nL_idx = obj.data{n}.laserIdx==0;
@@ -1854,7 +1969,7 @@ classdef omnibusLaserGLM
                     
                     figure('name',[obj.names{n} ' ' siteLabels{site} ' ' obj.model.name{1} ' [' obj.model.name{2} ']'],'color','w'); 
                     %Plot non-laser predictions and data                    
-                    for ped = 1:3
+                    for ped = 1:numPedestals
                         cnt = cont(nL_idx,:);
                         res = resp(nL_idx);
                         
@@ -1942,6 +2057,14 @@ classdef omnibusLaserGLM
                                 %                             l.Color = cols{ch};
                                 %                             l.LineWidth=1;
                                 ii = ii+1;
+                                
+                                if r>1
+                                    set(gca,'ytick','','ycolor','w');
+                                end
+                                
+                                if ped<numPedestals
+                                    set(gca,'xtick','','xcolor','w');
+                                end
                             end
                         end
                         
@@ -1956,47 +2079,47 @@ classdef omnibusLaserGLM
                     %or c50 to change
             
             
-            if any(sum(abs(obj.fitData.deltaParams{end}(:,5:end)),1)>0)
-%                 keyboard;
-                figure('name',['CFN FCN CHANGE' obj.model.name{1} ],'color','w');
-                
-                ii=1;
-                for n = subjID
-                    for site = 1:length(siteLabels)
-                        subplot(length(subjID),length(siteLabels),length(siteLabels)*(ii-1) + site);
-                        hold on;
-                        
-                        p_nL=obj.fitData.params{n}(1,5:end);
-                        p_L=(p_nL).*2.^obj.fitData.deltaParams{n}(site,5:end);
-                        
-                        if length(p_nL)==4
-                            h=ezplot(@(c)(cfn(c,p_nL(1),p_nL(3))),[0 1]); h.Color=[0 0 0];
-                            h=ezplot(@(c)(cfn(c,p_L(1),p_L(3))),[0 1]); h.Color=[1 0 0];
-                            
-                            h=ezplot(@(c)(cfn(c,p_nL(2),p_nL(4))),[0 1]); h.Color=[0 0 0]; h.LineStyle='--';
-                            h=ezplot(@(c)(cfn(c,p_L(2),p_L(4))),[0 1]); h.Color=[1 0 0];h.LineStyle='--';
-                        else
-                            h=ezplot(@(c)(obj.model.cfn(c,p_nL(1))),[0 1]); h.Color=[0 0 0];
-                            h=ezplot(@(c)(obj.model.cfn(c,p_L(1))),[0 1]); h.Color=[1 0 0];
-                            
-                            h=ezplot(@(c)(obj.model.cfn(c,p_nL(2))),[0 1]); h.Color=[0 0 0];h.LineStyle='--';
-                            h=ezplot(@(c)(obj.model.cfn(c,p_L(2))),[0 1]); h.Color=[1 0 0];h.LineStyle='--';
-
-                        end
-
-                        title(siteLabels{site}); axis square;
-                        
-                        if site==1
-                            ylabel(obj.names{n});
-                        end
-                    end
-                    
-                    ii=ii+1;
-                end
-                
-                legend('f(cL)','f(cL) + laser','f(cR)','f(cR) + laser');
-            end
-            
+%             if any(sum(abs(obj.fitData.deltaParams{end}(:,5:end)),1)>0)
+% %                 keyboard;
+%                 figure('name',['CFN FCN CHANGE' obj.model.name{1} ],'color','w');
+%                 
+%                 ii=1;
+%                 for n = subjID
+%                     for site = 1:length(siteLabels)
+%                         subplot(length(subjID),length(siteLabels),length(siteLabels)*(ii-1) + site);
+%                         hold on;
+%                         
+%                         p_nL=obj.fitData.params{n}(1,5:end);
+%                         p_L=(p_nL).*2.^obj.fitData.deltaParams{n}(site,5:end);
+%                         
+%                         if length(p_nL)==4
+%                             h=ezplot(@(c)(cfn(c,p_nL(1),p_nL(3))),[0 1]); h.Color=[0 0 0];
+%                             h=ezplot(@(c)(cfn(c,p_L(1),p_L(3))),[0 1]); h.Color=[1 0 0];
+%                             
+%                             h=ezplot(@(c)(cfn(c,p_nL(2),p_nL(4))),[0 1]); h.Color=[0 0 0]; h.LineStyle='--';
+%                             h=ezplot(@(c)(cfn(c,p_L(2),p_L(4))),[0 1]); h.Color=[1 0 0];h.LineStyle='--';
+%                         else
+%                             h=ezplot(@(c)(obj.model.cfn(c,p_nL(1))),[0 1]); h.Color=[0 0 0];
+%                             h=ezplot(@(c)(obj.model.cfn(c,p_L(1))),[0 1]); h.Color=[1 0 0];
+%                             
+%                             h=ezplot(@(c)(obj.model.cfn(c,p_nL(2))),[0 1]); h.Color=[0 0 0];h.LineStyle='--';
+%                             h=ezplot(@(c)(obj.model.cfn(c,p_L(2))),[0 1]); h.Color=[1 0 0];h.LineStyle='--';
+% 
+%                         end
+% 
+%                         title(siteLabels{site}); axis square;
+%                         
+%                         if site==1
+%                             ylabel(obj.names{n});
+%                         end
+%                     end
+%                     
+%                     ii=ii+1;
+%                 end
+%                 
+%                 legend('f(cL)','f(cL) + laser','f(cR)','f(cR) + laser');
+%             end
+%             
         end
         
         function plotData(obj,what,varargin)
@@ -2436,24 +2559,18 @@ classdef omnibusLaserGLM
             end
             
             if obj.bilateral_flag==0
-                areaList = {
-                    'Left visual', 1}; %[1 2 3 9 10 11 17 18 19]};
-%                     'Right visual', [6 7 8 14 15 16 22 23 24];
-%                                             'Left M2', [42 43 47 48 51];
-%                     'Right M2', [44 45 49 50 52]};
+                areaList = {'left vis', 1; 'right vis', 2; 'left m2', 5; 'right m2', 6};
             else
-                areaList = {'Visual',[1 2 3 5 6 7 9 10 11];
-                    'M2',[21 22 24 25 26]};
-%                     'Somatosensory',[13 14 15 16 17 18 19 20]};
+                areaList = {'visual',2; 'm2',6};
             end
             
-            if obj.nestedModel_flag == 1
-                xlab = 'log(pL/pR) given go';
-                ylab = 'log(pGO/pNG)';
-            else
+%             if obj.nestedModel_flag == 1
+%                 xlab = 'log(pL/pR) given go';
+%                 ylab = 'log(pGO/pNG)';
+%             else
                 xlab = 'log(pR/pNG)';
                 ylab = 'log(pL/pNG)';
-            end
+%             end
             
             
             figure('color','w');
@@ -2507,7 +2624,11 @@ classdef omnibusLaserGLM
                 %                 subplot(3,size(areaList,1),area+size(areaList,1)) %Z plot
                 h1(area)=subplot(2,size(areaList,1),area);
                 
-                if obj.nestedModel_flag == 0
+                %plot in log L/NG and log R/NG space, irrespective of
+                %whether the model was fit in that space or the nested
+                %logit space
+                
+%                 if obj.nestedModel_flag == 0
                     ZL = log(p(:,:,1)./p(:,:,3));
                     ZR = log(p(:,:,2)./p(:,:,3));
                     
@@ -2520,49 +2641,59 @@ classdef omnibusLaserGLM
                     ZRLas = log(pLas(:,:,2)./pLas(:,:,3)); ZRLas(isinf(ZRLas))=NaN;
                     
                     scatter(ZR(:),ZL(:),50,'o','filled'); hold on;
-                    plot(ZR([1:4 8 7 6 5 9:12 16 15 14 13]),ZL([1:4 8 7 6 5 9:12 16 15 14 13]),'k:');
-                    plot(ZR([1 5 9 13 14 10 6 2 3 7 11 15 16 12 8 4]),ZL([1 5 9 13 14 10 6 2 3 7 11 15 16 12 8 4]),'k:');
+                    plot(ZR,ZL,'k:');
+                    plot(ZR',ZL','k:');
                     quiver(ZR(:),ZL(:),ZRLas(:)-ZR(:),ZLLas(:)-ZL(:),0);
-                    %             scatter(ZRLas(:),ZLLas(:),200,'ro','filled'); hold on;
-                    %             text(ZR(:),ZL(:),cellfun(@(c)num2str(c),num2cell(1:numSites),'uni',0));
-                    ezplot('2*exp(x)=1+exp(x)+exp(y)');
-                    ezplot('2*exp(y)=1+exp(x)+exp(y)');
-                    ezplot('2=1+exp(x)+exp(y)');
-                    
-                    l=line([ZR(:)'; ZR(:)'],[ZL_ciLOW(:)';ZL_ciHIGH(:)']); 
-                    set(l,'color',[0 0.4470 0.7410],'linestyle','-');
-                    l=line([ZR_ciLOW(:)';ZR_ciHIGH(:)'],[ZL(:)'; ZL(:)']); 
-                    set(l,'color',[0 0.4470 0.7410],'linestyle','-');
-                else
-                    pG(:,:,1) = p(:,:,1)./sum(p(:,:,1:2),3);
-                    pG(:,:,2) = p(:,:,2)./sum(p(:,:,1:2),3);
-                    pGLas(:,:,1) = pLas(:,:,1)./sum(pLas(:,:,1:2),3);
-                    pGLas(:,:,2) = pLas(:,:,2)./sum(pLas(:,:,1:2),3);
-                    
-                    ZGO = log((1-p(:,:,3))./p(:,:,3));
-                    ZLRG = log(pG(:,:,1)./pG(:,:,2));
-                    
-                    ZGO_ciLOW = ZGO_ci(:,:,1);
-                    ZGO_ciHIGH = ZGO_ci(:,:,2);
-                    ZLRG_ciLOW = ZLRG_ci(:,:,1);
-                    ZLRG_ciHIGH = ZLRG_ci(:,:,2);
-                    
-                    ZGOLas = log((1-pLas(:,:,3))./pLas(:,:,3)); ZGOLas(isinf(ZGOLas))=NaN;
-                    ZRLGLas = log(pGLas(:,:,1)./pGLas(:,:,2)); ZRLGLas(isinf(ZRLGLas))=NaN;
-                    scatter(ZLRG(:),ZGO(:),50,'o','filled'); hold on;
-                    plot(ZLRG([1:4 8 7 6 5 9:12 16 15 14 13]),ZGO([1:4 8 7 6 5 9:12 16 15 14 13]),'k:');
-                    plot(ZLRG([1 5 9 13 14 10 6 2 3 7 11 15 16 12 8 4]),ZGO([1 5 9 13 14 10 6 2 3 7 11 15 16 12 8 4]),'k:');
-                    quiver(ZLRG(:),ZGO(:),ZRLGLas(:)-ZLRG(:),ZGOLas(:)-ZGO(:),0);
-                    
-                    l=line([ZLRG(:)'; ZLRG(:)'],[ZGO_ciLOW(:)';ZGO_ciHIGH(:)']); 
-                    set(l,'color',[0 0.4470 0.7410],'linestyle','-');
-                    l=line([ZLRG_ciLOW(:)';ZLRG_ciHIGH(:)'],[ZGO(:)'; ZGO(:)']); 
-                    set(l,'color',[0 0.4470 0.7410],'linestyle','-');
-                    
-                    axis equal;
-                end
+                    try
+                        ezplot('2*exp(x)=1+exp(x)+exp(y)');
+                        ezplot('2*exp(y)=1+exp(x)+exp(y)');
+                        ezplot('2=1+exp(x)+exp(y)');
+                    catch
+                        warning('error on ezplot of contours');
+                    end
+%                     l=line([ZR(:)'; ZR(:)'],[ZL_ciLOW(:)';ZL_ciHIGH(:)']); 
+%                     set(l,'color',[0 0.4470 0.7410],'linestyle','-');
+%                     l=line([ZR_ciLOW(:)';ZR_ciHIGH(:)'],[ZL(:)'; ZL(:)']); 
+%                     set(l,'color',[0 0.4470 0.7410],'linestyle','-');
+%                 else
+%                     pG(:,:,1) = p(:,:,1)./sum(p(:,:,1:2),3);
+%                     pG(:,:,2) = p(:,:,2)./sum(p(:,:,1:2),3);
+%                     pGLas(:,:,1) = pLas(:,:,1)./sum(pLas(:,:,1:2),3);
+%                     pGLas(:,:,2) = pLas(:,:,2)./sum(pLas(:,:,1:2),3);
+%                     
+%                     ZGO = log((1-p(:,:,3))./p(:,:,3));
+%                     ZLRG = log(pG(:,:,1)./pG(:,:,2));
+%                     
+%                     ZGO_ciLOW = ZGO_ci(:,:,1);
+%                     ZGO_ciHIGH = ZGO_ci(:,:,2);
+%                     ZLRG_ciLOW = ZLRG_ci(:,:,1);
+%                     ZLRG_ciHIGH = ZLRG_ci(:,:,2);
+%                     
+%                     ZGOLas = log((1-pLas(:,:,3))./pLas(:,:,3)); ZGOLas(isinf(ZGOLas))=NaN;
+%                     ZRLGLas = log(pGLas(:,:,1)./pGLas(:,:,2)); ZRLGLas(isinf(ZRLGLas))=NaN;
+%                     scatter(ZLRG(:),ZGO(:),50,'o','filled'); hold on;
+%                     plot(ZLRG([1:4 8 7 6 5 9:12 16 15 14 13]),ZGO([1:4 8 7 6 5 9:12 16 15 14 13]),'k:');
+%                     plot(ZLRG([1 5 9 13 14 10 6 2 3 7 11 15 16 12 8 4]),ZGO([1 5 9 13 14 10 6 2 3 7 11 15 16 12 8 4]),'k:');
+%                     quiver(ZLRG(:),ZGO(:),ZRLGLas(:)-ZLRG(:),ZGOLas(:)-ZGO(:),0);
+%                     
+%                     l=line([ZLRG(:)'; ZLRG(:)'],[ZGO_ciLOW(:)';ZGO_ciHIGH(:)']); 
+%                     set(l,'color',[0 0.4470 0.7410],'linestyle','-');
+%                     l=line([ZLRG_ciLOW(:)';ZLRG_ciHIGH(:)'],[ZGO(:)'; ZGO(:)']); 
+%                     set(l,'color',[0 0.4470 0.7410],'linestyle','-');
+%                     
+%                     axis equal;
+%                 end
                 axis equal;
                 xlabel(['empirical ' xlab]); ylabel(['empirical ' ylab]); title(areaList{area,1});
+                
+                %overlay black dot for random nonlaser behaviour
+                r = D.response(D.laserIdx==0);
+                r=sum([r==1 r==2 r==3],1)/length(r);
+                hold on;
+                h = plot(log(r(2)/r(3)),log(r(1)/r(3)),'k.');
+                hold off;
+                h.MarkerSize=30;
+                
                 
 %                 try
                     if cell2mat(strfind(varargin,'withField')) == 1
@@ -2572,32 +2703,47 @@ classdef omnibusLaserGLM
                     end
                     
                     h2(area)=subplot(2,size(areaList,1),area+size(areaList,1)); hold on;
-                    if obj.nestedModel_flag == 0
+%                     if obj.nestedModel_flag == 0
+                    try
                         ezplot('2*exp(x)=1+exp(x)+exp(y)');
                         ezplot('2*exp(y)=1+exp(x)+exp(y)');
                         ezplot('2=1+exp(x)+exp(y)');
+                    catch
+                        warning('error on ezplot of contours');
                     end
-                    pNL = median(obj.fitData.nonLaserParams{subj},1);
-                    pL = median(obj.fitData.params{subj}(laserIdxs,:),1);
+%                     end
+                    pNL = median(obj.fitData.params{subj},1);
+                    pL = median(obj.fitData.deltaParams{subj}(unique(obj.data{subj}.laserIdx(obj.data{subj}.areaIdx==laserIdxs)),:),1);
                     
                     for i = 1:length(cSet)
                         [cr,cl]=meshgrid(cSet{i});
                         cr = cr(:); cl = cl(:);
                         
-                        [ZLfcn,ZRfcn,LB] = obj.getModel(obj.fitData.nonLaserModel,obj.fitData.biasMode,subj);
-                        ZL = ZLfcn([],pNL,[cl cr]); %ZL = reshape(ZL,length(cVal),length(cVal));
-                        ZR = ZRfcn([],pNL,[cl cr]); %ZR = reshape(ZR,length(cVal),length(cVal));
                         
-                        [ZLfcn,ZRfcn] = obj.getModel(obj.fitData.laserModel,obj.fitData.biasMode,subj);
+                        p_nonLaser = obj.calculatePhat(obj.model.ZL,obj.model.ZR,[],pNL,[cl cr]);
+                        p_Laser = obj.calculatePhat(obj.model.deltaZL,obj.model.deltaZR,pNL,pL,[cl cr]);
                         
-%                         offset = repmat(pNL,length(cl),1);
-                        ZLLas = ZLfcn(pNL,pL,[cl cr]); %ZLLas = reshape(ZLLas,length(cVal),length(cVal));
-                        ZRLas = ZRfcn(pNL,pL,[cl cr]); %ZRLas = reshape(ZRLas,length(cVal),length(cVal));
+                        ZL = log(p_nonLaser(:,1)./p_nonLaser(:,3)); ZL = reshape(ZL,length(cVal),length(cVal));
+                        ZR = log(p_nonLaser(:,2)./p_nonLaser(:,3)); ZR = reshape(ZR,length(cVal),length(cVal));
                         
+                        ZLLas = log(p_Laser(:,1)./p_Laser(:,3)); ZLLas = reshape(ZLLas,length(cVal),length(cVal));
+                        ZRLas = log(p_Laser(:,2)./p_Laser(:,3)); ZRLas = reshape(ZRLas,length(cVal),length(cVal));
+%                         
+%                         
+%                         [ZLfcn,ZRfcn,LB] = obj.getModel(obj.fitData.nonLaserModel,obj.fitData.biasMode,subj);
+%                         ZL = ZLfcn([],pNL,[cl cr]); %ZL = reshape(ZL,length(cVal),length(cVal));
+%                         ZR = ZRfcn([],pNL,[cl cr]); %ZR = reshape(ZR,length(cVal),length(cVal));
+%                         
+%                         [ZLfcn,ZRfcn] = obj.getModel(obj.fitData.laserModel,obj.fitData.biasMode,subj);
+%                         
+% %                         offset = repmat(pNL,length(cl),1);
+%                         ZLLas = ZLfcn(pNL,pL,[cl cr]); %ZLLas = reshape(ZLLas,length(cVal),length(cVal));
+%                         ZRLas = ZRfcn(pNL,pL,[cl cr]); %ZRLas = reshape(ZRLas,length(cVal),length(cVal));
+%                         
                         if i ==1 
                             scatter(ZR(:),ZL(:),50,'o','filled');
-                            plot(ZR([1:4 8 7 6 5 9:12 16 15 14 13]),ZL([1:4 8 7 6 5 9:12 16 15 14 13]),'k:');
-                            plot(ZR([1 5 9 13 14 10 6 2 3 7 11 15 16 12 8 4]),ZL([1 5 9 13 14 10 6 2 3 7 11 15 16 12 8 4]),'k:');
+                            plot(ZR,ZL,'k:');
+                            plot(ZR',ZL','k:');
                             quiver(ZR(:),ZL(:),ZRLas(:)-ZR(:),ZLLas(:)-ZL(:),0);
                         else
                             quiver(ZR(:),ZL(:),ZRLas(:)-ZR(:),ZLLas(:)-ZL(:));
@@ -2858,6 +3004,44 @@ classdef omnibusLaserGLM
                 set(get(gcf,'children'),'box','off');
                 colormap(cmap);
 
+                fx1=figure('name',obj.names{n},'color','w');
+                for s=1:4
+                    %compute ZL and ZR
+                    z=[];
+                    for site = 1:(size(obj.inactivationCoords,1)+1)
+                        r = resp(laser==(site-1) & stim==s);
+                        r=sum([r==1 r==2 r==3],1)/length(r);
+                        
+                        z(site,1) = log(r(1)/r(3));
+                        z(site,2) = log(r(2)/r(3));
+                    end
+                    
+                    dz = bsxfun(@minus,z(2:end,:),z(1,:));
+                    for i = 1:2
+                        subplot(4,2,(s-1)*2 + i);
+                        hold on;
+                        imX=imagesc(linspace(-4.5,4.5,1000),linspace(3.75,-5.2,1000),img);
+                        set(gca,'ydir','normal');
+                        set(imX,'alphadata',0.7);
+                        h=scatter(ml,ap,200,dz(:,i),'s','filled'); axis equal;
+                        h.MarkerEdgeColor=[1 1 1]*0.95;
+                        %                         caxis([-1 1]*q);
+                        caxis([-1 1]*0.4);
+                        set(gca,'xtick','','ytick','','xcolor','w','ycolor','w');
+                        if s==1
+                            labels={'delta ZL','delta ZR'};
+                            title(labels{i});
+                        end
+                        
+                        if i==1
+                            set(gca,'ycolor','k'); ylabel(stim_labels{s});
+                        end
+                        
+                    end
+                    
+                    
+                end
+                colormap(cmap);
 %                 try
 %                     figure('name',obj.names{n},'color','w');
 %                     ezplot('y=x'); hold on;
@@ -3481,6 +3665,7 @@ classdef omnibusLaserGLM
             pR = exp(zr)./(1+exp(zl)+exp(zr));
             pNG = 1 - pL - pR;
             
+
             if obj.nestedModel_flag==1 %then ZL and ZR were actually ZGO/NG and ZL/R
                 zgo = zl;
                 zlr = zr;
@@ -3494,10 +3679,6 @@ classdef omnibusLaserGLM
             
             phat = [pL pR pNG];
             
-%             if any(~isreal(phat(:)))
-%                 warning('complex values, something is wrong');
-% %                 keyboard;
-%             end
         end
         
         function areaID = identifyArea(~,laserCoord)
@@ -3506,14 +3687,16 @@ classdef omnibusLaserGLM
             for t = 1:length(areaID)
                 pos = laserCoord(t,1:2);
                 
-                if pos(1) <= -2 && abs(pos(2))>1
+                if pos(1) <= -2 && abs(pos(2))>1 %vis
                     areaID(t) = (pos(2)<0)*1 + (pos(2)>0)*2;
-                elseif -1 <= pos(1) && pos(1) <= 1
+                elseif pos(1) == 0 && abs(pos(2)) > 1 %s1
                     areaID(t) = (pos(2)<0)*3 + (pos(2)>0)*4;
-                elseif 2 <= pos(1) && pos(1) <= 3
+                elseif 2 <= pos(1) && pos(1) <= 3 %m2
                     areaID(t) = (pos(2)<0)*5 + (pos(2)>0)*6;
+                elseif pos(1) <= -2 && abs(pos(2)) < 1 %retrosplenial
+                    areaID(t) = (pos(2)<0)*7 + (pos(2)>0)*8;
                 else
-                    areaID(t) = 7;
+                    areaID(t) = 9;
                 end
                 
                 if isnan(pos(1)) && isnan(pos(2))
