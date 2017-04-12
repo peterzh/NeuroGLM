@@ -1208,7 +1208,6 @@ classdef omnibusLaserGLM
             
             img=imread('D:\kirkcaldie_brain_BW_outline.png');
             numFolds = 20;
-            numFolds = 100;
 
             cv = cvpartition(obj.data{n}.sessionID,'KFold',numFolds);
             
@@ -1470,6 +1469,110 @@ classdef omnibusLaserGLM
 %             end
             
             %             end
+        end
+        
+        function crossval_compare2lasermodels(obj)
+            warning('unfinished');
+            %Go through each subject
+            baseModel = 'BO_NC50';
+            laserModels = {'bias+sens','bias+sens+^c50'};
+
+            img=imread('D:\kirkcaldie_brain_BW_outline.png');
+            numFolds = 20;
+            
+            nam = obj.names(1:end-1);
+            laserIdx=[1 2 5 6]; %vis and m2
+            
+            LOGLIK = nan(length(nam),length(laserIdx),length(laserModels));
+            
+
+            for n = 1:length(nam)
+                cv = cvpartition(obj.data{n}.sessionID,'KFold',numFolds);
+                p_hat = cell(numFolds,length(laserIdx),length(laserModels));
+                
+                for fold = 1:cv.NumTestSets
+                    trainC = obj.data{n}.stimulus(cv.training(fold),1:2);
+                    trainR = obj.data{n}.response(cv.training(fold));
+                    trainL = obj.data{n}.areaIdx(cv.training(fold));
+                    trainSID = obj.data{n}.sessionID(cv.training(fold));
+                    
+                    testC = obj.data{n}.stimulus(cv.test(fold),1:2);
+                    testR = obj.data{n}.response(cv.test(fold));
+                    testL = obj.data{n}.areaIdx(cv.test(fold));
+                    testSID = obj.data{n}.sessionID(cv.test(fold));
+                    
+                    nL = (trainL==999);
+                    sessions = unique(trainSID(nL));
+                    
+                    disp(baseModel);
+                    %FIT NONLASER PART OF TRAINING SET
+                    m = obj.getModel2(baseModel,'');
+                    p_nL = nan(length(sessions),length(m.pLabels));
+                    for s = 1:length(sessions)
+                        cont = trainC(nL & trainSID==sessions(s),:);
+                        resp = trainR(nL & trainSID==sessions(s));
+                        p_nL(s,:) = obj.util_optim(m.ZL,m.ZR,[],cont,resp,m.LB,m.UB);
+                        
+                        %Print loglik
+                        loglik=obj.calculateLogLik(p_nL(s,:),m.ZL,m.ZR,[],cont,resp)-obj.guess_bpt(n);
+                        disp(['Session ' num2str(s) ': ' num2str(loglik)]);
+                    end
+                    p_nL(:,m.LB==0 & m.UB==0) = p_nL(:,find(m.LB==0 & m.UB==0) - 1);
+                    
+                    for site=1:length(laserIdx)
+                        disp(['Site ' num2str(laserIdx(site))]);
+                        
+                        trainidx = (trainL==laserIdx(site));
+                        testidx = (testL==laserIdx(site));
+                        
+                        cont = trainC(trainidx,1:2);
+                        resp = trainR(trainidx);
+                        sid = trainSID(trainidx);
+                        offset = p_nL(sid,:);
+                        
+                        %fit non laser model onto laser trials
+                        m = obj.getModel2(baseModel,'');
+                        loglik=obj.calculateLogLik(zeros(1,length(m.pLabels)),m.deltaZL,m.deltaZR,offset,cont,resp)-obj.guess_bpt(n);
+                        disp(['    non-laser model : ' num2str(loglik)]);
+                               
+                        %Test set log lik on nonlaser model
+                        loglikNL=obj.calculateLogLik(zeros(1,length(m.pLabels)),m.deltaZL,m.deltaZR,p_nL(testSID(testidx),:),testC(testidx,:),testR(testidx));
+                        
+                        for lasermodel = 1:length(laserModels)
+                            m = obj.getModel2(baseModel,laserModels{lasermodel});
+
+                            LB = -inf(1,length(m.pLabels));
+                            UB = inf(1,length(m.pLabels));
+                            LB(~m.deltaP)=0;
+                            UB(~m.deltaP)=0;
+                            
+                            p = obj.util_optim(m.deltaZL,m.deltaZR,offset,cont,resp,LB,UB); %fit to training set
+                            ph = obj.calculatePhat(m.deltaZL,m.deltaZR,p_nL(testSID(testidx),:),p,testC(testidx,:));
+                            ph = ph(:,1).*(testR(testidx)==1) + ph(:,2).*(testR(testidx)==2) + ph(:,3).*(testR(testidx)==3);
+                            
+                            p_hat{fold,site,lasermodel} = ph;
+                            
+                            
+                            
+                        end
+                        
+                    end
+                end
+                
+                for site=1:length(laserIdx)
+                    for lm = 1:2
+                        
+                        LOGLIK(n,site,lm) = mean(log2(cat(1,p_hat{:,site,lm})));
+                    end
+                end
+            end
+            
+            %Average between areas
+            LOGLIK2=nan(length(nam),length(laserIdx)/2);
+            LOGLIK2(:,1) = mean(LOGLIK(:,1:2,2),2) - mean(LOGLIK(:,1:2,1),2)
+            LOGLIK2(:,2) = mean(LOGLIK(:,3:4,2),2) - mean(LOGLIK(:,3:4,1),2)
+            
+            keyboard;
         end
         
         function plotLaserCV(obj) %TO UPDATE

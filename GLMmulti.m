@@ -737,12 +737,12 @@ classdef GLMmulti
 %             %Get only most frequent stimulus types
 %             cVal = unique(unique(D.stimulus(idx,:)));
 %             
-            cVal = unique(unique(D.stimulus));
+            cVal = unique(unique(D.stimulus(:,1:2)));
             
             xlab = 'log(pR/pNG)';
             ylab = 'log(pL/pNG)';
             
-            figure('color','w');
+            figure('color','w','name',obj.names{subj});
             p=nan(length(cVal),length(cVal),3);
             C=nan(length(cVal),length(cVal),2);
             ZL_ci=nan(length(cVal),length(cVal),2);
@@ -788,15 +788,29 @@ classdef GLMmulti
 %             keyboard;
             plot(ZR(1),ZL(1),'o');
              hold on;
+             multiplier = 0.5;
             for cl = 1:length(cVal)
                 for cr = 1:length(cVal)
-                    cont = cVal([cl cr])/max(cVal);
+                    cont = log(1+cVal([cl cr])/max(cVal));
                     zr = ZR(cl,cr);
                     zl = ZL(cl,cr);
                     
                     if ~isnan(zr) && ~isnan(zl) && ~isinf(zr) && ~isinf(zl)
-                        r = fill([zr zr zr+0.1*cont(2) zr ],[zl+0.1 zl-0.1 zl zl+0.1],'r'); r.LineStyle='none';
-                        l = fill([zr zr zr-0.1*cont(1) zr ],[zl+0.1 zl-0.1 zl zl+0.1],'b'); l.LineStyle='none';
+                        
+                        th = linspace( pi/2, -pi/2, 100);
+                        R = multiplier * cont(2);  %or whatever radius you want
+                        x = R*cos(th) + zr;
+                        y = R*sin(th) + zl;
+                        
+                        r = fill(x,y,'r'); r.LineStyle='none';
+                        
+                        th = linspace( pi/2, 3*pi/2, 100);
+                        L = multiplier * cont(1);  %or whatever radius you want
+                        x = L*cos(th) + zr;
+                        y = L*sin(th) + zl;
+                        
+                        r = fill(x,y,'b'); r.LineStyle='none';
+
                     end
                 end
             end
@@ -814,6 +828,7 @@ classdef GLMmulti
                 ezplot('2*exp(x)=1+exp(x)+exp(y)');
                 ezplot('2*exp(y)=1+exp(x)+exp(y)');
                 ezplot('2=1+exp(x)+exp(y)');
+                title('');
             catch
                 warning('error on ezplot of contours');
             end
@@ -834,6 +849,7 @@ classdef GLMmulti
                 ezplot('2*exp(x)=1+exp(x)+exp(y)');
                 ezplot('2*exp(y)=1+exp(x)+exp(y)');
                 ezplot('2=1+exp(x)+exp(y)');
+                title('');
             catch
                 warning('error on ezplot of contours');
             end
@@ -854,16 +870,43 @@ classdef GLMmulti
 
             for cl = 1:length(cVal)
                 for cr = 1:length(cVal)
-                    cont = cVal([cl cr])/max(cVal);
+                    cont = log(1+cVal([cl cr])/max(cVal));
                     zr = ZR(cl,cr);
                     zl = ZL(cl,cr);
                     
                     if ~isnan(zr) && ~isnan(zl) && ~isinf(zr) && ~isinf(zl)
-                        r = fill([zr zr zr+0.1*cont(2) zr ],[zl+0.1 zl-0.1 zl zl+0.1],'r'); r.LineStyle='none';
-                        l = fill([zr zr zr-0.1*cont(1) zr ],[zl+0.1 zl-0.1 zl zl+0.1],'b'); l.LineStyle='none';
+                        
+                        th = linspace( pi/2, -pi/2, 100);
+                        R = multiplier * cont(2);  %or whatever radius you want
+                        x = R*cos(th) + zr;
+                        y = R*sin(th) + zl;
+                        
+                        r = fill(x,y,'r'); r.LineStyle='none';
+                        
+                        th = linspace( pi/2, 3*pi/2, 100);
+                        L = multiplier * cont(1);  %or whatever radius you want
+                        x = L*cos(th) + zr;
+                        y = L*sin(th) + zl;
+                        
+                        r = fill(x,y,'b'); r.LineStyle='none';
+                        
                     end
                 end
             end
+            
+            
+%             for cl = 1:length(cVal)
+%                 for cr = 1:length(cVal)
+%                     cont = cVal([cl cr])/max(cVal);
+%                     zr = ZR(cl,cr);
+%                     zl = ZL(cl,cr);
+%                     
+%                     if ~isnan(zr) && ~isnan(zl) && ~isinf(zr) && ~isinf(zl)
+%                         r = fill([zr zr zr+0.1*cont(2) zr ],[zl+0.1 zl-0.1 zl zl+0.1],'r'); r.LineStyle='none';
+%                         l = fill([zr zr zr-0.1*cont(1) zr ],[zl+0.1 zl-0.1 zl zl+0.1],'b'); l.LineStyle='none';
+%                     end
+%                 end
+%             end
             
             
             axis equal;
@@ -893,8 +936,8 @@ classdef GLMmulti
                             l = laserGLM(eRef);
                         end
                         
-                        %remove any sessions with performance < 75%
-                        if mean(g.data.feedbackType==1)<0.75
+                        %remove any sessions with performance < 60%
+                        if mean(g.data.feedbackType==1)<0.6
                             good(b)=0;
                         end
                         

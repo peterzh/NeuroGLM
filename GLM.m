@@ -232,6 +232,12 @@ classdef GLM
                     obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
                     obj.ZL = @(P,in)(P(2)*P(1) + P(2)*(in(:,1)-in(:,2)) );
                     obj.ZR = [];
+%                 case 'AFC_multimodalDiff'
+%                     obj.parameterLabels = {'OffsetV','OffsetA','ScaleV','ScaleA'};
+%                     obj.parameterBounds = [-inf -inf -inf -inf ;inf inf inf inf];
+%                     obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2) D.auditory_cond(:,1) D.auditory_cond(:,2)]);
+%                     obj.ZL = @(P,in)(P(1) + P(2)*(in(:,1)-in(:,2)) );
+%                     obj.ZR = [];
                 case 'C^N-subset-hist-response'
                     obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','HistL_L','HistR_L','HistNG_L','HistL_R','HistR_R','HistNG_R','N'};
                     obj.parameterBounds = [-inf(1,10) 0;
@@ -325,6 +331,16 @@ classdef GLM
             obj.lapseFlag=obj.ContrastDimensions;            
         end
         
+        function obj = removeRepeats(obj,varargin)
+            if nargin > 1
+                threshold = varargin{1};
+            else
+                threshold = 1;
+            end
+            
+            obj.data = obj.getrow(obj.data,obj.data.repeatNum<=threshold);
+        end
+        
         function obj = fit(obj)    
             %Non crossvalidated fitting
             
@@ -337,7 +353,8 @@ classdef GLM
             
             %Remove trials with repeats
 %             obj.data = obj.getrow(obj.data,obj.data.repeatNum==1);
-            options = optimoptions('fmincon','algorithm','interior-point','MaxFunEvals',100000,'MaxIter',10000);
+%             options = optimoptions('fmincon','algorithm','interior-point','MaxFunEvals',100000,'MaxIter',10000);
+            options = optimset('algorithm','interior-point','MaxFunEvals',100000,'MaxIter',10000);
             
             responses = obj.data.response;
             
@@ -545,7 +562,7 @@ classdef GLM
                         axis square;
 %                         set(gca,'XTick','','YTick',0:0.1:0.5);
                         if i > 1
-                            set(gca,'XTick','','ytick','');
+                            set(gca,'XTick',[],'ytick',[]);
                         end
                         
                         if i == 1
@@ -731,7 +748,7 @@ classdef GLM
                             
                             
                             if i > 1
-                                set(gca,'XTick','','ytick','');
+                                set(gca,'XTick',[],'ytick',[]);
                             end
                             
                             if i == 1
