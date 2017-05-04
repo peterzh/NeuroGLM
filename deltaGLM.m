@@ -27,12 +27,14 @@ classdef deltaGLM
                 d = d.(names{n});
                 
                 D = struct;
-                D.stimulus = d.contrast';
-                D.response = d.resp';
-                D.repeatNum = d.repeatNum';
-                D.RT = d.rt';
-                D.adapterContrast = d.adapterContrast';
-                D.adapterOrientation = d.orientation';
+                D.stimulus = d.stimulus;
+                D.stimulusOrientation = d.testOrient;
+                D.response = d.response;
+                D.repeatNum = d.repeatNum;
+%                 D.RT = d.rt';
+                D.adapterContrast = d.adapterContrast;
+                D.adapterOrientation = d.adapterOrient;
+                D.adapterCongruence = D.adapterOrientation - D.stimulusOrientation;
                 
                 %If response is in [-1 0 1], convert to [1 3 2]
                 if min(D.response)==-1
@@ -198,10 +200,10 @@ classdef deltaGLM
                 LB(~obj.model.deltaP)=0;
                 UB(~obj.model.deltaP)=0;
                 
-                orientation = unique(obj.data{n}.adapterOrientation);
+                congruence = unique(obj.data{n}.adapterCongruence);
                 p_L = [];
-                for o = 1:length(orientation)
-                    idx = obj.data{n}.adapterContrast==1 & obj.data{n}.adapterOrientation==orientation(o);
+                for o = 1:length(congruence)
+                    idx = obj.data{n}.adapterContrast==1 & obj.data{n}.adapterCongruence==congruence(o);
                     cont = obj.data{n}.stimulus(idx,:);
                     resp = obj.data{n}.response(idx);
                     offset = p_nL;
@@ -209,7 +211,7 @@ classdef deltaGLM
                 end
                 
                 obj.fitData.deltaParams{n} = p_L;
-                obj.fitData.deltaCondition{n} = {'adapterOrientation',orientation};
+                obj.fitData.deltaCondition{n} = {'adapterCongruence',congruence};
                 
             end
 
@@ -224,18 +226,21 @@ classdef deltaGLM
             pModel{1} = obj.getModel(baseModel,pmodel_unrestricted);
             pModel{2} = obj.getModel(baseModel,pmodel_restricted);
             
-
+            
+            numSubjects = length(obj.names);
+            for n = 1:numSubjects
+                disp(obj.names{n});
                 %First fit base non-perturbation portion of the data
                 
                 %Manual optim method per-session
-                nL = obj.data.adapterContrast==0.05;
-
-                    cont = obj.data.stimulus(nL,:);
-                    resp = obj.data.response(nL);
-                    
-                    p_nL = obj.util_optim(base.ZL,base.ZR,[],cont,resp,base.LB,base.UB);
-
-
+                nL = obj.data{n}.adapterContrast==0.05;
+                
+                cont = obj.data{n}.stimulus(nL,:);
+                resp = obj.data{n}.response(nL);
+                
+                p_nL = obj.util_optim(base.ZL,base.ZR,[],cont,resp,base.LB,base.UB);
+                
+                
                 %If the base model does not fit shape params on each
                 %side, make sure to copy the parameter used for each side
                 p_nL(base.LB==0 & base.UB==0) = p_nL(find(base.LB==0 & base.UB==0) - 1);
@@ -244,13 +249,13 @@ classdef deltaGLM
                 %Then go through each perturbation condition and fit
                 %extended models
                 
-                cond = obj.fitData.deltaCondition{2};
+                cond = obj.fitData.deltaCondition{n}{2};
                 
                 for o = 1:length(cond)
-                    L_idx = obj.data.adapterContrast==1 & obj.data.(obj.fitData.deltaCondition{1}) == cond(o);
+                    L_idx = obj.data{n}.adapterContrast==1 & obj.data{n}.(obj.fitData.deltaCondition{n}{1}) == cond(o);
                     
-                    cont = obj.data.stimulus(L_idx,:);
-                    resp = obj.data.response(L_idx);
+                    cont = obj.data{n}.stimulus(L_idx,:);
+                    resp = obj.data{n}.response(L_idx);
                     offset = repmat(p_nL,length(resp),1);
                     
                     loglik=[];
@@ -267,24 +272,26 @@ classdef deltaGLM
                         loglik(id) = sum(log(p));
                     end
                     
-                        dof = sum(pModel{1}.deltaP) - sum(pModel{2}.deltaP);
-                        if dof < 0
-                            error('Badly ordered arguments. First: unrestricted model, second: restricted model');
-                        end
-                        
-                        [h,pValue,stat,cValue] = lratiotest(loglik(1),loglik(2),dof,0.05);
-                        if pValue > 0.05
-                            symbol = '';
-                        elseif pValue < 0.001
-                            symbol = '***';
-                        elseif pValue < 0.01
-                            symbol = '**';
-                        elseif pValue < 0.05
-                            symbol = '*';
-                        end
-                        disp([obj.fitData.deltaCondition{1} ' = ' num2str(cond(o)) ' ' symbol]);
+                    dof = sum(pModel{1}.deltaP) - sum(pModel{2}.deltaP);
+                    if dof < 0
+                        error('Badly ordered arguments. First: unrestricted model, second: restricted model');
+                    end
                     
+                    [h,pValue,stat,cValue] = lratiotest(loglik(1),loglik(2),dof,0.05);
+                    if pValue > 0.05
+                        symbol = '';
+                    elseif pValue < 0.001
+                        symbol = '***';
+                    elseif pValue < 0.01
+                        symbol = '**';
+                    elseif pValue < 0.05
+                        symbol = '*';
+                    end
+                    disp([obj.fitData.deltaCondition{n}{1} ' = ' num2str(cond(o)) '. LogLiks:[' num2str(loglik(1)) ',' num2str(loglik(2)) '] ' symbol]);
                 end
+                
+                disp(' ');
+            end
       
             
             
