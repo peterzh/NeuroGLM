@@ -155,8 +155,8 @@ classdef GLM
                         +inf +inf +inf +inf 3 0.8];
                     
                     obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
-                    obj.ZL = @(P,in)(P(1) + P(2).*(in(:,1).^P(5))./(in(:,1).^P(5) + P(6)^P(5)));
-                    obj.ZR = @(P,in)(P(3) + P(4).*(in(:,2).^P(5))./(in(:,2).^P(5) + P(6)^P(5)));
+                    obj.ZL = @(P,in)(P(1) + P(2).*(in(:,1).^P(5))./(in(:,1).^P(5) + P(6)^P(5)) );
+                    obj.ZR = @(P,in)(P(3) + P(4).*(in(:,2).^P(5))./(in(:,2).^P(5) + P(6)^P(5)) );
                 case 'C50-subset-biasAsContrast'
                     obj.parameterLabels = {'Bias_L','ScaleL_L','Bias_R','ScaleR_R','N','C50'};
                     obj.parameterBounds = [-inf -inf -inf -inf 0 0.001;
@@ -281,6 +281,14 @@ classdef GLM
                     obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
                     obj.ZL = @(P,in)( P(1) + P(2).*in(:,1).^P(4) + P(3).*in(:,2).^P(4)  );
                     obj.parameterStart = [0 0 0 0.1];
+                 
+                case 'C50-subset-2AFC'
+                    obj.parameterLabels = {'Offset','ScaleL','ScaleR','N','C50'};
+                    obj.parameterBounds = [-inf -inf -inf 0 0.01;
+                        +inf +inf +inf 3 8];
+                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
+                    obj.ZL = @(P,in)( P(1) + P(2).*(in(:,1).^P(4))./(in(:,1).^P(4) + P(5)^P(4)) + P(3).*(in(:,2).^P(4))./(in(:,2).^P(4) + P(5)^P(4))  );
+                    obj.parameterStart = [0 0 0 0.1 0.1];
                     
                 case 'C^N-subset-Qlearning-2AFC'
                     obj.parameterLabels = {'OffsetL-R','ScaleL-R','QL-R'};

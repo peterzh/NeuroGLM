@@ -1,7 +1,7 @@
 function varargout = getSpikingData(name,varargin)
 
 switch(name)
-    case 'nick laveran'
+    case 'nick'
         dirs={'\\basket.cortexlab.net\data\nick\M150218_NS1LAV\20150529\cw_1','Laveran Left PPC 1';
             '\\basket.cortexlab.net\data\nick\M150218_NS1LAV\20150530\cw_1','Laveran Left Cingulate 1';
             '\\basket.cortexlab.net\data\nick\M150218_NS1LAV\20150601\cw_1','Laveran Right Cingulate 1';
@@ -57,6 +57,46 @@ switch(name)
         
         otherInfo = {dirs{id,2}};
         
+    case 'nick neuropixels'
+        %Not manually spike sorted
+        mice={'Cori', 'Radnitz', 'Muller'};
+        
+        for m = 1:length(mice)
+            dat = ['\\zserver.cortexlab.net\Data\Subjects\' mice{m}];
+            
+            folders = dir(dat); folders(1:2)=[];
+            folders([folders.isdir]==0)=[];
+            folders = {folders.name};
+            
+            for f = 1:length(folders)
+                dat2 = dir([dat '\' folders{f}]);
+                
+                if any(strcmp({dat2.name},'activeData.mat'))
+                   
+                    act = load([dat '\' folders{f} '\activeData.mat']);
+                    
+                    behav = struct;
+                    behav.contrast_cond = [act.cweA.contrastLeft act.cweA.contrastRight];
+                    behav.response = act.cweA.choice;
+                    behav.repeatNum = act.cweA.repNum;
+                    behav.feedbackType = act.cweA.feedback;
+                    
+                    behavT = struct;
+                    behavT.timestamps = {'stimOn','goCue','moveStart','responseTime'};
+                    behavT.stimOn = act.cwtA.stimOn;
+                    behavT.goCue = act.cwtA.goCue;
+                    behavT.moveStart = act.cwtA.moveStart;
+                    behavT.responseTime = act.cwtA.responseTime;
+        
+                    
+                    %Now add spiking data
+                    keyboard;
+                    
+                end
+            end
+        end
+
+                
     case 'armin mPFC'
         
     case 'sylvia sc'
@@ -171,7 +211,7 @@ switch(name)
 
         numTrials = length(behav.response);
         %Add timestamp information
-        b=dat.loadBlock(info{id,1});
+        b = dat.loadBlock(info{id,1});
         behavT = struct;
         behavT.timestamps = {'onsetToneSoundPlayedTime','stimOnset','responseMade'};
         

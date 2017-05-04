@@ -6,7 +6,9 @@ classdef omnibusLaserGLM
         inactivationCoords;
         data;
         model;
+        lambda;
         fitData;
+        cvData;
         guess_bpt = [];
     end
     
@@ -45,7 +47,7 @@ classdef omnibusLaserGLM
                         L=load(dat.expFilePath(eRef, 'laserManip', 'm'));
                         L.laserCoordByTrial;
                     catch
-                        getLaserLabels(inputData);
+                        getLaserLabels(eRef);
                         L=load(dat.expFilePath(inputData, 'laserManip', 'm'));
                         L.laserCoordByTrial; %Test if this variable exists, that's all...
                     end
@@ -152,6 +154,7 @@ classdef omnibusLaserGLM
 %                 obj.cfn_parameters{n} = g.parameterFits(5:6);
 %             end
 %             obj.plotExptSummary;
+
         end
         
         function plotExptSummary(obj)
@@ -291,7 +294,7 @@ classdef omnibusLaserGLM
             end
             
             if isempty(deltaStr)
-                m.deltaP = ones(1,length(m.pLabels));
+                m.deltaP = zeros(1,length(m.pLabels));
             else
                 m.deltaP = zeros(1,length(m.pLabels));
 
@@ -325,383 +328,13 @@ classdef omnibusLaserGLM
                 end
             end
         end
-        
-        function [ZL,ZR,LB,UB,pLabels] = getModel(obj,model,biasMode,subj)
-%             cfn = @(c)(obj.cfn(c,subj));
-            cfn = @(c,n,c50) ( (c.^n)./(c50.^n + c.^n) );
-            
-%             histfcn = @(r,side)( (r==side)*1 - (r==3) );
-            
-            LB=[]; UB=[];
-%             model = struct;
-            switch(biasMode)
-                case 'biasAsOffset'
-                    switch(model)
-                        
-%                         BASE non-laser models
-                        case 'base' %C50 and N shared
-                            ZL = @(p_offset,p,c)( p(1) + 10*p(3).*cfn(c(:,1),p(5),p(7))  );
-                            ZR = @(p_offset,p,c)( p(2) + 10*p(4).*cfn(c(:,2),p(5),p(7))  );
-                            LB = [-inf -inf 0 0 0.3 0 0.001 0]; %only used when doing non-laser fit
-                            UB = [+inf +inf +inf +inf 20 0 3 0]; %only used when doing non-laser fit
-                            pLabels = {'oL','oR','sL','sR','n','n','c50','c50'};
-                            
-                          case 'offsetOnly'
-                            ZL = @(p_offset,p,c)( p_offset(:,1) + 10*p_offset(:,3).*cfn(c(:,1),p_offset(:,5),p_offset(:,7))  );
-                            ZR = @(p_offset,p,c)( p_offset(:,2) + 10*p_offset(:,4).*cfn(c(:,2),p_offset(:,6),p_offset(:,8))  );
-                            
-                        case 'bias'
-                            ZL = @(p_offset,p,c)( p_offset(:,1) + p(1) + 10*(p_offset(:,3)).*cfn(c(:,1),p_offset(:,5),p_offset(:,7)) );
-                            ZR = @(p_offset,p,c)( p_offset(:,2) + p(2) + 10*(p_offset(:,4)).*cfn(c(:,2),p_offset(:,6),p_offset(:,8)) );
-                            LB = [1 1 0 0 0 0 0 0];
-                            
-                        case 'sub_sens_M'
-                            ZL = @(p_offset,p,c)( p_offset(:,1) + 10*(p_offset(:,3)*2^p(3)).*cfn(c(:,1),p_offset(:,5),p_offset(:,7))  );
-                            ZR = @(p_offset,p,c)( p_offset(:,2) + 10*(p_offset(:,4)*2^p(4)).*cfn(c(:,2),p_offset(:,6),p_offset(:,8))  );
-                            LB = [0 0 1 1 0 0 0 0];
-                            
-                        case 'sub_sens'
-                            ZL = @(p_offset,p,c)( p_offset(:,1) + 10*(p_offset(:,3) + p(3)).*cfn(c(:,1),p_offset(:,5),p_offset(:,7))  );
-                            ZR = @(p_offset,p,c)( p_offset(:,2) + 10*(p_offset(:,4) + p(4)).*cfn(c(:,2),p_offset(:,6),p_offset(:,8))  );
-                            LB = [0 0 1 1 0 0 0 0];
-                            
-                        case 'n'
-                            ZL = @(p_offset,p,c)( p_offset(:,1) + 10*p_offset(:,3).*cfn(c(:,1),p_offset(:,5)+p(5),p_offset(:,7))  );
-                            ZR = @(p_offset,p,c)( p_offset(:,2) + 10*p_offset(:,4).*cfn(c(:,2),p_offset(:,6)+p(6),p_offset(:,8))  );
-                            LB = [0 0 0 0 1 1 0 0];
-                            
-                        case 'c50'
-                            ZL = @(p_offset,p,c)( p_offset(:,1) + 10*p_offset(:,3).*cfn(c(:,1),p_offset(:,5),p_offset(:,7)+p(7))  );
-                            ZR = @(p_offset,p,c)( p_offset(:,2) + 10*p_offset(:,4).*cfn(c(:,2),p_offset(:,6),p_offset(:,8)+p(8))  );
-                            LB = [0 0 0 0 0 0 1 1];
-                            
-                        case 'n+c50'
-                            ZL = @(p_offset,p,c)( p_offset(:,1) + 10*p_offset(:,3).*cfn(c(:,1),p_offset(:,5)+p(5),p_offset(:,7)+p(7))  );
-                            ZR = @(p_offset,p,c)( p_offset(:,2) + 10*p_offset(:,4).*cfn(c(:,2),p_offset(:,6)+p(6),p_offset(:,8)+p(8))  );
-                            LB = [0 0 0 0 1 1 1 1];
 
-                        case 'bias+sub_sens_M'
-                            ZL = @(p_offset,p,c)( p_offset(:,1) + p(1) + 10*(p_offset(:,3)*2^p(3)).*cfn(c(:,1),p_offset(:,5),p_offset(:,7))  );
-                            ZR = @(p_offset,p,c)( p_offset(:,2) + p(2) + 10*(p_offset(:,4)*2^p(4)).*cfn(c(:,2),p_offset(:,6),p_offset(:,8))  );
-                            LB = [1 1 1 1 0 0 0 0];                            
-                            
-                        case 'bias+sub_sens'
-                            ZL = @(p_offset,p,c)( p_offset(:,1) + p(1) + 10*(p_offset(:,3) + p(3)).*cfn(c(:,1),p_offset(:,5),p_offset(:,7))  );
-                            ZR = @(p_offset,p,c)( p_offset(:,2) + p(2) + 10*(p_offset(:,4) + p(4)).*cfn(c(:,2),p_offset(:,6),p_offset(:,8))  );
-                            LB = [1 1 1 1 0 0 0 0];
-                            
-                        case 'bias+n'
-                            ZL = @(p_offset,p,c)( p_offset(:,1) + p(1) + 10*p_offset(:,3).*cfn(c(:,1),p_offset(:,5)+p(5),p_offset(:,7))  );
-                            ZR = @(p_offset,p,c)( p_offset(:,2) + p(2) + 10*p_offset(:,4).*cfn(c(:,2),p_offset(:,6)+p(6),p_offset(:,8))  );
-                            LB = [1 1 0 0 1 1 0 0];
-                        case 'bias+c50_M'
-                            ZL = @(p_offset,p,c)( p_offset(:,1) + p(1) + 10*p_offset(:,3).*cfn(c(:,1),p_offset(:,5),p_offset(:,7)*2^p(7))  );
-                            ZR = @(p_offset,p,c)( p_offset(:,2) + p(2) + 10*p_offset(:,4).*cfn(c(:,2),p_offset(:,6),p_offset(:,8)*2^p(8))  ); 
-                            LB = [1 1 0 0 0 0 1 1];                            
-                        case 'bias+c50'
-                            ZL = @(p_offset,p,c)( p_offset(:,1) + p(1) + 10*p_offset(:,3).*cfn(c(:,1),p_offset(:,5),p_offset(:,7)+p(7))  );
-                            ZR = @(p_offset,p,c)( p_offset(:,2) + p(2) + 10*p_offset(:,4).*cfn(c(:,2),p_offset(:,6),p_offset(:,8)+p(8))  ); 
-                            LB = [1 1 0 0 0 0 1 1];
-                            
-                        case 'bias+n+c50'
-                            ZL = @(p_offset,p,c)( p_offset(:,1) + p(1) + 10*p_offset(:,3).*cfn(c(:,1),p_offset(:,5)+p(5),p_offset(:,7)+p(7))  );
-                            ZR = @(p_offset,p,c)( p_offset(:,2) + p(2) + 10*p_offset(:,4).*cfn(c(:,2),p_offset(:,6)+p(6),p_offset(:,8)+p(8))  );           
-                            LB = [1 1 0 0 1 1 1 1];
-                            
-                        case 'bias+sub_sens+n'
-                            ZL = @(p_offset,p,c)( p_offset(:,1) + p(1) + 10*(p_offset(:,3) + p(3)).*cfn(c(:,1),p_offset(:,5)+p(5),p_offset(:,7))  );
-                            ZR = @(p_offset,p,c)( p_offset(:,2) + p(2) + 10*(p_offset(:,4) + p(4)).*cfn(c(:,2),p_offset(:,6)+p(6),p_offset(:,8))  );
-                            LB = [1 1 1 1 1 1 0 0];
-                            
-                        case 'bias+sub_sens+c50_M' %MULTIPLICATIVE S and C50 effects
-                            ZL = @(p_offset,p,c)( p_offset(:,1) + p(1) + 10*(p_offset(:,3)*2^p(3)).*cfn(c(:,1),p_offset(:,5),p_offset(:,7)*2^p(7))  );
-                            ZR = @(p_offset,p,c)( p_offset(:,2) + p(2) + 10*(p_offset(:,4)*2^p(4)).*cfn(c(:,2),p_offset(:,6),p_offset(:,8)*2^p(8))  );
-                            LB = [1 1 1 1 0 0 1 1];
-                            
-                        case 'bias+sub_sens+n+c50_M' %MULTIPLICATIVE S and C50 effects
-                            ZL = @(p_offset,p,c)( p_offset(:,1) + p(1) + 10*(p_offset(:,3)*2^p(3)).*cfn(c(:,1),p_offset(:,5)*2^p(5),p_offset(:,7)*2^p(7))  );
-                            ZR = @(p_offset,p,c)( p_offset(:,2) + p(2) + 10*(p_offset(:,4)*2^p(4)).*cfn(c(:,2),p_offset(:,6)*2^p(6),p_offset(:,8)*2^p(8))  );
-                            LB = [1 1 1 1 1 1 1 1];   
-%                         case 'bias+sub_sens+c50'
-%                             ZL = @(p_offset,p,c)( p_offset(:,1) + p(1) + 10*(p_offset(:,3) + p(3)).*cfn(c(:,1),p_offset(:,5),p_offset(:,7)+p(7))  );
-%                             ZR = @(p_offset,p,c)( p_offset(:,2) + p(2) + 10*(p_offset(:,4) + p(4)).*cfn(c(:,2),p_offset(:,6),p_offset(:,8)+p(8))  );
-%                             LB = [1 1 1 1 0 0 1 1];
-%                             
-                            
-                        case 'bias+sub_sens+n+c50'
-                            ZL = @(p_offset,p,c)( p_offset(:,1) + p(1) + 10*(p_offset(:,3) + p(3)).*cfn(c(:,1),p_offset(:,5)+p(5),p_offset(:,7)+p(7))  );
-                            ZR = @(p_offset,p,c)( p_offset(:,2) + p(2) + 10*(p_offset(:,4) + p(4)).*cfn(c(:,2),p_offset(:,6)+p(6),p_offset(:,8)+p(8))  );                     
-                            LB = [1 1 1 1 1 1 1 1];
-                            
-                            
-                        case 'BO_C^N'
-                            m.cfn = @(c,n)(c.^n);
-                            m.ZL = @(p_offset,p,c)( p(1) + 10*p(3).*m.cfn(c(:,1),p(5)) );
-                            m.ZR = @(p_offset,p,c)( p(2) + 10*p(4).*m.cfn(c(:,2),p(5)) );
-                            m.LB = [-inf -inf 0 0 0 0]; %only used when doing non-laser fit
-                            m.UB = [+inf +inf +inf +inf 1 0]; %only used when doing non-laser fit
-                            m.pLabels = {'oL','oR','sL','sR','nL','nR'};
-                            
-                            m.deltaZL = @(p_offset,p,c)( p_offset(:,1) + p(1) + 10*(p_offset(:,3)*2^p(3)).*m.cfn(c(:,1),p_offset(:,5)*2^p(5)) );
-                            m.deltaZR = @(p_offset,p,c)( p_offset(:,2) + p(2) + 10*(p_offset(:,4)*2^p(4)).*m.cfn(c(:,2),p_offset(:,6)*2^p(6))  );
-                            
-                        case 'BC_C^N'
-                            m.cfn = @(c,n)(c.^n);
-                            m.ZL = @(p_offset,p,c)( 10*p(3).*(m.cfn(c(:,1),p(5)) + p(1)) );
-                            m.ZR = @(p_offset,p,c)( 10*p(4).*(m.cfn(c(:,2),p(5)) + p(2)) );
-                            m.LB = [-inf -inf 0 0 0 0]; %only used when doing non-laser fit
-                            m.UB = [+inf +inf +inf +inf 1 0]; %only used when doing non-laser fit
-                            m.pLabels = {'bL','bR','sL','sR','nL','nR'};
-                            
-                            m.deltaZL = @(p_offset,p,c)( 10*(p_offset(:,3)*2^p(3)).*(m.cfn(c(:,1),p_offset(:,5)*2^p(5)) + p_offset(:,1) + p(1)) );
-                            m.deltaZR = @(p_offset,p,c)( 10*(p_offset(:,4)*2^p(4)).*(m.cfn(c(:,2),p_offset(:,6)*2^p(6)) + p_offset(:,2) + p(2)) );
-
-                        case 'BO_C50'
-                            m.cfn = @(c,n,c50)((c.^n)./(c.^n + c50.^n));
-                            m.ZL = @(p_offset,p,c)( p(1) + 10*p(3).*m.cfn(c(:,1),p(5),p(7)) );
-                            m.ZR = @(p_offset,p,c)( p(2) + 10*p(4).*m.cfn(c(:,2),p(5),p(7)) );
-                            m.LB = [-inf -inf 0 0 0.3 0 0.001 0]; %only used when doing non-laser fit
-                            m.UB = [+inf +inf +inf +inf 20 0 3 0]; %only used when doing non-laser fit
-                            m.pLabels = {'oL','oR','sL','sR','nL','nR','c50L','c50R'};
-                            
-                            m.deltaZL = @(p_offset,p,c)( p_offset(:,1) + p(1) + 10*(p_offset(:,3)*2^p(3)).*m.cfn(c(:,1),p_offset(:,5)*2^p(5),p_offset(:,7)*2^p(7)) );
-                            m.deltaZR = @(p_offset,p,c)( p_offset(:,2) + p(2) + 10*(p_offset(:,4)*2^p(4)).*m.cfn(c(:,2),p_offset(:,6)*2^p(6),p_offset(:,8)*2^p(8))  );
-                            
-                        case 'BC_C50'
-                            m.cfn = @(c,n,c50)((c.^n)./(c.^n + c50.^n));
-                            m.ZL = @(p_offset,p,c)( 10*p(3).*(m.cfn(c(:,1),p(5)) + p(1)) );
-                            m.ZR = @(p_offset,p,c)( 10*p(4).*(m.cfn(c(:,2),p(5)) + p(2)) );
-                            m.LB = [-inf -inf 0 0 0 0]; %only used when doing non-laser fit
-                            m.UB = [+inf +inf +inf +inf 1 0]; %only used when doing non-laser fit
-                            m.pLabels = {'bL','bR','sL','sR','nL','nR','c50L','c50R'};
-                            
-                            m.deltaZL = @(p_offset,p,c)( 10*(p_offset(:,3)*2^p(3)).*(m.cfn(c(:,1),p_offset(:,5)*2^p(5),p_offset(:,7)*2^p(7)) + p_offset(:,1) + p(1)) );
-                            m.deltaZR = @(p_offset,p,c)( 10*(p_offset(:,4)*2^p(4)).*(m.cfn(c(:,2),p_offset(:,6)*2^p(6),p_offset(:,8)*2^p(8)) + p_offset(:,2) + p(2)) );
-                            
-                         %C^N MODELS
-                            
-%                          case 'base_n'
-%                             ZL = @(p_offset,p,c)( p(1) + 10*p(3).*c(:,1).^p(5) );
-%                             ZR = @(p_offset,p,c)( p(2) + 10*p(4).*c(:,2).^p(5) );
-%                             LB = [-inf -inf 0 0 0 0]; %only used when doing non-laser fit
-%                             UB = [+inf +inf +inf +inf 1 0]; %only used when doing non-laser fit
-%                             pLabels = {'oL','oR','sL','sR','n','n'};
-%                          
-%                         case 'offsetOnly'
-%                             ZL = @(p_offset,p,c)( p_offset(:,1) + 10*(p_offset(:,3)).*c(:,1).^(p_offset(:,5))  );
-%                             ZR = @(p_offset,p,c)( p_offset(:,2) + 10*(p_offset(:,4)).*c(:,2).^(p_offset(:,6))  );
-%                             LB = [0 0 0 0 0 0];   
-%                             
-%                         case 'bias+sub_sens+C^N_M'
-%                             ZL = @(p_offset,p,c)( p_offset(:,1) + p(1) + 10*(p_offset(:,3)*2^p(3)).*c(:,1).^(p_offset(:,5)*2^p(5))  );
-%                             ZR = @(p_offset,p,c)( p_offset(:,2) + p(2) + 10*(p_offset(:,4)*2^p(4)).*c(:,2).^(p_offset(:,6)*2^p(6))  );
-%                             LB = [1 1 1 1 1 1];   
-%                             
-%                         case 'bias'
-%                             ZL = @(p_offset,p,c)( p_offset(:,1) + p(1) + 10*(p_offset(:,3)).*c(:,1).^(p_offset(:,5))  );
-%                             ZR = @(p_offset,p,c)( p_offset(:,2) + p(2) + 10*(p_offset(:,4)).*c(:,2).^(p_offset(:,6))  );
-%                             LB = [1 1 0 0 0 0]; 
-%                             
-%                         case 'sub_sens_M'
-%                             ZL = @(p_offset,p,c)( p_offset(:,1) + 10*(p_offset(:,3)*2^p(3)).*c(:,1).^(p_offset(:,5))  );
-%                             ZR = @(p_offset,p,c)( p_offset(:,2) + 10*(p_offset(:,4)*2^p(4)).*c(:,2).^(p_offset(:,6))  );
-%                             LB = [0 0 1 1 0 0];   
-%                             
-%                         case 'C^N_M'
-%                             ZL = @(p_offset,p,c)( p_offset(:,1) + 10*(p_offset(:,3)).*c(:,1).^(p_offset(:,5)*2^p(5))  );
-%                             ZR = @(p_offset,p,c)( p_offset(:,2) + 10*(p_offset(:,4)).*c(:,2).^(p_offset(:,6)*2^p(6))  );
-%                             LB = [0 0 0 0 1 1];
-%                         
-%                         case 'bias+sub_sens_M'
-%                             ZL = @(p_offset,p,c)( p_offset(:,1) + p(1) + 10*(p_offset(:,3)*2^p(3)).*c(:,1).^(p_offset(:,5))  );
-%                             ZR = @(p_offset,p,c)( p_offset(:,2) + p(2) + 10*(p_offset(:,4)*2^p(4)).*c(:,2).^(p_offset(:,6))  );
-%                             LB = [1 1 1 1 0 0];  
-%                             
-%                         case 'bias+C^N_M'
-%                             ZL = @(p_offset,p,c)( p_offset(:,1) + p(1) + 10*(p_offset(:,3)).*c(:,1).^(p_offset(:,5)*2^p(5))  );
-%                             ZR = @(p_offset,p,c)( p_offset(:,2) + p(2) + 10*(p_offset(:,4)).*c(:,2).^(p_offset(:,6)*2^p(6))  );
-%                             LB = [1 1 0 0 1 1];   
-                             
-                    end
-                    
-                    
-                case 'biasAsContrast'
-                    switch(model)
-                        %                         case 'offsetOnly'
-                        %                             ZL = @(p_offset,p,c)( p_offset(:,3).*(cfn(c(:,1)) + p_offset(:,1)) );
-                        %                             ZR = @(p_offset,p,c)( p_offset(:,4).*(cfn(c(:,2)) + p_offset(:,2)) );
-                        %                             numP = NaN;
-                        %                         case 'bias'
-                        %                             ZL = @(p_offset,p,c)( ( p_offset(:,3) ).*(cfn(c(:,1)) + p_offset(:,1) + p(1)) );
-                        %                             ZR = @(p_offset,p,c)( ( p_offset(:,4) ).*(cfn(c(:,2)) + p_offset(:,2) + p(2)) );
-                        %                             numP = 4;
-                        %                         case 'sub_sens'
-                        %                             ZL = @(p_offset,p,c)( ( p_offset(:,3) + p(3) ).*(cfn(c(:,1)) + p_offset(:,1) ) );
-                        %                             ZR = @(p_offset,p,c)( ( p_offset(:,4) + p(4) ).*(cfn(c(:,2)) + p_offset(:,2) ) );
-                        %                             numP = 4;
-                        
-                        %                         case 'bias+sub_sens'
-                        %                             ZL = @(p_offset,p,c)( (p_offset(:,3) + p(3)).*(cfn(c(:,1)) + p_offset(:,1) + p(1)) );
-                        %                             ZR = @(p_offset,p,c)( (p_offset(:,4) + p(4)).*(cfn(c(:,2)) + p_offset(:,2) + p(2)) );
-                        %                             numP = 4;
-                        
-%                         BASE non-laser models
-                        case 'base' %C50 and N shared
-                            ZL = @(p_offset,p,c)( 10*p(3).*(cfn(c(:,1),p(5),p(7)) + p(1)) );
-                            ZR = @(p_offset,p,c)( 10*p(4).*(cfn(c(:,2),p(5),p(7)) + p(2)) );
-                            LB = [-inf -inf 0 0 0.3 0 0.001 0]; %only used when doing non-laser fit
-                            UB = [+inf +inf +inf +inf 20 0 3 0]; %only used when doing non-laser fit
-                            pLabels = {'bL','bR','sL','sR','n','n','c50','c50'};
-                            
-                        case 'baseLR' %Separate c50 and N for left and right
-                            ZL = @(p_offset,p,c)( 10*p(3).*(cfn(c(:,1),p(5),p(7)) + p(1) ) );
-                            ZR = @(p_offset,p,c)( 10*p(4).*(cfn(c(:,2),p(6),p(8)) + p(2) ) );
-                            LB = [-inf -inf 0 0 0.3 0.3 0 0]; %only used when doing non-laser fit
-                            UB = [+inf +inf +inf +inf 20    20    1 1]; %only used when doing non-laser fit     
-                            pLabels = {'bL','bR','sL','sR','nL','nR','c50L','c50R'};
-%                         
-
-%                         case 'baseHist'
-%                             ZL = @(p_offset,p,c)( 10*p(3).*(cfn(c(:,1),p(5),p(7)) + p(1)) + histfcn(c(:,6),1)*p(9) + histfcn(c(:,6),2)*p(11) );
-%                             ZR = @(p_offset,p,c)( 10*p(4).*(cfn(c(:,2),p(5),p(7)) + p(2)) + histfcn(c(:,6),1)*p(10) + histfcn(c(:,6),2)*p(12) );
-%                             LB = [-inf -inf -inf -inf 0.3 0 0 0 ones(1,4)*-3]; %only used when doing non-laser fit
-%                             UB = [+inf +inf +inf +inf 20 0 1 0 ones(1,4)*3]; %only used when doing non-laser fit
-%                             pLabels = {'bL','bR','sL','sR','n','n','c50','c50','Lt-1_L','Lt-1_R','Rt-1_L','Rt-1_R'};
-%                             
-%                             
-                            %LASER DELTA MODELS    
-  
-                        case 'offsetOnly'
-                            ZL = @(p_offset,p,c)( 10*p_offset(:,3).*(cfn(c(:,1),p_offset(:,5),p_offset(:,7)) + p_offset(:,1)) );
-                            ZR = @(p_offset,p,c)( 10*p_offset(:,4).*(cfn(c(:,2),p_offset(:,6),p_offset(:,8)) + p_offset(:,2)) );
-                            
-                        case 'bias'
-                            ZL = @(p_offset,p,c)( 10*(p_offset(:,3)).*(cfn(c(:,1),p_offset(:,5),p_offset(:,7)) + p_offset(:,1) + p(1)) );
-                            ZR = @(p_offset,p,c)( 10*(p_offset(:,4)).*(cfn(c(:,2),p_offset(:,6),p_offset(:,8)) + p_offset(:,2) + p(2)) );
-                            LB = [1 1 0 0 0 0 0 0];
-                            
-                        case 'sub_sens_M'
-                            ZL = @(p_offset,p,c)( 10*(p_offset(:,3)*2^p(3)).*(cfn(c(:,1),p_offset(:,5),p_offset(:,7)) + p_offset(:,1) ) );
-                            ZR = @(p_offset,p,c)( 10*(p_offset(:,4)*2^p(4)).*(cfn(c(:,2),p_offset(:,6),p_offset(:,8)) + p_offset(:,2) ) );
-                            LB = [0 0 1 1 0 0 0 0];
-                            
-                        case 'sub_sens'
-                            ZL = @(p_offset,p,c)( 10*(p_offset(:,3) + p(3)).*(cfn(c(:,1),p_offset(:,5),p_offset(:,7)) + p_offset(:,1) ) );
-                            ZR = @(p_offset,p,c)( 10*(p_offset(:,4) + p(4)).*(cfn(c(:,2),p_offset(:,6),p_offset(:,8)) + p_offset(:,2) ) );
-                            LB = [0 0 1 1 0 0 0 0];
-                            
-                        case 'n'
-                            ZL = @(p_offset,p,c)( 10*(p_offset(:,3)).*(cfn(c(:,1),p_offset(:,5)+p(5),p_offset(:,7)) + p_offset(:,1) ) );
-                            ZR = @(p_offset,p,c)( 10*(p_offset(:,4)).*(cfn(c(:,2),p_offset(:,6)+p(6),p_offset(:,8)) + p_offset(:,2) ) );
-                            LB = [0 0 0 0 1 1 0 0];
-                        
-                        case 'c50_M' %MULTIPLICATIVE
-                            ZL = @(p_offset,p,c)( 10*(p_offset(:,3)).*(cfn(c(:,1),p_offset(:,5),p_offset(:,7)*2^p(7)) + p_offset(:,1) ) );
-                            ZR = @(p_offset,p,c)( 10*(p_offset(:,4)).*(cfn(c(:,2),p_offset(:,6),p_offset(:,8)*2^p(8)) + p_offset(:,2) ) );
-                            LB = [0 0 0 0 0 0 1 1];   
-                            
-                        case 'c50'
-                            ZL = @(p_offset,p,c)( 10*(p_offset(:,3)).*(cfn(c(:,1),p_offset(:,5),p_offset(:,7)+p(7)) + p_offset(:,1) ) );
-                            ZR = @(p_offset,p,c)( 10*(p_offset(:,4)).*(cfn(c(:,2),p_offset(:,6),p_offset(:,8)+p(8)) + p_offset(:,2) ) );
-                            LB = [0 0 0 0 0 0 1 1];
-                            
-                        case 'n+c50'
-                            ZL = @(p_offset,p,c)( 10*(p_offset(:,3)).*(cfn(c(:,1),p_offset(:,5)+p(5),p_offset(:,7)+p(7)) + p_offset(:,1) ) );
-                            ZR = @(p_offset,p,c)( 10*(p_offset(:,4)).*(cfn(c(:,2),p_offset(:,6)+p(6),p_offset(:,8)+p(8)) + p_offset(:,2) ) );
-                            LB = [0 0 0 0 1 1 1 1];
-                            
-                        case 'bias+sub_sens_M' %MULTIPLICATIVE S
-                            ZL = @(p_offset,p,c)( 10*(p_offset(:,3)*2^p(3)).*(cfn(c(:,1),p_offset(:,5),p_offset(:,7)) + p_offset(:,1) + p(1)) );
-                            ZR = @(p_offset,p,c)( 10*(p_offset(:,4)*2^p(4)).*(cfn(c(:,2),p_offset(:,6),p_offset(:,8)) + p_offset(:,2) + p(2)) );
-                            LB = [1 1 1 1 0 0 0 0];
-                            
-                        case 'bias+sub_sens'
-                            ZL = @(p_offset,p,c)( 10*(p_offset(:,3) + p(3)).*(cfn(c(:,1),p_offset(:,5),p_offset(:,7)) + p_offset(:,1) + p(1)) );
-                            ZR = @(p_offset,p,c)( 10*(p_offset(:,4) + p(4)).*(cfn(c(:,2),p_offset(:,6),p_offset(:,8)) + p_offset(:,2) + p(2)) );
-                            LB = [1 1 1 1 0 0 0 0];
-                            
-                        case 'bias+n'
-                            ZL = @(p_offset,p,c)( 10*p_offset(:,3).*(cfn(c(:,1),p(5)+p_offset(:,5),p_offset(:,7)) + p_offset(:,1) + p(1)) );
-                            ZR = @(p_offset,p,c)( 10*p_offset(:,4).*(cfn(c(:,2),p(6)+p_offset(:,6),p_offset(:,8)) + p_offset(:,2) + p(2)) );   
-                            LB = [1 1 0 0 1 1 0 0];
-                        
-                        case 'bias+c50_M' %MULTIPLICATIVE C50
-                            ZL = @(p_offset,p,c)( 10*p_offset(:,3).*(cfn(c(:,1),p_offset(:,5),p_offset(:,7)*2^p(7)) + p_offset(:,1) + p(1)) );
-                            ZR = @(p_offset,p,c)( 10*p_offset(:,4).*(cfn(c(:,2),p_offset(:,6),p_offset(:,8)*2^p(8)) + p_offset(:,2) + p(2)) );   
-                            LB = [1 1 0 0 0 0 1 1];   
-                            
-                        case 'bias+c50'
-                            ZL = @(p_offset,p,c)( 10*p_offset(:,3).*(cfn(c(:,1),p_offset(:,5),p(7)+p_offset(:,7)) + p_offset(:,1) + p(1)) );
-                            ZR = @(p_offset,p,c)( 10*p_offset(:,4).*(cfn(c(:,2),p_offset(:,6),p(8)+p_offset(:,8)) + p_offset(:,2) + p(2)) );   
-                            LB = [1 1 0 0 0 0 1 1];
-                            
-                        case 'bias+n+c50'
-                            ZL = @(p_offset,p,c)( 10*p_offset(:,3).*(cfn(c(:,1),p(5)+p_offset(:,5),p(7)+p_offset(:,7)) + p_offset(:,1) + p(1)) );
-                            ZR = @(p_offset,p,c)( 10*p_offset(:,4).*(cfn(c(:,2),p(6)+p_offset(:,6),p(8)+p_offset(:,8)) + p_offset(:,2) + p(2)) );              
-                            LB = [1 1 0 0 1 1 1 1];
-                            
-                        case 'bias+sub_sens+n'
-                            ZL = @(p_offset,p,c)( 10*(p_offset(:,3) + p(3)).*(cfn(c(:,1),p(5)+p_offset(:,5),p_offset(:,7)) + p_offset(:,1) + p(1)) );
-                            ZR = @(p_offset,p,c)( 10*(p_offset(:,4) + p(4)).*(cfn(c(:,2),p(6)+p_offset(:,6),p_offset(:,8)) + p_offset(:,2) + p(2)) );
-                            LB = [1 1 1 1 1 1 0 0];
-                            
-                        case 'bias+sub_sens+c50_M' %MULTIPLICATIVE S AND C50 EFFECTS
-                            ZL = @(p_offset,p,c)( 10*(p_offset(:,3)*2^p(3)).*(cfn(c(:,1),p_offset(:,5),p_offset(:,7)*2^p(7)) + p_offset(:,1) + p(1)) );
-                            ZR = @(p_offset,p,c)( 10*(p_offset(:,4)*2^p(4)).*(cfn(c(:,2),p_offset(:,6),p_offset(:,8)*2^p(8)) + p_offset(:,2) + p(2)) );
-                            LB = [1 1 1 1 0 0 1 1];
-                            
-                        case 'bias+sub_sens+c50'
-                            ZL = @(p_offset,p,c)( 10*(p_offset(:,3) + p(3)).*(cfn(c(:,1),p_offset(:,5),p(7)+p_offset(:,7)) + p_offset(:,1) + p(1)) );
-                            ZR = @(p_offset,p,c)( 10*(p_offset(:,4) + p(4)).*(cfn(c(:,2),p_offset(:,6),p(8)+p_offset(:,8)) + p_offset(:,2) + p(2)) );
-                            LB = [1 1 1 1 0 0 1 1];
-                            
-                        case 'bias+sub_sens+n+c50_M'
-                            ZL = @(p_offset,p,c)( 10*(p_offset(:,3)*2^p(3)).*(cfn(c(:,1),p_offset(:,5)*2^p(5),p_offset(:,7)*2^p(7)) + p_offset(:,1) + p(1)) );
-                            ZR = @(p_offset,p,c)( 10*(p_offset(:,4)*2^p(4)).*(cfn(c(:,2),p_offset(:,6)*2^p(6),p_offset(:,8)*2^p(8)) + p_offset(:,2) + p(2)) );                       
-                            LB = [1 1 1 1 1 1 1 1];
-                            
-                        case 'bias+sub_sens+n+c50'
-                            ZL = @(p_offset,p,c)( 10*(p_offset(:,3) + p(3)).*(cfn(c(:,1),p(5)+p_offset(:,5),p(7)+p_offset(:,7)) + p_offset(:,1) + p(1)) );
-                            ZR = @(p_offset,p,c)( 10*(p_offset(:,4) + p(4)).*(cfn(c(:,2),p(6)+p_offset(:,6),p(8)+p_offset(:,8)) + p_offset(:,2) + p(2)) );                       
-                            LB = [1 1 1 1 1 1 1 1];
-
-                            
-                            %C^N MODEL
-                        case 'base_n'
-                            ZL = @(p_offset,p,c)( 10*p(3)*(c(:,1).^p(5) + p(1)) );
-                            ZR = @(p_offset,p,c)( 10*p(4)*(c(:,2).^p(5) + p(2)) );
-                            LB = [-inf -inf 0 0 0 0]; %only used when doing non-laser fit
-                            UB = [+inf +inf +inf +inf 1 0]; %only used when doing non-laser fit
-                            pLabels = {'bL','bR','sL','sR','n','n'};
-                            
-                        case 'bias+sub_sens+C^N_M'
-                            ZL = @(p_offset,p,c)( 10*(p_offset(:,3)*2^p(3)).*(c(:,1).^(p_offset(:,5)*2^p(5)) + p_offset(:,1) + p(1) ));
-                            ZR = @(p_offset,p,c)( 10*(p_offset(:,4)*2^p(4)).*(c(:,2).^(p_offset(:,6)*2^p(6)) + p_offset(:,2) + p(2) ));
-                            LB = [1 1 1 1 1 1];
-                            
-                            
-                            %                         case 'nested_bias+sub_sens' %hacky attempt at a nested model implementation
-                            %                             ZL = @(p_offset,p,c)( (p_offset(:,3) + p(3)).*(max([cfn(c(:,1)) cfn(c(:,2))],[],2) + p_offset(:,1) + p(1) ) ); %actually pGO/pNG
-                            %                             ZR = @(p_offset,p,c)( (p_offset(:,4) + p(4)).*(diff([cfn(c(:,1)) cfn(c(:,2))],[],2) + p_offset(:,2) + p(2)) ); %actually pL/pR given GO
-                            %                             numP = 4;
-                        case 'nested_bias+sub_sens' %hacky attempt at a nested model implementation
-                            ZL = @(p_offset,p,c)( (p_offset(:,3) + p(3)).*(max(c.^repmat(p_offset(:,5)+p(5),1,2),[],2) + p_offset(:,1) + p(1) ) ); %actually pGO/pNG
-                            ZR = @(p_offset,p,c)( (p_offset(:,4) + p(4)).*(diff(c.^repmat(p_offset(:,5)+p(5),1,2),[],2) + p_offset(:,2) + p(2)) ); %actually pL/pR given GO
-                            LB = [-inf -inf -inf -inf 0]; %only used when doing non-laser fit
-                            UB = [+inf +inf +inf +inf 1]; %only used when doing non-laser fit
-                            
-                    end
-                    
-            end
-            
-        end
-        
         function obj = fit(obj,nonLaserModel,LaserModel)
 %             f=figure;
             obj.model = obj.getModel2(nonLaserModel,LaserModel);
             obj.fitData.perSession = 1;
             obj.fitData.groupAreas = 0;
-            obj.fitData.lambda = 0.0001;
+            obj.lambda = 0.0001;
             
             if strcmp(nonLaserModel(end-5:end),'NESTED')
                 obj.nestedModel_flag = 1;
@@ -745,6 +378,10 @@ classdef omnibusLaserGLM
                 
                 obj.fitData.params{n} = p_nL;
                 
+                if n == 7
+                    keyboard;
+                end
+                
                 %Then go through each inactivation location and fit
                 %extended models
                 if obj.fitData.groupAreas==0
@@ -786,6 +423,184 @@ classdef omnibusLaserGLM
             
             disp('Done!'); %close(f);
             
+        end
+        
+        function likelihoodratiotest(obj,nonLaserModel,lasermodel_unrestricted,lasermodel_restricted)
+            obj.lambda = 0;
+            
+            numSubjects = length(obj.names);
+            params = cell(1,numSubjects);
+            deltaParams = cell(1,numSubjects);
+            
+            nonlasermodel = obj.getModel2(nonLaserModel,[]);
+            lasModel{1} = obj.getModel2(nonLaserModel,lasermodel_unrestricted);
+            lasModel{2} = obj.getModel2(nonLaserModel,lasermodel_restricted);
+            
+            areaLabels = {'Lv1','Rv1','Ls1','Rs1','Lm2','Rm2'};
+            
+            for n = 1:numSubjects
+                
+%                 if n == numSubjects
+%                     keyboard;
+%                 end
+                %First fit non-laser portion of the data
+                
+                %Manual optim method per-session
+                nL = obj.data{n}.laserIdx==0;
+               
+                sessions = unique(obj.data{n}.sessionID(nL));
+                p_nL = nan(length(sessions),length(nonlasermodel.pLabels));
+                for s = 1:length(sessions)
+                    cont = obj.data{n}.stimulus(nL & obj.data{n}.sessionID==sessions(s),1:2);
+                    resp = obj.data{n}.response(nL & obj.data{n}.sessionID==sessions(s));
+                    
+                    p_nL(s,:) = obj.util_optim(nonlasermodel.ZL,nonlasermodel.ZR,[],cont,resp,nonlasermodel.LB,nonlasermodel.UB);
+                end
+
+                %If the base model does not fit shape params on each
+                %side, make sure to copy the parameter used for each side
+                p_nL(:,nonlasermodel.LB==0 & nonlasermodel.UB==0) = p_nL(:,find(nonlasermodel.LB==0 & nonlasermodel.UB==0) - 1);
+                
+                
+                %Then go through each inactivation location and fit
+                %extended models
+                laserIdx = (1:6);
+                siteID = obj.data{n}.areaIdx;
+
+                for site = laserIdx
+                    L_idx = siteID==site;
+                    if sum(L_idx)>0
+                        cont = obj.data{n}.stimulus(L_idx,1:2);
+                        resp = obj.data{n}.response(L_idx);
+                        sess = obj.data{n}.sessionID(L_idx);
+                        
+                        %Calculate offset from non-laser fit
+                        %offset on parameters
+                        offset = p_nL(sess,:);
+                        
+                        loglik=[];
+                        for id = 1:2
+                            LB = -inf(1,length(lasModel{id}.pLabels));
+                            UB = inf(1,length(lasModel{id}.pLabels));
+                            LB(~lasModel{id}.deltaP)=0;
+                            UB(~lasModel{id}.deltaP)=0;
+                            
+                            p_L = obj.util_optim(lasModel{id}.deltaZL,lasModel{id}.deltaZR,offset,cont,resp,LB,UB);
+                            phat = obj.calculatePhat(lasModel{id}.deltaZL,lasModel{id}.deltaZR,offset,p_L,cont);
+                            p = (resp==1).*phat(:,1) + (resp==2).*phat(:,2) + (resp==3).*phat(:,3);
+                            
+                            loglik(id) = sum(log(p));
+                            
+                        end
+                        
+                        dof = sum(lasModel{1}.deltaP) - sum(lasModel{2}.deltaP);
+                        if dof < 0
+                            error('Badly ordered arguments. First: unrestricted model, second: restricted model');
+                        end
+                        
+                        [h,pValue,stat,cValue] = lratiotest(loglik(1),loglik(2),dof,0.05);
+                        if pValue > 0.05
+                            symbol = '';
+                        elseif pValue < 0.001
+                            symbol = '***';
+                        elseif pValue < 0.01
+                            symbol = '**';
+                        elseif pValue < 0.05
+                            symbol = '*';
+                        end
+                        disp([obj.names{n} ' ' areaLabels{site} ' ' symbol]);
+                        
+                        
+                    end
+                    
+                end
+            end
+            
+        end
+        
+        function obj = simulateDataset(obj,profile)
+            %Inserts an extra dataset with simulated nonlaser and laser
+            %model behaviour
+
+            if ~any(strcmp(obj.names,'<<SIMULATION>>')==1)
+                simID = length(obj.names)+1;
+                
+                obj.names{simID}  = '<<SIMULATION>>';
+                obj.data{simID} = struct;
+                obj.guess_bpt(simID) = nan;
+            else
+                simID = length(obj.names);
+            end
+            
+            numTrials = round(length(obj.data{simID-1}.response)/5);
+            sampleIdx = randsample(length(obj.data{simID-1}.response),numTrials);
+            
+            D = structfun(@(field)(field(sampleIdx,:)),obj.data{simID-1},'uni',0);
+            D.response = nan(size(D.response)); D = rmfield(D,{'feedbackType','RT','repeatNum'});
+            D.stimulus = D.stimulus(:,1:2);
+            
+            switch(profile)
+                case 1
+                    %BO_NC50 baseline model every session has same
+                    %parameters
+                    %bias is affected in vis and m2 areas
+                    %sens is also effected in vis
+                    %no laser effects elsewhere
+                    m = obj.getModel2('BO_NC50','all');
+                    
+                    bL = -2.2;
+                    bR = -1.8;
+                    sL = 1;
+                    sR = 1;
+                    n = 1.2;
+                    c50 = 0.4;
+                    
+                    p_nL = [bL bR sL sR n n c50 c50];
+                    p_L = {'Lvis', 1, [+1 -1  -0.5 0  0 0 0 0];...
+                           'Rvis', 2, [-1 +1  0 -0.5  0 0 0 0];...
+                           'Lm2',  5,  [+1 -1  0 0  0 0 0 0];...
+                           'Rm2',  6,  [-1 +1  0 0  0 0 0 0]};
+                       
+                   %First simulate responses on trials without any laser
+                   %effects
+                   noLasIdx = ~any(D.areaIdx==[p_L{:,2}],2);
+                   
+                    p_hat = obj.calculatePhat(m.ZL,m.ZR,[],p_nL,D.stimulus(noLasIdx,:));
+                    [~,resp]=max(mnrnd(1,p_hat),[],2);
+                    D.response(noLasIdx) = resp;
+                    
+                    
+                    %Now go through the trials for each laser-effect site
+                    %and create trials
+                    
+                    for area = 1:size(p_L,1)
+                        LasIdx = D.areaIdx==p_L{area,2};
+                        
+                        p_hat = obj.calculatePhat(m.deltaZL,m.deltaZR,p_nL,p_L{area,3},D.stimulus(LasIdx,:));
+                        [~,resp]=max(mnrnd(1,p_hat),[],2);
+                        D.response(LasIdx) = resp;
+                    end
+                    obj.data{simID} = D;
+                    
+                    tab = tabulate(D.response);
+                    tab = tab(:,3)/100;
+                    obj.guess_bpt(simID)=sum(tab.*log2(tab));
+                    
+            end
+            
+            
+            
+            
+            
+        end
+        
+        function obj = removeSimulation(obj)
+            if any(strcmp(obj.names,'<<SIMULATION>>')==1)
+                simID = length(obj.names);
+                obj.data(simID)=[];
+                obj.guess_bpt(simID) = [];
+                obj.names(simID) = [];
+            end
         end
         
         function obj = mergeSites(obj)
@@ -1197,438 +1012,193 @@ classdef omnibusLaserGLM
         end
         
         function obj = crossval_LaserEffect(obj,n)
-           
-%             n=length(obj.names);
-%             baseModels = {'BO_C^N','BC_C^N','BO_NC50','BC_NC50'};
-            baseModels = {'BO_NC50'};
+            %Fits complete nonlaser set of data and only does crossval on
+            %the trials with laser inactivation
+
+            areas = {'V1', [1 2];
+                     'M2', [5 6]};
+            
+            InactivationSites = [areas{:,2}];
+
+            baseModel = 'BO_NC50';
             laserModels = {'bias','sens','^c50'};
-% %             laserModels = {'bias','sens','shape'};
             numLas = 2^length(laserModels) - 1;
-
+            MODELSTRINGS = cell(1,numLas + 1);
+            MODELSTRINGS{end}='noLaserTerms';
             
+            if isempty(obj.cvData)
+                obj.cvData.L = cell(1,length(obj.names));
+                obj.cvData.loglik = cell(1,length(obj.names));
+                obj.cvData.areas = areas;
+            end
+
             img=imread('D:\kirkcaldie_brain_BW_outline.png');
+            
+            %First fit the whole nonlaser dataset
+            NL = getrow(obj.data{n},obj.data{n}.areaIdx==999);
+            m = obj.getModel2(baseModel,'');
+            
+            sessions = unique(NL.sessionID);
+            p_nL = nan(length(sessions),length(m.pLabels));
+            disp(['Non-laser model loglik on entire dataset']);
+            for s = 1:length(sessions)
+                cont = NL.stimulus(NL.sessionID==s,1:2);
+                resp = NL.response(NL.sessionID==s);
+                
+                p_nL(s,:) = obj.util_optim(m.ZL,m.ZR,[],cont,resp,m.LB,m.UB);
+                
+                %Print loglik
+                loglik=obj.calculateLogLik(p_nL(s,:),m.ZL,m.ZR,[],cont,resp)-obj.guess_bpt(n);
+                disp(['Session ' num2str(s) ': ' num2str(loglik)]);
+            end
+            p_nL(:,m.LB==0 & m.UB==0) = p_nL(:,find(m.LB==0 & m.UB==0) - 1);
+            
+            
+            %Now do crossval on the laser part of the data 
             numFolds = 20;
-
-            cv = cvpartition(obj.data{n}.sessionID,'KFold',numFolds);
+            L = getrow(obj.data{n},any(obj.data{n}.areaIdx == InactivationSites,2));
+            L.p_hat = nan(size(L.response,1),numLas+1);
+            L.p_hat_trainingset = nan(size(L.p_hat));
             
-            obj.fitData.phat{n} = nan(length(obj.data{n}.response),length(numLas)+1);
+            cv = cvpartition(L.areaIdx,'KFold',numFolds);
 
-%             LOGLIK = nan(cv.NumTestSets,length(laserModels),6);
-            LOGLIK = nan(cv.NumTestSets,length(baseModels),numLas,6);
-            MODELSTRINGS = cell(length(baseModels),numLas);
-            
             for fold = 1:cv.NumTestSets
-                
-                trainC = obj.data{n}.stimulus(cv.training(fold),1:2);
-                trainR = obj.data{n}.response(cv.training(fold));
-%                 trainL = obj.data{n}.laserIdx(cv.training(fold));
-                trainL = obj.data{n}.areaIdx(cv.training(fold));
-                trainSID = obj.data{n}.sessionID(cv.training(fold));
-                
-                testC = obj.data{n}.stimulus(cv.test(fold),1:2);
-                testR = obj.data{n}.response(cv.test(fold));
-%                 testL = obj.data{n}.laserIdx(cv.test(fold));
-                testL = obj.data{n}.areaIdx(cv.test(fold));
-                testSID = obj.data{n}.sessionID(cv.test(fold));
-                
-                nL = (trainL==999);
-                sessions = unique(trainSID(nL));
-                
-                for base = 1:length(baseModels)
-                    disp(baseModels{base});
+                disp(['fold: ' num2str(fold) '/' num2str(numFolds)]);
+                for site=1:length(InactivationSites)
+                    trainIdx = cv.training(fold) & L.areaIdx==InactivationSites(site);
+                    testIdx = cv.test(fold) & L.areaIdx==InactivationSites(site);
                     
-                    %FIT NONLASER PART OF TRAINING SET
-                    m = obj.getModel2(baseModels{base},'');
-                    p_nL = nan(length(sessions),length(m.pLabels));
-                    
-                    if obj.fitData.perSession==1
-                        for s = 1:length(sessions)
-                            cont = trainC(nL & trainSID==sessions(s),:);
-                            resp = trainR(nL & trainSID==sessions(s));
-                            p_nL(s,:) = obj.util_optim(m.ZL,m.ZR,[],cont,resp,m.LB,m.UB);
-                            
-                            %Print loglik
-                            loglik=obj.calculateLogLik(p_nL(s,:),m.ZL,m.ZR,[],cont,resp)-obj.guess_bpt(n);
-                            disp(['Session ' num2str(s) ': ' num2str(loglik)]);
-                        end
-                    else
-                        cont = trainC(nL,:);
-                        resp = trainR(nL);
-                        p_nL(1,:) = obj.util_optim(m.ZL,m.ZR,[],cont,resp,m.LB,m.UB);
-                        p_nL = repmat(p_nL,length(sessions),1);
-                        
-                        loglik=obj.calculateLogLik(p_nL(1,:),m.ZL,m.ZR,[],cont,resp)-obj.guess_bpt(n);
-                        disp(['Pooled sessions ' num2str(s) ': ' num2str(loglik)]);
-                    end
-                    
-                    p_nL(:,m.LB==0 & m.UB==0) = p_nL(:,find(m.LB==0 & m.UB==0) - 1);
-                    
-%                     
-                    %FIT LASER PART OF TRAINING SET
-                    if obj.bilateral_flag==0
-                        laserIdx=[1 2 5 6];
-                    else
-                        laserIdx=[2 6];
-                    end                  
-                    
+                    trainC = L.stimulus(trainIdx,1:2);
+                    testC = L.stimulus(testIdx,1:2);
+                    trainR = L.response(trainIdx);
+                    testR = L.response(testIdx);
+                    trainSID = L.sessionID(trainIdx);
+                    testSID = L.sessionID(testIdx);
 
-                    for site=laserIdx
-                        disp(['Site ' num2str(site)]);
-                        
-                        trainidx = (trainL==site);
-                        testidx = (testL==site);
-                        
-                        cont = trainC(trainidx,1:2);
-                        resp = trainR(trainidx);
-                        sid = trainSID(trainidx);
-                        offset = p_nL(sid,:);
-                        
-                        %fit non laser model onto laser trials
-                        m = obj.getModel2(baseModels{base},'');
-                        loglik=obj.calculateLogLik(zeros(1,length(m.pLabels)),m.deltaZL,m.deltaZR,offset,cont,resp)-obj.guess_bpt(n);
-                        disp(['    non-laser model : ' num2str(loglik)]);
-                               
-                        %Test set log lik on nonlaser model
-                        loglikNL=obj.calculateLogLik(zeros(1,length(m.pLabels)),m.deltaZL,m.deltaZR,p_nL(testSID(testidx),:),testC(testidx,:),testR(testidx));
-                        
-                        for las = 1:numLas
-                            lasIdx = find(decimalToBinaryVector(las,length(laserModels)));
-                            laserString = strjoin(laserModels(lasIdx),'+');
-                            MODELSTRINGS{base,las} = [baseModels{base} '.' laserString];
-                            m = obj.getModel2(baseModels{base},laserString);
-                            
-                            LB = -inf(1,length(m.pLabels));
-                            UB = inf(1,length(m.pLabels));
-                            LB(~m.deltaP)=0;
-                            UB(~m.deltaP)=0;
-                            
-                            p = obj.util_optim(m.deltaZL,m.deltaZR,offset,cont,resp,LB,UB);
+                    %Fit on training laser data
+                    trainOffset = p_nL(trainSID,:);
+                    ph = obj.calculatePhat(m.deltaZL,m.deltaZR,trainOffset,zeros(1,length(m.pLabels)),trainC);
+                    L.p_hat_trainingset(trainIdx,numLas + 1) = ph(:,1).*(trainR==1) + ph(:,2).*(trainR==2) + ph(:,3).*(trainR==3);
+                    
+                    %Test model without any laser terms
+                    testOffset = p_nL(testSID,:);
+                    ph = obj.calculatePhat(m.deltaZL,m.deltaZR,testOffset,zeros(1,length(m.pLabels)),testC);
+                    L.p_hat(testIdx,numLas + 1) = ph(:,1).*(testR==1) + ph(:,2).*(testR==2) + ph(:,3).*(testR==3);
 
-                            loglik=obj.calculateLogLik(p,m.deltaZL,m.deltaZR,offset,cont,resp)-obj.guess_bpt(n);
-                            disp(['    ' laserString ' : ' num2str(loglik)]);
+                    for laserModel = 1:numLas
+                        lasIdx = find(decimalToBinaryVector(laserModel,length(laserModels)));
+                        laserString = strjoin(laserModels(lasIdx),'+');
+                        MODELSTRINGS{1,laserModel} = [baseModel '.' laserString];                        
+                        m = obj.getModel2(baseModel,laserString);
+                        LB = -inf(1,length(m.pLabels));
+                        UB = inf(1,length(m.pLabels));
+                        LB(~m.deltaP)=0;
+                        UB(~m.deltaP)=0;
                         
-                            %now test on set set at the same site
-                            LOGLIK(fold,base,las,site)=obj.calculateLogLik(p,m.deltaZL,m.deltaZR,p_nL(testSID(testidx),:),testC(testidx,:),testR(testidx)) - loglikNL;
-                        end
+                        %Fit laser model
+                        p = obj.util_optim(m.deltaZL,m.deltaZR,trainOffset,trainC,trainR,LB,UB);
+                        ph = obj.calculatePhat(m.deltaZL,m.deltaZR,trainOffset,p,trainC);
+                        L.p_hat_trainingset(trainIdx,laserModel) = ph(:,1).*(trainR==1) + ph(:,2).*(trainR==2) + ph(:,3).*(trainR==3);
+
+                        %Test laser model
+                        ph = obj.calculatePhat(m.deltaZL,m.deltaZR,testOffset,p,testC);
+                        L.p_hat(testIdx,laserModel) = ph(:,1).*(testR==1) + ph(:,2).*(testR==2) + ph(:,3).*(testR==3);
                     end
+   
                 end
             end
             
-%             keyboard;
-                        
-                        
-      
-            labels = [laserModels];
+            obj.cvData.L{n} = L;
             
-            if obj.bilateral_flag==0 %if unilateral, average between hemispheres
-                vis = mean(LOGLIK(:,:,:,1:2),4);
-                m2 = mean(LOGLIK(:,:,:,5:6),4);
-                LOGLIK(:,:,:,1) = vis;
-                LOGLIK(:,:,:,2) = vis;
-                LOGLIK(:,:,:,5) = m2;
-                LOGLIK(:,:,:,6) = m2;
-            end
-            
-            areas = {'vis','m2'};
-            
-            if obj.bilateral_flag==0
-                areas = {'Left vis','Right vis','Left m2','Right m2'};
-            else
-                areas = {'vis','m2'};
-            end
-            
-            figure('name',obj.names{n},'color','w');
-            ii=1;
-            for a = laserIdx
-                h(a)=subplot(1,length(areas),ii);
-%                 boxplot(LOGLIK(:,:,a)-obj.guess_bpt(n),'plotstyle','compact','labels',labels);
-%                 ax=errorbar(1:length(labels),nanmean(LOGLIK(:,:,a),1),nanstd(LOGLIK(:,:,a),[],1)/sqrt(numFolds));
-                mean_ll = mean(LOGLIK(:,:,:,a),1);
-                stder_ll = std(LOGLIK(:,:,:,a),[],1)/sqrt(numFolds);
-
-                mean_ll = permute(mean_ll,[2 3 1]);
-                stder_ll = permute(stder_ll,[2 3 1]);
+            figure('name',obj.names{n},'color','w')
+            for a = 1:size(areas,1)
                 
-                jj=1;
-                hold on;
-                Cols = repmat(get(gca,'colororder'),5,1);
-                alpha = linspace(0.4,1,length(baseModels));
-
-                for las = 1:numLas
-                    for base = 1:length(baseModels)
-                        
-                        ax=bar(jj,mean_ll(base,las));
-                        ax.FaceColor = Cols(las,:);
-                        ax.BarWidth=1; ax.EdgeAlpha=0; 
-%                         ax.FaceAlpha=0.7;
-                        ax.FaceAlpha = alpha(base);
-                        
-%                         l=line([jj jj],[mean_ll(base,las)-stder_ll(base,las) mean_ll(base,las)+stder_ll(base,las)]);
-%                         l.LineWidth=0.5; l.Color=Cols(las,:);
-                        
-                        jj=jj+1;
-                    end
-                end
+                idx = any(L.areaIdx==areas{a,2},2);
+                loglik = mean(log2(L.p_hat(idx,:)));
                 
-                xlim([0 numLas*length(baseModels)+1]); set(gca,'xtick','','xcolor','w');
-                if a==laserIdx(end)
-                    axb=get(gca,'children');
-                    legend(flipud(axb(2:2:end)),MODELSTRINGS(:),'Interpreter', 'none'); legend boxoff;
-                end
-%                 set(gca,'xticklabels',MODELSTRINGS(:),'xtick',1:length(MODELSTRINGS(:)));
+                obj.cvData.loglik{n}(a,:) = loglik;
                 
+                h(a)=subplot(1,size(areas,1),a);
+                ax = bar(loglik(1:end-1));
+                ax.BaseValue = loglik(end);
+                ax.EdgeAlpha=0; ax.BarWidth=0.95;
                 
+                set(gca,'XTickLabel',MODELSTRINGS(1:end-1),'XTickLabelRotation',45);
+                title(areas{a,1});
                 
-%                 ax=barh(mean_ll(:));
-%                 ax.BarWidth=0.95; ax.EdgeAlpha=0; ax.FaceAlpha=0.7;
-%                 set(gca,'xticklabels',MODELSTRINGS(:),'xtick',1:length(MODELSTRINGS(:)));
-%                 
-%                 hold on;
-%                 for m=1:length(labels)
-%                     l=line([m m],[mean_ll(m)-stder_ll(m) mean_ll(m)+stder_ll(m)]);
-%                     l.LineWidth=5; l.Color=[0 0 0.5];
-%                 end
-%                 hold off;
-%                 
-                
-                
-%                 set(gca,'xticklabels',labels,'xticklabelrotation',45,'xtick',1:length(labels),'box','off'); 
-                title(areas{ii}); 
-                
-                if ii==1
-                    ylabel('log lik relative to nonlaser model');
-%                     ylabel('log lik relative to guess'); % should be relative to nonlaser
-                end
-%                 ax.Marker='.'; ax.LineStyle='none'; ax.MarkerSize=20;
-                
-                if ii>1
-                    set(gca,'ytick','','ycolor','w');
+                if a == 1
+                    ylabel({'log likelihood','baseline = value without laser terms'});
                 end
 
-                ii=ii+1;
-%                 subplot(2,length(areas),a+length(areas));
-%                 ll = nanmean(log2(phat(obj.data{n}.areaIdx==a,:)),1);
-%                 bar(ll - obj.guess_bpt(n)); set(gca,'xlim',[0 length(labels)+1],'xticklabels',labels,'xticklabelrotation',90);
             end
             linkaxes(h,'y');
             
-            disp(MODELSTRINGS);
-            
-%             keyboard;
-%             
-% %             phat(phat==0)=0.001;
-%             
-%             %                 subplot(3,length(obj.names),n);
-%             %                 subplot(3,1,1);
-%             %                 bar(nanmean(log2(phat))-obj.guess_bpt(n));
-%             %                 set(gca,'XTickLabel',['noLaser' laserModels],'XTickLabelRotation',90,'box','off');
-%             %                 title(obj.names{n}); ylabel('CV loglik relative to guess');
-%             
-% %             logLik = nan(size(obj.inactivationCoords,1),size(phat,2));
-%             logLik = nan(6,size(phat,2));
-%             laserIdx = 1:6;
-% %             laserIdx = unique(obj.data{n}.laserIdx)';
-% %             laserIdx(1) = [];
-%             for m = 1:size(phat,2)
-%                 for site = laserIdx
-%                     logLik(site,m) = nanmean(log2(phat(obj.data{n}.areaIdx==site,m)));
-%                 end
-%                 %                     logLik{n}(:,m) = pivottable(obj.data{n}.laserIdx,[],log2(phat(:,m)),'nanmean');
-%             end
-%             
-%             
-%             compar = nchoosek(1:(length(laserModels)+1),2);
-%             
-%             figure('color','w');
-%             bar(logLik-obj.guess_bpt(n)); set(gca,'XTickLabel',{'Left V1','Right V1','Left S1','Right S1','Left M2','Right M2'});
-%             legend(labels); set(gca,'box','off');
-            
-%             for p = 1:size(compar,1)
-%                 %                     subplot(3,length(obj.names),n+(p*length(obj.names)));
-%                 subplot(round(size(compar,1)/2),2,p); hold on;
-%                 imX=imagesc(linspace(-4.5,4.5,100),linspace(3.75,-5.2,100),img);
-%                 set(gca,'ydir','normal');
-%                 set(imX,'alphadata',0.7);
-%                 
-%                 delta_LL = logLik(:,compar(p,2)) - logLik(:,compar(p,1));
-%                 ap = obj.inactivationCoords(:,1);
-%                 ml = obj.inactivationCoords(:,2);
-%                 if obj.bilateral_flag==1
-%                     ap = [ap; ap];
-%                     ml = [ml; -ml];
-%                     delta_LL = [delta_LL;delta_LL];
-%                 end
-%                 
-%                 h=scatter(ml,ap,200,delta_LL,'s','filled'); caxis([-1 1]*0.5);
-%                 h.MarkerEdgeColor=[1 1 1]*0.95;
-%                 axis equal; set(gca,'xtick','','ytick','','xcolor','w','ycolor','w');
-%                 cmap = [ linspace(0,1,100)' ones(100,1) linspace(0,1,100)';
-%                     linspace(1,0,100)' linspace(1,0,100)' ones(100,1)];
-%                 colormap(flipud(cmap)); colorbar; title([labels{compar(p,2)} ' v ' labels{compar(p,1)}]);
-%                 drawnow;
-%             end
-            
-            %             end
+            obj.cvData.MODELSTRINGS = MODELSTRINGS;
         end
         
-        function crossval_compare2lasermodels(obj)
-            warning('unfinished');
-            %Go through each subject
-            baseModel = 'BO_NC50';
-            laserModels = {'bias+sens','bias+sens+^c50'};
-
-            img=imread('D:\kirkcaldie_brain_BW_outline.png');
-            numFolds = 20;
+        function plotlasercrossval(obj,id1,id2)
             
-            nam = obj.names(1:end-1);
-            laserIdx=[1 2 5 6]; %vis and m2
-            
-            LOGLIK = nan(length(nam),length(laserIdx),length(laserModels));
-            
-
-            for n = 1:length(nam)
-                cv = cvpartition(obj.data{n}.sessionID,'KFold',numFolds);
-                p_hat = cell(numFolds,length(laserIdx),length(laserModels));
-                
-                for fold = 1:cv.NumTestSets
-                    trainC = obj.data{n}.stimulus(cv.training(fold),1:2);
-                    trainR = obj.data{n}.response(cv.training(fold));
-                    trainL = obj.data{n}.areaIdx(cv.training(fold));
-                    trainSID = obj.data{n}.sessionID(cv.training(fold));
-                    
-                    testC = obj.data{n}.stimulus(cv.test(fold),1:2);
-                    testR = obj.data{n}.response(cv.test(fold));
-                    testL = obj.data{n}.areaIdx(cv.test(fold));
-                    testSID = obj.data{n}.sessionID(cv.test(fold));
-                    
-                    nL = (trainL==999);
-                    sessions = unique(trainSID(nL));
-                    
-                    disp(baseModel);
-                    %FIT NONLASER PART OF TRAINING SET
-                    m = obj.getModel2(baseModel,'');
-                    p_nL = nan(length(sessions),length(m.pLabels));
-                    for s = 1:length(sessions)
-                        cont = trainC(nL & trainSID==sessions(s),:);
-                        resp = trainR(nL & trainSID==sessions(s));
-                        p_nL(s,:) = obj.util_optim(m.ZL,m.ZR,[],cont,resp,m.LB,m.UB);
-                        
-                        %Print loglik
-                        loglik=obj.calculateLogLik(p_nL(s,:),m.ZL,m.ZR,[],cont,resp)-obj.guess_bpt(n);
-                        disp(['Session ' num2str(s) ': ' num2str(loglik)]);
-                    end
-                    p_nL(:,m.LB==0 & m.UB==0) = p_nL(:,find(m.LB==0 & m.UB==0) - 1);
-                    
-                    for site=1:length(laserIdx)
-                        disp(['Site ' num2str(laserIdx(site))]);
-                        
-                        trainidx = (trainL==laserIdx(site));
-                        testidx = (testL==laserIdx(site));
-                        
-                        cont = trainC(trainidx,1:2);
-                        resp = trainR(trainidx);
-                        sid = trainSID(trainidx);
-                        offset = p_nL(sid,:);
-                        
-                        %fit non laser model onto laser trials
-                        m = obj.getModel2(baseModel,'');
-                        loglik=obj.calculateLogLik(zeros(1,length(m.pLabels)),m.deltaZL,m.deltaZR,offset,cont,resp)-obj.guess_bpt(n);
-                        disp(['    non-laser model : ' num2str(loglik)]);
-                               
-                        %Test set log lik on nonlaser model
-                        loglikNL=obj.calculateLogLik(zeros(1,length(m.pLabels)),m.deltaZL,m.deltaZR,p_nL(testSID(testidx),:),testC(testidx,:),testR(testidx));
-                        
-                        for lasermodel = 1:length(laserModels)
-                            m = obj.getModel2(baseModel,laserModels{lasermodel});
-
-                            LB = -inf(1,length(m.pLabels));
-                            UB = inf(1,length(m.pLabels));
-                            LB(~m.deltaP)=0;
-                            UB(~m.deltaP)=0;
-                            
-                            p = obj.util_optim(m.deltaZL,m.deltaZR,offset,cont,resp,LB,UB); %fit to training set
-                            ph = obj.calculatePhat(m.deltaZL,m.deltaZR,p_nL(testSID(testidx),:),p,testC(testidx,:));
-                            ph = ph(:,1).*(testR(testidx)==1) + ph(:,2).*(testR(testidx)==2) + ph(:,3).*(testR(testidx)==3);
-                            
-                            p_hat{fold,site,lasermodel} = ph;
-                            
-                            
-                            
-                        end
-                        
-                    end
-                end
-                
-                for site=1:length(laserIdx)
-                    for lm = 1:2
-                        
-                        LOGLIK(n,site,lm) = mean(log2(cat(1,p_hat{:,site,lm})));
-                    end
-                end
+            if isempty(obj.cvData)
+                error('Do crossval on all data');
             end
             
-            %Average between areas
-            LOGLIK2=nan(length(nam),length(laserIdx)/2);
-            LOGLIK2(:,1) = mean(LOGLIK(:,1:2,2),2) - mean(LOGLIK(:,1:2,1),2)
-            LOGLIK2(:,2) = mean(LOGLIK(:,3:4,2),2) - mean(LOGLIK(:,3:4,1),2)
+%             subjs = find(~cellfun(@isempty,obj.cvData.loglik));
+%             for n = 1:length(subjs)
+%                 figure('name',obj.names{subjs(n)},'color','w');
+%                 
+%                 loglik = obj.cvData.loglik{subjs(n)};
+%                 
+%                 for a = 1:size(obj.cvData.areas,1)
+%                     h(a)=subplot(1,size(obj.cvData.areas,1),a);
+%                     ax = bar(loglik(a,1:end-1));
+%                     ax.BaseValue = loglik(a,end);
+%                     ax.EdgeAlpha=0; ax.BarWidth=0.95;
+%                     
+%                     set(gca,'XTickLabel',obj.cvData.MODELSTRINGS(1:end-1),'XTickLabelRotation',45);
+%                     title(obj.cvData.areas{a,1});
+%                     
+%                     if a == 1
+%                         ylabel({'log likelihood','baseline = value without laser terms'});
+%                     end
+%                     
+%                 end
+%                 linkaxes(h,'y');
+%             end
+%             
+%             
+%             
             
-            keyboard;
-        end
-        
-        function plotLaserCV(obj) %TO UPDATE
-%             keyboard;
-            ids = find(~cellfun(@isempty,obj.fitData.phat));
+            deltaLL = [];
             
-            cols = {[1 0 0],[0.7 0 0],[0 0 1],[0 0 0.7]};
             
-            symbols = {'o','s','d','p','h'};
-            figure('color','w'); subplot(1,2,1);
+            
+            for n = 1:(length(obj.names)-1)
+                deltaLL(n,:) = (obj.cvData.loglik{n}(:,id1) - obj.cvData.loglik{n}(:,id2))';
+            end
+            
+            figure('color','w');
+            
+            h = scatterhist(deltaLL(:,1),deltaLL(:,2),'Group',obj.names(1:end-1)','Marker','.','MarkerSize',50);
+            set(h(1),'box','off');
             hold on;
-            for n = 1:length(ids)
-                set(gca,'ColorOrderIndex',1);
-                
-                ii=1;
-                for a = [1 2 5 6]
-                    p=obj.fitData.phat{ids(n)}(obj.data{ids(n)}.areaIdx==a,:);
-                    ll = mean(log2(p),1);
-                    h=plot(ll(end-2)-ll(1),ll(end-1)-ll(1),symbols{n});
-                    h.Color=cols{ii};
-                    h.MarkerFaceColor=h.Color;
-                    h.MarkerSize=10;
-%                     keyboard;
-                    ii=ii+1;
-                end
-            end
             
-            ezplot('y=x');
-            xlabel('Bias + Sens');
-            ylabel('Bias + Sens + C50'); title('');
-            legend('Left vis','Right vis','Left m2','Right m2');
-            axis square;
+            boxplot(h(2),deltaLL(:,1),'orientation','horizontal');
+            boxplot(h(3),deltaLL(:,2),'orientation','horizontal'); view(h(3),[270,90]);
+            set(h(2:3),'XTickLabel','','YTickLabel','','box','on');
 
+            fimplicit(h(1),@(x,y)(x-y))            
+%             errorbar(mean(deltaLL),1.96*std(deltaLL)/sqrt(size(deltaLL,1)));
+            xlabel('V1');
+            ylabel('M2');
             
-            subplot(1,2,2); hold on;
-            areaLab = {'Lvis','Rvis','LS1','RS1','Lm2','Rm2'};
-            for a = 1:6
-                dLL =[];
-                for n = 1:length(ids)
-                    p=obj.fitData.phat{ids(n)}(obj.data{ids(n)}.areaIdx==a,:);
-                    ll = mean(log2(p),1);
-                    dLL(n) = ll(end-1)-ll(end-2);
-                end
-
-                h=bar(mean(dLL)); h.XData=a;
-                h.EdgeAlpha=0; h.FaceAlpha=0.5;
-                
-                stdr=std(dLL)/sqrt(length(dLL));
-                l=line([a a],[mean(dLL)-stdr, mean(dLL)+stdr]);
-                l.Color=[l.Color 0.9];
-                l.LineWidth=5;
-                ylabel('Bias+Sens+C50 - Bias+Sens [bits per trial]');
-            end
-            set(gca,'XTickLabel',areaLab,'XTick',1:6);
+            
+            title({[obj.cvData.MODELSTRINGS{id1} ' relative to ' obj.cvData.MODELSTRINGS{id2}],...
+                  ['H0: V1=0 : p=' num2str( signrank(deltaLL(:,1)) )],...
+                  ['H0: M2=0 : p=' num2str( signrank(deltaLL(:,2)) )],...
+            	  ['H0: V1=M2 : p=' num2str( signrank(deltaLL(:,1),deltaLL(:,2)) )]});
         end
         
+
         function plotFit_NonLaserOneSession(obj,n,sess) 
             if isempty(sess)
                 p_nL = median(obj.fitData.params{n},1);
@@ -3722,9 +3292,9 @@ classdef omnibusLaserGLM
         end
         
         function [p,exitflag] = util_optim(obj,ZL,ZR,offset,cont,resp,LB,UB)
-            lambda = 0.0001;
+%             lambda = 0.0001;
 %             lambda=0;
-            objective = @(PARAMETERS) (-obj.calculateLogLik(PARAMETERS,ZL,ZR,offset,cont,resp) + lambda*sum(abs(PARAMETERS).^2) );
+            objective = @(PARAMETERS) (-obj.calculateLogLik(PARAMETERS,ZL,ZR,offset,cont,resp) + obj.lambda*sum(abs(PARAMETERS).^2) );
             
             options = optimoptions('fmincon','UseParallel',0,'MaxFunEvals',100000,'MaxIter',10000,'Display','off');
             [p,~,exitflag] = fmincon(objective,zeros(1,length(LB)), [], [], [], [], LB, UB, [], options);
@@ -3757,6 +3327,10 @@ classdef omnibusLaserGLM
             %             end
             
             logLik = nanmean(log2(p));
+            
+%             if isinf(logLik)
+%                 keyboard;
+%             end
             
             %             disp(logLik);
         end
