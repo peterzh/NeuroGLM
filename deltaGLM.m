@@ -171,7 +171,7 @@ classdef deltaGLM
         function obj = fit(obj,behavModel,perturbationModel)
             %             f=figure;
             obj.model = obj.getModel(behavModel,perturbationModel);
-            obj.lambda = 0.0001;
+            obj.lambda = 0.01;
                        
             numSubjects = length(obj.names);
             obj.fitData.params = cell(1,numSubjects);
