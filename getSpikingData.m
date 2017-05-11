@@ -49,53 +49,92 @@ switch(name)
         behav.feedbackType = cwl.feedbackType;
         
         behavT = struct;
-        behavT.timestamps = {'stimOnset','goCue','responseMoveStart','responseMade'};
+        behavT.timestamps = {'stimOnset','goCue','responseMoveStart'};
         behavT.stimOnset = cwe.stimulusCueStarted;
         behavT.goCue = cwe.goCue;
         behavT.responseMoveStart = cwe.responseMoveStartTimes;
-        behavT.responseMade = cwe.responseMade;
         
         otherInfo = {dirs{id,2}};
         
     case 'nick neuropixels'
-        %Not manually spike sorted
-        mice={'Cori', 'Radnitz', 'Muller'};
+        dirs = {'\\zserver.cortexlab.net\Data\Subjects\Cori\2016-12-14','ephys_M2','ephys_V1'; %1 2
+                '\\zserver.cortexlab.net\Data\Subjects\Cori\2016-12-15','ephys_M2','ephys_V1'; %3 4 ...
+                '\\zserver.cortexlab.net\Data\Subjects\Cori\2016-12-16','ephys_AM','ephys_RL'; % 5 6
+                '\\zserver.cortexlab.net\Data\Subjects\Cori\2016-12-17','ephys_LM','ephys_PM';
+                '\\zserver.cortexlab.net\Data\Subjects\Cori\2016-12-18','ephys_AM','ephys_V1';
+                '\\zserver.cortexlab.net\Data\Subjects\Radnitz\2017-01-08','ephys_M2','ephys_V1';
+                '\\zserver.cortexlab.net\Data\Subjects\Radnitz\2017-01-09','ephys_M2','ephys_V1';
+                '\\zserver.cortexlab.net\Data\Subjects\Radnitz\2017-01-10','ephys_AM','ephys_M2';
+                '\\zserver.cortexlab.net\Data\Subjects\Radnitz\2017-01-11','ephys_PM','ephys_RSP';
+                '\\zserver.cortexlab.net\Data\Subjects\Radnitz\2017-01-12','ephys_M1','ephys_S1';
+                '\\zserver.cortexlab.net\Data\Subjects\Radnitz\2017-01-13','ephys_M1','ephys_V1';
+                '\\zserver.cortexlab.net\Data\Subjects\Muller\2017-01-07','ephys_M2','ephys_V1';
+                '\\zserver.cortexlab.net\Data\Subjects\Muller\2017-01-08','ephys_AM','ephys_M2';
+                '\\zserver.cortexlab.net\Data\Subjects\Muller\2017-01-09','ephys_LM','ephys_PM';
+                '\\zserver.cortexlab.net\Data\Subjects\Muller\2017-01-10','ephys_LM','ephys_PM';
+                '\\zserver.cortexlab.net\Data\Subjects\Muller\2017-01-11','ephys_M1','ephys_S1';
+                '\\zserver.cortexlab.net\Data\Subjects\Muller\2017-01-12','ephys_M1','ephys_V1';
+                };
         
-        for m = 1:length(mice)
-            dat = ['\\zserver.cortexlab.net\Data\Subjects\' mice{m}];
-            
-            folders = dir(dat); folders(1:2)=[];
-            folders([folders.isdir]==0)=[];
-            folders = {folders.name};
-            
-            for f = 1:length(folders)
-                dat2 = dir([dat '\' folders{f}]);
-                
-                if any(strcmp({dat2.name},'activeData.mat'))
-                   
-                    act = load([dat '\' folders{f} '\activeData.mat']);
-                    
-                    behav = struct;
-                    behav.contrast_cond = [act.cweA.contrastLeft act.cweA.contrastRight];
-                    behav.response = act.cweA.choice;
-                    behav.repeatNum = act.cweA.repNum;
-                    behav.feedbackType = act.cweA.feedback;
-                    
-                    behavT = struct;
-                    behavT.timestamps = {'stimOn','goCue','moveStart','responseTime'};
-                    behavT.stimOn = act.cwtA.stimOn;
-                    behavT.goCue = act.cwtA.goCue;
-                    behavT.moveStart = act.cwtA.moveStart;
-                    behavT.responseTime = act.cwtA.responseTime;
+        id = varargin{1};
+        session = dirs(round(id/2),:);
         
-                    
-                    %Now add spiking data
-                    keyboard;
-                    
-                end
-            end
-        end
+        dat = session{1};
+        ephys_shank = session{2+(mod(id,2)==0)};
 
+        
+        act = load([dat '\activeData.mat']);
+        behav = struct;
+        behav.contrast_cond = [act.cweA.contrastLeft act.cweA.contrastRight];
+        behav.response = act.cweA.choice;
+        behav.repeatNum = act.cweA.repNum;
+        behav.feedbackType = act.cweA.feedback;
+        
+        behavT = struct;
+        behavT.stimOn = act.cwtA.stimOn;
+        behavT.beeps = act.cwtA.beeps;
+        behavT.moveStart = act.cwtA.moveStart;
+        behav = getrow(behav,act.cweA.inclTrials==1);
+        behavT = getrow(behavT,act.cweA.inclTrials==1);
+        behavT.timestamps = {'stimOn','beeps','moveStart'};
+
+        
+        ksDir = fullfile(dat,ephys_shank,'sorting');
+
+        spikeStruct = loadParamsPy(fullfile(ksDir, 'params.py'));
+        spikeTemplates = readNPY(fullfile(ksDir, 'spike_templates.npy')); % note: zero-indexed
+        
+        ss = readNPY(fullfile(ksDir, 'spike_times.npy'));
+        st = double(ss)/spikeStruct.sample_rate;
+        
+        %APPLY TIME CORRECTION
+        if mod(id,2)==0 %Needs to be aligned
+            ephys_timingbase = session{1+(mod(id,2)==0)};
+            correctionFile = fullfile(dat,'alignments',['correct_' ephys_shank '_to_' ephys_timingbase '.npy']);
+            correction = readNPY(correctionFile);
+            
+            st = applyCorrection(st,correction);
+            
+            warning(['aligning ' ephys_shank '_to_' ephys_timingbase]);
+        end
+        
+        if exist(fullfile(ksDir, 'spike_clusters.npy'))
+            clu = readNPY(fullfile(ksDir, 'spike_clusters.npy'));
+        else
+            clu = spikeTemplates;
+        end
+        
+        
+        clusterIDs = unique(clu);
+        spikeTimes = cell(length(clusterIDs),1);
+        for c = 1:length(clusterIDs)
+            spikeTimes{c} = st(clu==clusterIDs(c));
+        end
+        
+        parts = strsplit(dat, '\');
+        name = parts{5};
+        otherInfo = {[name ' ' ephys_shank(7:end) ' ' num2str(id)]};
+        
                 
     case 'armin mPFC'
         

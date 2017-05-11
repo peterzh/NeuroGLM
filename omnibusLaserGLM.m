@@ -98,6 +98,7 @@ classdef omnibusLaserGLM
                     
                     d.sessionID = ones(length(d.response),1)*session;
                     D = addstruct(D,d);
+                    
                 end
                 
                 D = getrow(D,D.repeatNum==1);
@@ -333,7 +334,7 @@ classdef omnibusLaserGLM
 %             f=figure;
             obj.model = obj.getModel2(nonLaserModel,LaserModel);
             obj.fitData.perSession = 1;
-            obj.fitData.groupAreas = 0;
+            obj.fitData.groupAreas = 1;
             obj.lambda = 0.0001;
             
             if strcmp(nonLaserModel(end-5:end),'NESTED')
@@ -423,6 +424,65 @@ classdef omnibusLaserGLM
             
             disp('Done!'); %close(f);
             
+        end
+        
+        function deltaShuffle(obj,nonLaserModel,LaserModel)
+            m = obj.getModel2(nonLaserModel,LaserModel);
+            n = 6;
+            if obj.fitData.groupAreas == 0
+                error('need to run grouped area fit');
+            end
+            
+            %If the laser has no true effect, then laser trials are
+            %indistinguishable from nonlaser trials
+            
+            %Go through each location, and shuffle with nonlaser trials,
+            %and do a full fit process
+            areaList = [1 2 5 6];
+            numIter = 100;
+            obj.lambda = 0.0001;
+            
+            for area = 1:length(areaList)
+                D = getrow(obj.data{n},obj.data{n}.areaIdx==999 | obj.data{n}.areaIdx==areaList(area));
+                
+                p_L = nan(numIter,length(m.UB));
+                for iter = 1:numIter
+                    disp([num2str(iter) '/' num2str(numIter)]);
+                    %Shuffle laser identity
+                    D.areaIdx = D.areaIdx(randperm(length(D.areaIdx)));
+                    
+                    %Get 'nonlaser' trials, fit model
+                    nL = D.areaIdx==999;
+                    sessions = unique(D.sessionID(nL));
+                    p_nL = nan(length(sessions),length(m.pLabels));
+                    for s = 1:length(sessions)
+                        cont = D.stimulus(nL & D.sessionID==sessions(s),1:2);
+                        resp = D.response(nL & D.sessionID==sessions(s));
+                        
+                        p_nL(s,:) = obj.util_optim(m.ZL,m.ZR,[],cont,resp,m.LB,m.UB);
+                    end
+                    p_nL(:,m.LB==0 & m.UB==0) = p_nL(:,find(m.LB==0 & m.UB==0) - 1);
+                    
+                    
+                    %Get 'laser' trials, fit model
+                    L_idx = D.areaIdx~=999;
+                    
+                    LB = -inf(1,length(m.pLabels));
+                    UB = inf(1,length(m.pLabels));
+                    LB(~m.deltaP)=0;
+                    UB(~m.deltaP)=0;
+                    
+                    cont = D.stimulus(L_idx,:);
+                    resp = D.response(L_idx);
+                    sess = D.sessionID(L_idx);
+                    offset = p_nL(sess,:);
+                    
+                    p_L(iter,:) = obj.util_optim(m.deltaZL,m.deltaZR,offset,cont,resp,LB,UB);
+                end
+                
+                keyboard;
+            end
+                
         end
         
         function likelihoodratiotest(obj,nonLaserModel,lasermodel_unrestricted,lasermodel_restricted)
@@ -720,7 +780,6 @@ classdef omnibusLaserGLM
             numSubjects = length(obj.names);
             numIter = 300;
             
-%             obj.fitData.paramsNULL = cell(1,numSubjects);
             obj.fitData.deltaParamsNULL = cell(1,numSubjects);
             figure('name','Sampling from null distribution of laser parameters');
             for n = 1:numSubjects
@@ -1531,21 +1590,21 @@ classdef omnibusLaserGLM
                 end
             end
             
-            figure('color','w','name','ALLSUBJ');
-            for p = 1:size(plotVal,2)
-                subplot(size(plotVal,2)/2,2,p);
-                imX=imagesc(linspace(-4.5,4.5,100),linspace(3.75,-5.2,100),img);
-                set(gca,'ydir','normal');
-                        set(imX,'alphadata',0.7); hold on;
-                        
-                scatter(ml,ap,dot,plotVal{p},'s','filled'); axis equal;
-                caxis([-1 1]*max(abs(plotVal{p}))); colorbar;
-                set(gca,'box','off','ytick','','xtick','','xcolor','w','ycolor','w');
-                ylim([-6,4]);
-            end
-            cmap = [ones(100,1) linspace(0,1,100)' linspace(0,1,100)';
-                        linspace(1,0,100)' linspace(1,0,100)' ones(100,1)];
-                    colormap(flipud(cmap));
+%             figure('color','w','name','ALLSUBJ');
+%             for p = 1:size(plotVal,2)
+%                 subplot(size(plotVal,2)/2,2,p);
+%                 imX=imagesc(linspace(-4.5,4.5,100),linspace(3.75,-5.2,100),img);
+%                 set(gca,'ydir','normal');
+%                         set(imX,'alphadata',0.7); hold on;
+%                         
+%                 scatter(ml,ap,dot,plotVal{p},'s','filled'); axis equal;
+%                 caxis([-1 1]*max(abs(plotVal{p}))); colorbar;
+%                 set(gca,'box','off','ytick','','xtick','','xcolor','w','ycolor','w');
+%                 ylim([-6,4]);
+%             end
+%             cmap = [ones(100,1) linspace(0,1,100)' linspace(0,1,100)';
+%                         linspace(1,0,100)' linspace(1,0,100)' ones(100,1)];
+%                     colormap(flipud(cmap));
             
             if obj.fitData.groupAreas==0 && length(subjID)==1
                 figure('name',['Laser parameter maps' obj.names{subjID}],'color','w');
@@ -3321,18 +3380,9 @@ classdef omnibusLaserGLM
         function logLik = calculateLogLik(obj,testParams,ZL,ZR,offset,inputs,responses)
             phat = obj.calculatePhat(ZL,ZR,offset,testParams,inputs);
             p = (responses==1).*phat(:,1) + (responses==2).*phat(:,2) + (responses==3).*phat(:,3);
-            p(p<0)=0; %Correct for weird numerical error at extreme ends of probabilities;
-            %             if any(p<0)
-            %                 keyboard;
-            %             end
+            p(p<0.0001)=0.0001; %ensure probabilities are never zero
             
             logLik = nanmean(log2(p));
-            
-%             if isinf(logLik)
-%                 keyboard;
-%             end
-            
-            %             disp(logLik);
         end
         
         function phat = calculatePhat(obj,ZL,ZR,offset,testParams,inputs)

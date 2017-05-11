@@ -1,4 +1,4 @@
-classdef deltaGLM
+classdef deltaGLM_Miles
     properties
         names;
         data;
@@ -15,7 +15,7 @@ classdef deltaGLM
     end
     
     methods
-        function obj = deltaGLM(names)
+        function obj = deltaGLM_Miles(names)
             numSubjects = length(names);
             obj.data = cell(1,numSubjects);
             obj.names = names;
