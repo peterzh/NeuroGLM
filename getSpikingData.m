@@ -1,5 +1,4 @@
 function varargout = getSpikingData(name,varargin)
-
 switch(name)
     case 'nick'
         dirs={'\\basket.cortexlab.net\data\nick\M150218_NS1LAV\20150529\cw_1','Laveran Left PPC 1';
@@ -89,7 +88,7 @@ switch(name)
         behav.response = act.cweA.choice;
         behav.repeatNum = act.cweA.repNum;
         behav.feedbackType = act.cweA.feedback;
-        
+
         behavT = struct;
         behavT.stimOn = act.cwtA.stimOn;
         behavT.beeps = act.cwtA.beeps;
@@ -135,9 +134,7 @@ switch(name)
         name = parts{5};
         otherInfo = {[name ' ' ephys_shank(7:end) ' ' num2str(id)]};
         
-                
-    case 'armin mPFC'
-        
+
     case 'sylvia sc'
         info = {'2015-02-23_1_M141002_SS026',...
                 'LeftSC?',...

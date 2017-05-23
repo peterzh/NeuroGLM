@@ -157,6 +157,24 @@ classdef GLM
                     obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
                     obj.ZL = @(P,in)(P(1) + P(2).*(in(:,1).^P(5))./(in(:,1).^P(5) + P(6)^P(5)) );
                     obj.ZR = @(P,in)(P(3) + P(4).*(in(:,2).^P(5))./(in(:,2).^P(5) + P(6)^P(5)) );
+                case 'C50-subset-neur'
+                    obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','N','C50','neurL','neurR'};
+                    obj.parameterBounds = [-inf -inf -inf -inf 0 0.001 -inf -inf;
+                        +inf +inf +inf +inf 3 0.8 inf inf];
+                    
+                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2) D.neur(:,1)]);
+                    obj.ZL = @(P,in)(P(1) + P(2).*(in(:,1).^P(5))./(in(:,1).^P(5) + P(6)^P(5)) + P(7).*in(:,3) );
+                    obj.ZR = @(P,in)(P(3) + P(4).*(in(:,2).^P(5))./(in(:,2).^P(5) + P(6)^P(5)) + P(8).*in(:,3) );
+               case 'neur'
+                    obj.parameterLabels = {'neurL','neurR'};
+                    obj.parameterBounds = [-inf -inf;
+                        +inf +inf ];
+                    
+                    obj.Zinput = @(D)(D.neur(:,1));
+                    obj.ZL = @(P,in)( P(1).*in(:,1) );
+                    obj.ZR = @(P,in)( P(2).*in(:,1) );
+
+                            
                 case 'C50-subset-biasAsContrast'
                     obj.parameterLabels = {'Bias_L','ScaleL_L','Bias_R','ScaleR_R','N','C50'};
                     obj.parameterBounds = [-inf -inf -inf -inf 0 0.001;

@@ -9,8 +9,8 @@ classdef deltaGLM_Armin
         fitData;
         cvData;
         guess_bpt;
-        baseDir = '\\basket.cortexlab.net\home\VTA_Inactivation';
-        lapseFlag;
+        baseDir = '\\basket.cortexlab.net\home\ArminSessions';
+        lapseFlag=0;
 
     end
     
@@ -198,7 +198,22 @@ classdef deltaGLM_Armin
                     m.pLabels = {'b','s','nL','nR','c50L','c50R'};
                     
                     m.deltaZ = @(p_offset,p,c)( p_offset(:,1) + p(1) + 10*(p_offset(:,2)*2^p(2)).*(m.cfn(c(:,1),p_offset(:,3)*2^p(3),p_offset(:,5)*2^p(5)) - m.cfn(c(:,2),p_offset(:,4)*2^p(4),p_offset(:,6)*2^p(6))) );
+               case '2AFC-BO_CDIFF'
+                    m.Z = @(p_offset,p,c)( p(1) + 10*p(2).*( c(:,1) - c(:,2) ) );
+                    m.LB = [-inf -inf]; %only used when doing non-laser fit
+                    m.UB = [+inf +inf]; %only used when doing non-laser fit
+                    m.pLabels = {'b','s'};
                     
+                    m.deltaZ = @(p_offset,p,c)( p_offset(:,1) + p(1) + 10*(p_offset(:,2)*2^p(2)).*( c(:,1) - c(:,2) ) );
+              
+                case '2AFC-BC_CDIFF'
+                    m.Z = @(p_offset,p,c)( 10*p(2).*(c(:,1) - c(:,2) + p(1) ) );
+                    m.LB = [-inf -inf]; %only used when doing non-laser fit
+                    m.UB = [+inf +inf]; %only used when doing non-laser fit
+                    m.pLabels = {'b','s'};
+                    
+                    m.deltaZ = @(p_offset,p,c)( 10*(p_offset(:,2)*2^p(2)).*( c(:,1) - c(:,2) + p_offset(:,1) + p(1) ) );
+                                
                 otherwise
                     error(['Model ' model ' does not exist']);
             end
@@ -215,6 +230,10 @@ classdef deltaGLM_Armin
                     
                     if any(strfind(deltaStr,'sens'))
                         m.deltaP(2:3) = 1;
+                    end
+                    
+                    if any(strfind(deltaStr,'s1'))
+                        m.deltaP(2) = 1;
                     end
                     
                     if any(strfind(deltaStr,'shape')) 
@@ -303,6 +322,81 @@ classdef deltaGLM_Armin
             obj.plotFit_mega;
         end
         
+        function fitSeparate(obj,behavModel)
+
+            
+            model = obj.getModel(behavModel,[]);
+            numParams = length(model.pLabels);
+            figure('color','w');
+            
+            for p = 1:numParams
+                h(p) = subplot(1,numParams,p);
+                title(model.pLabels{p});
+                hold on;
+            end
+            
+            obj.lapseFlag = 0;
+
+            obj.lambda = 0.001;
+            
+            numSubjects = length(obj.names)-1;
+            for n = 1:numSubjects
+                
+                %Get session IDs
+                DA_L = unique(obj.data{n}.session(obj.data{n}.DAsession==1));
+                DA_R = unique(obj.data{n}.session(obj.data{n}.DAsession==2));
+                
+                paramsL = nan(length(DA_L),length(model.pLabels));
+                paramsR = nan(length(DA_R),length(model.pLabels));
+                for dal = 1:length(DA_L)
+                    idx = obj.data{n}.session == DA_L(dal);
+                    cont = obj.data{n}.stimulus(idx,:);
+                    resp = obj.data{n}.response(idx);
+                    paramsL(dal,:) = obj.util_optim(model.Z,[],cont,resp,model.LB,model.UB);
+                end
+                paramsL(:,model.LB==0 & model.UB==0) = paramsL(:,find(model.LB==0 & model.UB==0) - 1);
+                
+                for dar = 1:length(DA_R)
+                    idx = obj.data{n}.session == DA_R(dar);
+                    cont = obj.data{n}.stimulus(idx,:);
+                    resp = obj.data{n}.response(idx);
+                    paramsR(dar,:) = obj.util_optim(model.Z,[],cont,resp,model.LB,model.UB);
+                end
+                paramsR(:,model.LB==0 & model.UB==0) = paramsR(:,find(model.LB==0 & model.UB==0) - 1);
+                
+            
+                for p = 1:numParams
+                    h(p)=subplot(1,numParams,p);
+                    h2 = notBoxPlot(paramsL(:,p) ,ones(length(paramsL(:,p)),1)*n);
+                    h2.data.Marker='.';
+                    h2.data.MarkerSize=10;
+                    h2.sdPtch.delete;
+                    h2.mu.Color=[1 0 0];
+                    h2.data.Color=[1 0 0];
+                    h2.semPtch.EdgeColor=[ 1 0 0];
+                    h2.semPtch.FaceAlpha=0;
+                    
+                    h2 = notBoxPlot(paramsR(:,p) ,ones(length(paramsR(:,p)),1)*n);
+                    h2.data.Marker='.';
+                    h2.data.MarkerSize=10;
+                    h2.sdPtch.delete;
+                    h2.mu.Color=[0 1 0];
+                    h2.data.Color=[0 1 0];
+                    h2.semPtch.EdgeColor=[0 1 0];
+                    h2.semPtch.FaceAlpha=0;
+                end
+                
+            end
+            
+            set(h,'xtick',1:numSubjects,'xticklabels',obj.names(1:end-1),'xticklabelrotation',45);
+            
+            
+            
+            disp('Done!');
+            
+        end
+        
+        
         function plotFit_mega(obj)
             numSubjects = length(obj.names)-1;
             numParams = length(obj.model.pLabels);
@@ -359,9 +453,9 @@ classdef deltaGLM_Armin
                 %Then go through each perturbation condition and fit
                 %extended models
                 
-                pCond = (1:length(obj.perturbation))-1; pCond(1)=[];
+                pCond = (1:length(obj.perturbation{n}))-1; 
                 
-                for o = 1:length(pCond)
+                for o = 2:length(pCond)
                     L_idx = obj.data{n}.perturbation==pCond(o);
                     
                     cont = obj.data{n}.stimulus(L_idx,:);
@@ -397,7 +491,7 @@ classdef deltaGLM_Armin
                     elseif pValue < 0.05
                         symbol = '*';
                     end
-                    disp([obj.perturbation{pCond(o)} '. LogLiks:[' num2str(loglik(1)) ',' num2str(loglik(2)) '] ' symbol]);
+                    disp([obj.perturbation{n}{o} '. LogLiks:[' num2str(loglik(1)) ',' num2str(loglik(2)) '] ' symbol]);
                 end
                 
                 disp(' ');
@@ -407,7 +501,7 @@ classdef deltaGLM_Armin
             
         end
 
-        function plotFit(obj)
+        function plotFit(obj,saveFlag)
             numSubjects = length(obj.names);
             
             %PLOT NON-PERTURBATION FIT + DATA
@@ -437,29 +531,36 @@ classdef deltaGLM_Armin
                     [ph(c,:),pci] = binofit(sum([r==1 r==2],1),length(r));
                     
                     dC = cVals(c,2)-cVals(c,1);
-                    for ch=1:2
+                    for ch=2
                         l(1)=line([1 1]*dC,pci(ch,:));
                         %                             l(2)=line([dC-0.03 dC+0.03],[1 1]*pci(ch,1));
                         %                             l(3)=line([dC-0.03 dC+0.03],[1 1]*pci(ch,2));
                         set(l,'Color',cols{ch},'Linewidth',0.5);
                     end
                 end
-                plot(cVals(:,2)-cVals(:,1),ph,'.','markersize',15);
-                
+%                 plot(cVals(:,2)-cVals(:,1),ph,'.','markersize',15);
+                h=plot(cVals(:,2)-cVals(:,1),ph(:,2),'o','markersize',5);
+                h.Color=cols{2};
                 %Plot predictions
                 testCont = [linspace(1,0,100)' zeros(100,1); zeros(100,1) linspace(0,1,100)'];
                 p_hat = obj.calculatePhat(obj.model.Z,[],obj.fitData.params{n},testCont);
                 set(gca,'ColorOrderIndex',1);
-                plot(diff(testCont,[],2),p_hat,'linewidth',0.5);
+                h=plot(diff(testCont,[],2),p_hat(:,2),'linewidth',0.5,'linestyle','--');
+                h.Color=cols{2};
                 ylim([0 1]);
                 
                 
                 
                 %PLOT PERTURBATION DATASETS
                 for p = 1:length(perturbConds)
-                    subplot(2,numDeltaConditions+1,1+p);
-                    hold on;
-                    
+                    if length(perturbConds)~=1
+                        subplot(2,numDeltaConditions+1,1+p);
+                        hold on;
+                        title(obj.perturbation{n}{p+1});
+                    else
+                        set(gca,'colororderindex',1);
+                        title({[obj.perturbation{n}{1} '--'],[obj.perturbation{n}{p+1} '-']});
+                    end
                     idx = obj.data{n}.perturbation == perturbConds(p);
                     cont = obj.data{n}.stimulus(idx,:);
                     resp = obj.data{n}.response(idx);
@@ -471,21 +572,22 @@ classdef deltaGLM_Armin
                         [ph(c,:),pci] = binofit(sum([r==1 r==2],1),length(r));
                         
                         dC = cVals(c,2)-cVals(c,1);
-                        for ch=1:2
+                        for ch=2
                             l(1)=line([1 1]*dC,pci(ch,:));
                             set(l,'Color',cols{ch},'Linewidth',0.5);
                         end
                     end
-                    plot(cVals(:,2)-cVals(:,1),ph,'.','markersize',15);
+                    h=plot(cVals(:,2)-cVals(:,1),ph(:,2),'.','markersize',15);
+                    h.Color=cols{2};
                     
                     %Plot predictions
                     testCont = [linspace(1,0,100)' zeros(100,1); zeros(100,1) linspace(0,1,100)'];
                     p_hat = obj.calculatePhat(obj.model.deltaZ,obj.fitData.params{n},obj.fitData.deltaParams{n}(p,:),testCont);
                     set(gca,'ColorOrderIndex',1);
-                    plot(diff(testCont,[],2),p_hat,'linewidth',0.5);
+                    h=plot(diff(testCont,[],2),p_hat(:,2),'linewidth',0.5);
+                    h.Color=cols{2};
                     ylim([0 1]);
                     
-                    title(obj.perturbation{n}{p+1});
                     
                     %PLOT PARAMETER PERTURBATIONS
                     subplot(2,numDeltaConditions+1,1+p+numDeltaConditions+1);
@@ -495,7 +597,10 @@ classdef deltaGLM_Armin
                     
                     
                 end
-
+                
+                if saveFlag==1
+                    savefig(gcf,['\\zserver.cortexlab.net\Lab\Share\PeterZH\deltaGLM_Armin\' obj.names{n} '.fig']);
+                end
             end
             
             
@@ -522,7 +627,7 @@ classdef deltaGLM_Armin
                     
                     
                     numFolds = 5;
-                    models = {'2AFC-BO','2AFC-BO_C','2AFC-BO_C^N','2AFC-BO_NC50'};
+                    models = {'2AFC-BO','2AFC-BO_C','2AFC-BO_CDIFF','2AFC-BO_C^N','2AFC-BO_NC50'};
                     
                     %             cfn = @(c,n,c50) ( (c.^n)./(c50.^n + c.^n) );
                     
