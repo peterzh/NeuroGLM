@@ -17,42 +17,40 @@ classdef laserGLM < GLM
         function obj = laserGLM(inputData)
             obj@GLM(inputData);
             
-            if isa(inputData,'char')
-                try
-                    L=load(dat.expFilePath(inputData, 'laserManip', 'm'));
-                    L.laserCoordByTrial;
-                catch
-                    getLaserLabels(inputData);
-                    L=load(dat.expFilePath(inputData, 'laserManip', 'm'));
-                    L.laserCoordByTrial; %Test if this variable exists, that's all...
-                end
-                
-                %if bilateral then replace each row by its virtual
-                %coordinate
-                try 
-                    L.coordList_unadjusted(1,:); %in bilat expts this field exists
-                    for n=1:size(L.laserCoordByTrial,1)
-                        if ~isnan(L.laserCoordByTrial(n,1))
-                            matchIdx = sum(abs(bsxfun(@minus,L.laserCoordByTrial(n,:),L.coordList)),2)==0;
-                            L.laserCoordByTrial(n,:) = [L.coordList_unadjusted(matchIdx,:) 0];
-                        end
-                    end
-
-                catch
-%                     disp('No coordList_unadjusted detected');
-                end
-                
-                if size(L.laserCoordByTrial,2)==2
-                    L.laserCoordByTrial = [L.laserCoordByTrial zeros(size(L.laserCoordByTrial,1),1)];
-                end
-                
-                obj.data.laser = L.laserCoordByTrial;
-                                
-                try
-                    obj.sessionLabel = L.custom_name;
-                catch
-                end
-            end
+%             if isa(inputData,'char')
+%                 try
+%                     L=load(dat.expFilePath(inputData, 'laserManip', 'm'));
+%                     L.laserCoordByTrial;
+%                 catch
+%                     getLaserLabels(inputData);
+%                     L=load(dat.expFilePath(inputData, 'laserManip', 'm'));
+%                     L.laserCoordByTrial; %Test if this variable exists, that's all...
+% 
+%                     block = dat.loadBlock(inputData);
+%                     
+%                 end
+%                 
+%                 %if bilateral then replace each row by its virtual
+%                 %coordinate
+%                 try 
+%                     L.coordList_unadjusted(1,:); %in bilat expts this field exists
+%                     for n=1:size(L.laserCoordByTrial,1)
+%                         if ~isnan(L.laserCoordByTrial(n,1))
+%                             matchIdx = sum(abs(bsxfun(@minus,L.laserCoordByTrial(n,:),L.coordList)),2)==0;
+%                             L.laserCoordByTrial(n,:) = [L.coordList_unadjusted(matchIdx,:) 0];
+%                         end
+%                     end
+% 
+%                 catch
+% %                     disp('No coordList_unadjusted detected');
+%                 end
+% 
+%          
+%                 try
+%                     obj.sessionLabel = L.custom_name;
+%                 catch
+%                 end
+%             end
             [sites,~,ic] = unique(obj.data.laser,'rows');
             nanIdx = find(isnan(sites(:,1)),1,'first');
             

@@ -20,7 +20,7 @@ switch(name)
                 date = datestr(date,29);
                 
                 %Check if widefield data exists
-                dir = fullfile('\\zserver\Data\Subjects\',names{n},date,num2str(session));
+                dir = fullfile('\\zserver.cortexlab.net\Data\Subjects\',names{n},date,num2str(session));
                 if ~isempty(g.data.response) && exist(dir) == 7
                     counter = counter+1;
                     
@@ -51,24 +51,51 @@ switch(name)
                         b_stimOnset=nan(b.numCompletedTrials,1);
                         b_goCue=nan(b.numCompletedTrials,1);
                         b_responseMade=nan(b.numCompletedTrials,1);
-                        b_rewardDelivered=nan(b.numCompletedTrials,1);
                         for trial = 1:b.numCompletedTrials
                             b_stimOnset(trial,1)= b.trial(trial).stimulusCueStartedTime;
                             b_goCue(trial,1) = b.trial(trial).onsetToneSoundPlayedTime(1);
                             b_responseMade(trial,1) = b.trial(trial).responseMadeTime;
-                            if ~isempty(b.trial(trial).feedbackPositiveStartedTime)
-                                b_rewardDelivered(trial,1) = b.trial(trial).feedbackPositiveStartedTime;
+                        end
+                        
+                        b_rewardDelivered = b.rewardDeliveryTimes';
+                        
+                        figure;
+                        while length(b_rewardDelivered) ~= length(t_rewardDelivered)
+                            warning('unequal reward timestamps, find missing trial');
+                            idx = min([length(b_rewardDelivered) length(t_rewardDelivered)]);
+                            badIdx = find(abs(diff(b_rewardDelivered(1:idx)-t_rewardDelivered(1:idx)))>0.1,1,'first')+1;
+                            
+                            
+                            
+                            aa=subplot(3,1,1);
+                            plot(b_rewardDelivered(1:idx)-t_rewardDelivered(1:idx));
+                            
+                            
+                            if length(b_rewardDelivered) > length(t_rewardDelivered)
+                                b_rewardDelivered(badIdx) = [];
+                            else
+                                t_rewardDelivered(badIdx) = [];
                             end
+
                         end
+%                         
+                        ab=subplot(3,1,2);
+                        plot(b_rewardDelivered-t_rewardDelivered);
+                        set(ab,'ylim',aa.YLim);
                         
-                        b_rewardDelivered = b_rewardDelivered(~isnan(b_rewardDelivered));
+                        goodIdx = abs(diff(b_rewardDelivered(1:idx)-t_rewardDelivered(1:idx)))<0.1;
+                        b_rewardDelivered = b_rewardDelivered(goodIdx);
+                        t_rewardDelivered = t_rewardDelivered(goodIdx);
                         
-                        if length(b_rewardDelivered) ~= length(t_rewardDelivered)
-                            warning('unequal reward timestamps');
-                            keyboard;
-                        end
+                        subplot(3,1,3);
+                        plot(b_rewardDelivered,t_rewardDelivered,'ro');
+                        hold on;
                         
+                         
                         beta = [ones(length(b_rewardDelivered),1) b_rewardDelivered]\t_rewardDelivered; %Regression
+                        
+                        t_rewardDelivered_hat = [ones(length(b_rewardDelivered),1) b_rewardDelivered]*beta;
+                        plot(b_rewardDelivered, t_rewardDelivered_hat, 'r--')
                         
                         t_stimOnset = [ones(length(b_stimOnset),1) b_stimOnset]*beta;
                         t_goCue = [ones(length(b_goCue),1) b_goCue]*beta;
@@ -97,14 +124,14 @@ switch(name)
 %                                t_goCue(trial) = t_goCue(trial) + t(latency_idx);
 %                            end
                            
-                        figure; 
-                        subplot(1,2,1); title({'RewardDelivery timebase regression',beta});
-                        plot(b_rewardDelivered,t_rewardDelivered,'ko',b_rewardDelivered,[ones(length(b_rewardDelivered),1) b_rewardDelivered]*beta,'k-')
-                        xlabel('Block timing'); ylabel('Timeline timing');
-                        subplot(1,2,2);
-                        plot(b_stimOnset,t_stimOnset,'k-')
-                        xlabel('Block timing'); ylabel('Timeline timing');
-                        title('Stimulus Onset realignment');
+%                         figure; 
+%                         subplot(1,2,1); title({'RewardDelivery timebase regression',beta});
+%                         plot(b_rewardDelivered,t_rewardDelivered,'ko',b_rewardDelivered,[ones(length(b_rewardDelivered),1) b_rewardDelivered]*beta,'k-')
+%                         xlabel('Block timing'); ylabel('Timeline timing');
+%                         subplot(1,2,2);
+%                         plot(b_stimOnset,t_stimOnset,'k-')
+%                         xlabel('Block timing'); ylabel('Timeline timing');
+%                         title('Stimulus Onset realignment');
                         
                         behavT = [];
                         
@@ -129,7 +156,7 @@ switch(name)
 %                             title(events{e});
 %                             xlim([0 10]);
 %                         end
-                        
+%                         
                         
                         otherInfo = { expRefs{n}{s} };
                         varargout = {W,behav,behavT,otherInfo};

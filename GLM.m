@@ -24,11 +24,11 @@ classdef GLM
         function obj = GLM(inputData)
             if isa(inputData,'struct')
                 %If input is a struct containing AT MINIMUM the fields:
-                %                 -contrast_cond
+                %                 -stimulus
                 %                 -response
                 %                 -repeatNum
-                if isfield(inputData,'stimulus')
-                    inputData.contrast_cond=inputData.stimulus(:,1:2);
+                if isfield(inputData,'contrast_cond')
+                    inputData.stimulus=inputData.contrast_cond(:,1:2);
                 end
                 
                 obj.data = inputData;
@@ -37,26 +37,32 @@ classdef GLM
             elseif isa(inputData,'char')
                 %if expRef, then load using the dat package
                 obj.expRef = inputData;
-                D = struct('contrast_cond',[],'response',[],'repeatNum',[],'feedbackType',[],'RT',[]);
                 
-                try
-                    block = dat.loadBlock(obj.expRef);
-                    trials = block.trial;
-                    
-                    for t=1:block.numCompletedTrials
-                        D.contrast_cond(t,:) = trials(t).condition.visCueContrast';
-                        D.response(t,1) = trials(t).responseMadeID';
-                        D.repeatNum(t,1) = trials(t).condition.repeatNum;
-                        D.feedbackType(t,1) = trials(t).feedbackType;
-                        D.RT(t,1) = trials(t).responseMadeTime-trials(t).interactiveStartedTime;
-                        
-%                         if D.RT(t,1) > 4
-%                             keyboard;
-%                         end
-                    end
-                catch
-                    warning('session data empty');
+                D = loadData(inputData);
+                
+                if any(strcmp(fieldnames(D),'laser'))
+                    warning('Data contains laser trials, use laserGLM instead');
                 end
+%                 D = struct('stimulus',[],'response',[],'repeatNum',[],'feedbackType',[],'RT',[]);
+%                 
+%                 try
+%                     block = dat.loadBlock(obj.expRef);
+%                     trials = block.trial;
+%                     
+%                     for t=1:block.numCompletedTrials
+%                         D.stimulus(t,:) = trials(t).condition.visCueContrast';
+%                         D.response(t,1) = trials(t).responseMadeID';
+%                         D.repeatNum(t,1) = trials(t).condition.repeatNum;
+%                         D.feedbackType(t,1) = trials(t).feedbackType;
+%                         D.RT(t,1) = trials(t).responseMadeTime-trials(t).interactiveStartedTime;
+%                         
+% %                         if D.RT(t,1) > 4
+% %                             keyboard;
+% %                         end
+%                     end
+%                 catch
+%                     warning('session data empty');
+%                 end
                 
                 obj.data = D;
             else
@@ -65,7 +71,7 @@ classdef GLM
             
             if ~isempty(obj.data.response)
                 
-                if any(min(obj.data.contrast_cond,[],2)>0)
+                if any(min(obj.data.stimulus,[],2)>0)
                     obj.ContrastDimensions = 2;
                 else
                     obj.ContrastDimensions = 1;
@@ -90,63 +96,63 @@ classdef GLM
                     %used as a baseline to compare other models
                     obj.parameterLabels = {'Offset_L','Offset_R'};
                     obj.parameterBounds = [-inf -inf; +inf +inf];
-                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
+                    obj.Zinput = @(D)([D.stimulus(:,1) D.stimulus(:,2)]);
                     obj.ZL = @(P,in)(P(1)*ones(length(in(:,1)),1));
                     obj.ZR = @(P,in)(P(2)*ones(length(in(:,1)),1));
                 case 'C-subset'
                     obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R'};
                     obj.parameterBounds = [-inf -inf -inf -inf;
                         +inf +inf +inf +inf];
-                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
+                    obj.Zinput = @(D)([D.stimulus(:,1) D.stimulus(:,2)]);
                     obj.ZL = @(P,in)(P(1) + P(2).*in(:,1)   );
                     obj.ZR = @(P,in)(P(3) + P(4).*in(:,2)  );
                 case 'C-subset-biasAsContrast'
                     obj.parameterLabels = {'Bias_L','ScaleL_L','Bias_R','ScaleR_R'};
                     obj.parameterBounds = [-inf -inf -inf -inf;
                         +inf +inf +inf +inf];
-                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
+                    obj.Zinput = @(D)([D.stimulus(:,1) D.stimulus(:,2)]);
                     obj.ZL = @(P,in)( P(2).*(in(:,1) + P(1))   );
                     obj.ZR = @(P,in)( P(4).*(in(:,2) + P(3))  );
                 case 'C'
                     obj.parameterLabels = {'Offset_L','ScaleL_L','ScaleR_L','Offset_R','ScaleL_R','ScaleR_R'};
                     obj.parameterBounds = [-inf -inf -inf -inf -inf -inf;
                         +inf +inf +inf +inf +inf +inf];
-                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
+                    obj.Zinput = @(D)([D.stimulus(:,1) D.stimulus(:,2)]);
                     obj.ZL = @(P,in)(P(1) + P(2).*in(:,1) + P(3).*in(:,2));
                     obj.ZR = @(P,in)(P(4) + P(5).*in(:,1) + P(6).*in(:,2));
                 case 'C^N'
                     obj.parameterLabels = {'Offset_L','ScaleL_L','ScaleR_L','Offset_R','ScaleL_R','ScaleR_R','N'};
                     obj.parameterBounds = [-inf -inf -inf -inf -inf -inf 0;
                         +inf +inf +inf +inf +inf +inf +inf];
-                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
+                    obj.Zinput = @(D)([D.stimulus(:,1) D.stimulus(:,2)]);
                     obj.ZL = @(P,in)(P(1) + P(2).*in(:,1).^P(7) + P(3).*in(:,2).^P(7));
                     obj.ZR = @(P,in)(P(4) + P(5).*in(:,1).^P(7) + P(6).*in(:,2).^P(7));
                 case 'C^N-subset'
                     obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','N'};
                     obj.parameterBounds = [-inf -inf -inf -inf 0;
                         +inf +inf +inf +inf 3];
-                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
+                    obj.Zinput = @(D)([D.stimulus(:,1) D.stimulus(:,2)]);
                     obj.ZL = @(P,in)(P(1) + P(2).*in(:,1).^P(5));
                     obj.ZR = @(P,in)(P(3) + P(4).*in(:,2).^P(5));
                 case 'C^N-subset-biasAsContrast'
                     obj.parameterLabels = {'Bias_L','ScaleL_L','Bias_R','ScaleR_R','N'};
                     obj.parameterBounds = [-inf -inf -inf -inf 0;
                         +inf +inf +inf +inf 3];
-                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
+                    obj.Zinput = @(D)([D.stimulus(:,1) D.stimulus(:,2)]);
                     obj.ZL = @(P,in)( P(2).*(in(:,1).^P(5) + P(1)) );
                     obj.ZR = @(P,in)( P(4).*(in(:,2).^P(5) + P(3)) );
                 case 'C^NL^NR-subset'
                     obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','N_L','N_R'};
                     obj.parameterBounds = [-inf -inf -inf -inf 0 0;
                         +inf +inf +inf +inf 3 3];
-                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
+                    obj.Zinput = @(D)([D.stimulus(:,1) D.stimulus(:,2)]);
                     obj.ZL = @(P,in)(P(1) + P(2).*in(:,1).^P(5));
                     obj.ZR = @(P,in)(P(3) + P(4).*in(:,2).^P(6));
                 case 'C50'
                     obj.parameterLabels = {'Offset_L','ScaleL_L','ScaleR_L','Offset_R','ScaleL_R','ScaleR_R','N','C50'};
                     obj.parameterBounds = [-inf -inf -inf -inf -inf -inf 0 0.001;
                         +inf +inf +inf +inf +inf +inf 3 0.8];
-                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
+                    obj.Zinput = @(D)([D.stimulus(:,1) D.stimulus(:,2)]);
                     obj.ZL = @(P,in)(P(1) + P(2).*(in(:,1).^P(7))./(in(:,1).^P(7) + P(8)^P(7)) + P(3).*(in(:,2).^P(7))./(in(:,2).^P(7) + P(8)^P(7)));
                     obj.ZR = @(P,in)(P(4) + P(5).*(in(:,1).^P(7))./(in(:,1).^P(7) + P(8)^P(7)) + P(6).*(in(:,2).^P(7))./(in(:,2).^P(7) + P(8)^P(7)));
                 case 'C50-subset'
@@ -154,15 +160,24 @@ classdef GLM
                     obj.parameterBounds = [-inf -inf -inf -inf 0 0.001;
                         +inf +inf +inf +inf 3 0.8];
                     
-                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
+                    obj.Zinput = @(D)([D.stimulus(:,1) D.stimulus(:,2)]);
                     obj.ZL = @(P,in)(P(1) + P(2).*(in(:,1).^P(5))./(in(:,1).^P(5) + P(6)^P(5)) );
                     obj.ZR = @(P,in)(P(3) + P(4).*(in(:,2).^P(5))./(in(:,2).^P(5) + P(6)^P(5)) );
+                    
+                case 'C50-subset-sharedS'
+                    obj.parameterLabels = {'Offset_L','Offset_R','Scale','N','C50'};
+                    obj.parameterBounds = [-inf -inf -inf 0 0.001;
+                        +inf +inf +inf 3 0.8];
+                    
+                    obj.Zinput = @(D)([D.stimulus(:,1) D.stimulus(:,2)]);
+                    obj.ZL = @(P,in)(P(1) + P(3).*(in(:,1).^P(4))./(in(:,1).^P(4) + P(5)^P(4)) );
+                    obj.ZR = @(P,in)(P(2) + P(3).*(in(:,2).^P(4))./(in(:,2).^P(4) + P(5)^P(4)) );
                 case 'C50-subset-neur'
                     obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','N','C50','neurL','neurR'};
                     obj.parameterBounds = [-inf -inf -inf -inf 0 0.001 -inf -inf;
                         +inf +inf +inf +inf 3 0.8 inf inf];
                     
-                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2) D.neur(:,1)]);
+                    obj.Zinput = @(D)([D.stimulus(:,1) D.stimulus(:,2) D.neur(:,1)]);
                     obj.ZL = @(P,in)(P(1) + P(2).*(in(:,1).^P(5))./(in(:,1).^P(5) + P(6)^P(5)) + P(7).*in(:,3) );
                     obj.ZR = @(P,in)(P(3) + P(4).*(in(:,2).^P(5))./(in(:,2).^P(5) + P(6)^P(5)) + P(8).*in(:,3) );
                case 'neur'
@@ -180,7 +195,7 @@ classdef GLM
                     obj.parameterBounds = [-inf -inf -inf -inf 0 0.001;
                         +inf +inf +inf +inf 3 0.8];
                     
-                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
+                    obj.Zinput = @(D)([D.stimulus(:,1) D.stimulus(:,2)]);
                     obj.ZL = @(P,in)( P(2).*((in(:,1).^P(5))./(in(:,1).^P(5) + P(6)^P(5)) + P(1) ) );
                     obj.ZR = @(P,in)( P(4).*((in(:,2).^P(5))./(in(:,2).^P(5) + P(6)^P(5)) + P(3) ) );
                 case 'C50-subset-v1'
@@ -188,7 +203,7 @@ classdef GLM
                     obj.parameterBounds = [-inf -inf -inf -inf -inf -inf 0 0.001;
                         +inf +inf +inf +inf +inf +inf 3 0.8];
                     
-                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
+                    obj.Zinput = @(D)([D.stimulus(:,1) D.stimulus(:,2)]);
                     obj.ZL = @(P,in)( P(1) + P(3).*((in(:,1).^P(7))./(in(:,1).^P(7) + P(8)^P(7)) + P(2) ) );
                     obj.ZR = @(P,in)( P(4) + P(6).*((in(:,2).^P(7))./(in(:,2).^P(7) + P(8)^P(7)) + P(5) ) );
                 case 'C50-subset-separate'
@@ -196,7 +211,7 @@ classdef GLM
                     obj.parameterBounds = [-inf -inf -inf -inf -inf -inf;
                         +inf +inf +inf +inf inf inf];
                     
-                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2) D.response]);
+                    obj.Zinput = @(D)([D.stimulus(:,1) D.stimulus(:,2) D.response]);
                     obj.ZL = @(P,in)( P(1) + P(2).*(in(:,1).^P(5))./(in(:,1).^P(5) + P(6)^P(5)) ).*(in(:,3)~=2);
                     obj.ZR = @(P,in)( P(3) + P(4).*(in(:,2).^P(5))./(in(:,2).^P(5) + P(6)^P(5)) ).*(in(:,3)~=1);
                     
@@ -205,7 +220,7 @@ classdef GLM
                     obj.parameterBounds = [-inf -inf -inf -inf 0 0 1;
                         +inf +inf +inf +inf 1 1 1];
                     
-                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
+                    obj.Zinput = @(D)([D.stimulus(:,1) D.stimulus(:,2)]);
                     obj.ZL = @(P,in)( P(1) + P(3).*(in(:,1).^P(7))./(in(:,1).^P(7) + P(5)) );
                     obj.ZR = @(P,in)( P(2) + P(4).*(in(:,2).^P(7))./(in(:,2).^P(7) + P(6)) );
                 case 'C50LR-subset'
@@ -213,7 +228,7 @@ classdef GLM
                     obj.parameterBounds = [-inf -inf -inf -inf 0 0.001 0 0.001;
                         +inf +inf +inf +inf 3 0.8 3 0.8];
                     
-                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
+                    obj.Zinput = @(D)([D.stimulus(:,1) D.stimulus(:,2)]);
                     obj.ZL = @(P,in)(P(1) + P(2).*(in(:,1).^P(5))./(in(:,1).^P(5) + P(6)^P(5)));
                     obj.ZR = @(P,in)(P(3) + P(4).*(in(:,2).^P(7))./(in(:,2).^P(7) + P(8)^P(7)));    
                 case 'Clogistic-subset'
@@ -221,7 +236,7 @@ classdef GLM
                     obj.parameterBounds = [-inf -inf -inf -inf -inf -inf -inf;
                         +inf +inf +inf +inf +inf +inf +inf];
                     
-                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
+                    obj.Zinput = @(D)([D.stimulus(:,1) D.stimulus(:,2)]);
                     obj.ZL = @(P,in)(P(1) + P(2)./(1 + exp(-P(5).*(in(:,1) - P(6)))) );
                     obj.ZR = @(P,in)(P(3) + P(4)./(1 + exp(-P(5).*(in(:,2) - P(7)))) );
                 case 'Supersaturation-subset'
@@ -229,59 +244,59 @@ classdef GLM
                     obj.parameterBounds = [-inf -inf -inf -inf 0 0 0;
                         +inf +inf +inf +inf +inf +inf 2];
                     
-                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
+                    obj.Zinput = @(D)([D.stimulus(:,1) D.stimulus(:,2)]);
                     obj.ZL = @(P,in)(P(1) + P(2).*(in(:,1).^P(5))./(in(:,1).^P(5)*P(7) + P(6)^P(5)*P(7)));
                     obj.ZR = @(P,in)(P(3) + P(4).*(in(:,2).^P(5))./(in(:,2).^P(5)*P(7) + P(6)^P(5)*P(7)));
                 case 'AFC'
                     obj.parameterLabels = {'Offset','ScaleL','ScaleR'};
                     obj.parameterBounds = [-inf -inf -inf; +inf +inf +inf];
-                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
+                    obj.Zinput = @(D)([D.stimulus(:,1) D.stimulus(:,2)]);
                     obj.ZL = @(P,in)(P(1) + P(2)*in(:,1) + P(3)*in(:,2));
                     obj.ZR = [];
                 case 'AFC_diff'
                     obj.parameterLabels = {'Offset','Scale'};
                     obj.parameterBounds = [-inf -inf;inf inf];
-                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
+                    obj.Zinput = @(D)([D.stimulus(:,1) D.stimulus(:,2)]);
                     obj.ZL = @(P,in)(P(1) + P(2)*(in(:,1)-in(:,2)) );
                     obj.ZR = [];
                 case 'AFC_diff_alternate'
                     obj.parameterLabels = {'Offset','Scale'};
                     obj.parameterBounds = [-inf -inf;inf inf];
-                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
+                    obj.Zinput = @(D)([D.stimulus(:,1) D.stimulus(:,2)]);
                     obj.ZL = @(P,in)(P(2)*P(1) + P(2)*(in(:,1)-in(:,2)) );
                     obj.ZR = [];
 %                 case 'AFC_multimodalDiff'
 %                     obj.parameterLabels = {'OffsetV','OffsetA','ScaleV','ScaleA'};
 %                     obj.parameterBounds = [-inf -inf -inf -inf ;inf inf inf inf];
-%                     obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2) D.auditory_cond(:,1) D.auditory_cond(:,2)]);
+%                     obj.Zinput = @(D)([D.stimulus(:,1) D.stimulus(:,2) D.auditory_cond(:,1) D.auditory_cond(:,2)]);
 %                     obj.ZL = @(P,in)(P(1) + P(2)*(in(:,1)-in(:,2)) );
 %                     obj.ZR = [];
                 case 'C^N-subset-hist-response'
                     obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','HistL_L','HistR_L','HistNG_L','HistL_R','HistR_R','HistNG_R','N'};
                     obj.parameterBounds = [-inf(1,10) 0;
                                           +inf(1,10) inf];
-                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2) D.hist(:,1) D.hist(:,2) D.hist(:,3)]);
+                    obj.Zinput = @(D)([D.stimulus(:,1) D.stimulus(:,2) D.hist(:,1) D.hist(:,2) D.hist(:,3)]);
                     obj.ZL = @(P,in)( P(1) + P(2).*in(:,1).^P(11) + P(5).*in(:,3) + P(6).*in(:,4) + P(7).*in(:,5) );
                     obj.ZR = @(P,in)( P(3) + P(4).*in(:,2).^P(11) + P(8).*in(:,3) + P(9).*in(:,4) + P(10).*in(:,5) );
                 case 'C^N-subset-hist-contrast'
                     obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','HistL_L','HistR_L','HistNG_L','HistL_R','HistR_R','HistNG_R','N'};
                     obj.parameterBounds = [-inf(1,10) 0;
                                         +inf(1,10) inf];
-                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2) D.hist(:,1) D.hist(:,2) D.hist(:,3)]);
+                    obj.Zinput = @(D)([D.stimulus(:,1) D.stimulus(:,2) D.hist(:,1) D.hist(:,2) D.hist(:,3)]);
                     obj.ZL = @(P,in)( P(1) + P(2).*in(:,1).^P(11) + P(5).*in(:,3) + P(6).*in(:,4) + P(7).*in(:,5) );
                     obj.ZR = @(P,in)( P(3) + P(4).*in(:,2).^P(11) + P(8).*in(:,3) + P(9).*in(:,4) + P(10).*in(:,5) );
                 case 'C^N-subset-hist-success'
                     obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','Hist_L','Hist_R','N'};
                     obj.parameterBounds = [-inf(1,6) 0;
                                         +inf(1,6) inf];
-                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2) D.hist]);
+                    obj.Zinput = @(D)([D.stimulus(:,1) D.stimulus(:,2) D.hist]);
                     obj.ZL = @(P,in)( P(1) + P(2).*in(:,1).^P(7) + P(5).*in(:,3) );
                     obj.ZR = @(P,in)( P(3) + P(4).*in(:,2).^P(7) + P(6).*in(:,3) );
                 case 'AFC-C^N-subset-hist-success'
                     obj.parameterLabels = {'Offset','ScaleL_L','ScaleR_R','Hist','N'};
                     obj.parameterBounds = [-inf(1,4) 0;
                         +inf(1,4) inf];
-                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2) D.hist]);
+                    obj.Zinput = @(D)([D.stimulus(:,1) D.stimulus(:,2) D.hist]);
                     obj.ZL = @(P,in)( P(1) + P(2).*in(:,1).^P(5) + P(3).*in(:,2).^P(5) + P(4).*in(:,3) );
                 case 'C^N-subset-Qlearning'
                     obj.parameterLabels = {'ScaleL_L','ScaleR_R','Q_L','Q_R','N'};
@@ -296,7 +311,7 @@ classdef GLM
                     obj.parameterLabels = {'Offset','ScaleL','ScaleR','N'};
                     obj.parameterBounds = [-inf -inf -inf 0.1;
                         +inf +inf +inf 1];
-                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
+                    obj.Zinput = @(D)([D.stimulus(:,1) D.stimulus(:,2)]);
                     obj.ZL = @(P,in)( P(1) + P(2).*in(:,1).^P(4) + P(3).*in(:,2).^P(4)  );
                     obj.parameterStart = [0 0 0 0.1];
                  
@@ -304,7 +319,7 @@ classdef GLM
                     obj.parameterLabels = {'Offset','ScaleL','ScaleR','N','C50'};
                     obj.parameterBounds = [-inf -inf -inf 0 0.01;
                         +inf +inf +inf 3 8];
-                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
+                    obj.Zinput = @(D)([D.stimulus(:,1) D.stimulus(:,2)]);
                     obj.ZL = @(P,in)( P(1) + P(2).*(in(:,1).^P(4))./(in(:,1).^P(4) + P(5)^P(4)) + P(3).*(in(:,2).^P(4))./(in(:,2).^P(4) + P(5)^P(4))  );
                     obj.parameterStart = [0 0 0 0.1 0.1];
                     
@@ -331,7 +346,7 @@ classdef GLM
                     obj.parameterBounds = [-inf -inf -inf -inf 0 0.001;
                         +inf +inf +inf +inf 3 0.8];
                     
-                    obj.Zinput = @(D)([D.contrast_cond(:,1) D.contrast_cond(:,2)]);
+                    obj.Zinput = @(D)([D.stimulus(:,1) D.stimulus(:,2)]);
                     obj.ZL = @(P,in)( P(1) + P(2).*(in(:,1).^P(5))./(in(:,1).^P(5) + P(6)^P(5)) - P(2)*mean(in(:,1).^P(5)./(in(:,1).^P(5) + P(6)^P(5))) );
                     obj.ZR = @(P,in)( P(3) + P(4).*(in(:,2).^P(5))./(in(:,2).^P(5) + P(6)^P(5)) - P(4)*mean(in(:,2).^P(5)./(in(:,2).^P(5) + P(6)^P(5))) );
                 otherwise
@@ -413,11 +428,11 @@ classdef GLM
             end
             
             %non-cv log likelihood for fitted model
-            ll_model = obj.calculateLogLik(obj.parameterFits,obj.data.contrast_cond,obj.data.response)/length(obj.data.response);
+            ll_model = obj.calculateLogLik(obj.parameterFits,obj.data.stimulus,obj.data.response)/length(obj.data.response);
             
             %another thing to do is just take the mode of the pred
             %probabilities and see if they match the data
-            phats = obj.calculatePhat(obj.parameterFits,obj.data.contrast_cond);
+            phats = obj.calculatePhat(obj.parameterFits,obj.data.stimulus);
             classify = nan(length(obj.data.response),1);
             for t = 1:length(obj.data.response)
                 [~,rhat] = max(phats(t,:));
@@ -434,7 +449,7 @@ classdef GLM
 %             %non-cv log likelihood for naive intercept model (no contrast)
 %             obj = obj.setModel('Offset');            
 %             obj=obj.fit;
-%             ll_naive = obj.calculateLogLik(obj.parameterFits,obj.data.contrast_cond,obj.data.response);
+%             ll_naive = obj.calculateLogLik(obj.parameterFits,obj.data.stimulus,obj.data.response);
 
             r2 = 1 + ll_model/obj.guess_bpt;
             disp(['McFadden Pseudo-R^2: ' num2str(r2)]);
@@ -516,7 +531,7 @@ classdef GLM
                         
             switch(obj.ContrastDimensions)
                 case 1
-                    contrast1D = obj.data.contrast_cond(:,2) - obj.data.contrast_cond(:,1);
+                    contrast1D = obj.data.stimulus(:,2) - obj.data.stimulus(:,1);
                     uniqueC1D = unique(contrast1D);
                     prop=[];
                     prop_ci=[];
@@ -557,13 +572,13 @@ classdef GLM
                     h=gca;
                     
                 case 2
-                    uniqueCL = unique(obj.data.contrast_cond(:,1));
-                    uniqueCR = unique(obj.data.contrast_cond(:,2));
+                    uniqueCL = unique(obj.data.stimulus(:,1));
+                    uniqueCR = unique(obj.data.stimulus(:,2));
                     prop=nan(length(uniqueCL),length(uniqueCR),3);
                     
                     for cl = 1:length(uniqueCL)
                         for cr = 1:length(uniqueCR)
-                            E = obj.getrow(obj.data,obj.data.contrast_cond(:,1) == uniqueCL(cl) & obj.data.contrast_cond(:,2) == uniqueCR(cr));
+                            E = obj.getrow(obj.data,obj.data.stimulus(:,1) == uniqueCL(cl) & obj.data.stimulus(:,2) == uniqueCR(cr));
                             for i=1:3
                                 prop(cl,cr,i) = sum(E.response==i)/length(E.response);
                             end
@@ -614,7 +629,7 @@ classdef GLM
             figure('color','w');
             resplabel = {'Left choices','Right choices'};
             
-            cVal = unique(obj.data.contrast_cond(:));
+            cVal = unique(obj.data.stimulus(:));
             i=1;
             meanRT = nan(length(cVal),length(cVal),2);
             medianRT = nan(length(cVal),length(cVal),2);
@@ -623,7 +638,7 @@ classdef GLM
                     subplot(length(cVal),length(cVal),i);
                     
                     try
-                        idx = obj.data.contrast_cond(:,1) == cVal(cl) & obj.data.contrast_cond(:,2) == cVal(cr) & obj.data.response==1;
+                        idx = obj.data.stimulus(:,1) == cVal(cl) & obj.data.stimulus(:,2) == cVal(cr) & obj.data.response==1;
                         distributionPlot(obj.data.RT(idx),'histOpt',0,'widthDiv',[2 1],'histOri','left','color','b','showMM',0,'globalNorm',2)
                         meanRT(cl,cr,1) = mean(obj.data.RT(idx));
                         medianRT(cl,cr,1) = median(obj.data.RT(idx));
@@ -631,7 +646,7 @@ classdef GLM
                     end
                     
                     try
-                        idx = obj.data.contrast_cond(:,1) == cVal(cl) & obj.data.contrast_cond(:,2) == cVal(cr) & obj.data.response==2;
+                        idx = obj.data.stimulus(:,1) == cVal(cl) & obj.data.stimulus(:,2) == cVal(cr) & obj.data.response==2;
                         distributionPlot(obj.data.RT(idx),'histOpt',0,'widthDiv',[2 2],'histOri','right','color','r','showMM',0,'globalNorm',2)
                         set(gca,'xtick','','xcolor','w','box','off','ytick','','ycolor','w');
                         meanRT(cl,cr,2) = mean(obj.data.RT(idx));
@@ -688,7 +703,7 @@ classdef GLM
                 subplot(1,2,r); hold on;
                 for cl = 1:length(cVal)
                     for cr = 1:length(cVal)
-                        idx = obj.data.contrast_cond(:,1) == cVal(cl) & obj.data.contrast_cond(:,2) == cVal(cr) & obj.data.response==r;
+                        idx = obj.data.stimulus(:,1) == cVal(cl) & obj.data.stimulus(:,2) == cVal(cr) & obj.data.response==r;
                         histogram(obj.data.RT(idx),'DisplayStyle','stairs');
                     end
                 end
@@ -714,7 +729,7 @@ classdef GLM
                         hold on;
                                                 
                         if ~(strcmp(obj.modelString,'fullContrasts') || strcmp(obj.modelString,'fullContrasts-subset'))
-                            maxC = max(max(obj.data.contrast_cond));
+                            maxC = max(max(obj.data.stimulus));
                             evalC = [linspace(maxC,0,100)', zeros(100,1);
                                 zeros(100,1), linspace(0,maxC,100)'];
                             evalC1d = evalC(:,2) - evalC(:,1);
@@ -735,7 +750,7 @@ classdef GLM
                             hold off;
                             h=gca;
                         else
-                            evalC = unique(obj.data.contrast_cond,'rows');
+                            evalC = unique(obj.data.stimulus,'rows');
                             evalC1d = evalC(:,2) - evalC(:,1);
                             [~,sortIdx]=sort(evalC1d);
                             phat = obj.calculatePhat(obj.parameterFits,evalC);
@@ -750,8 +765,8 @@ classdef GLM
                         h=obj.plotData;
                         fig=get(h(1),'Parent');
                         
-                        evalCL = linspace(0,max(obj.data.contrast_cond(:,1)),100);
-                        evalCR = linspace(0,max(obj.data.contrast_cond(:,1)),100);
+                        evalCL = linspace(0,max(obj.data.stimulus(:,1)),100);
+                        evalCR = linspace(0,max(obj.data.stimulus(:,1)),100);
 %                         evalCL = linspace(0,1,100);
 %                         evalCR = linspace(0,1,100);
                         prop=nan(length(evalCL),length(evalCR),3);
@@ -788,7 +803,7 @@ classdef GLM
                         end
                         
                         figure('color','w');
-                        cont = obj.data.contrast_cond;
+                        cont = obj.data.stimulus;
                         resp = obj.data.response;
                         cVals = unique(cont(:));
 %                         numPedestals = length(cVals)-1;
@@ -855,12 +870,12 @@ classdef GLM
                 error('Need to fit model first');
             end
             
-            cVals = unique(obj.data.contrast_cond(:));
+            cVals = unique(obj.data.stimulus(:));
             prop=nan(length(cVals),length(cVals),3);
             
             for cl = 1:length(cVals)
                 for cr = 1:length(cVals)
-                    E = obj.getrow(obj.data,obj.data.contrast_cond(:,1) == cVals(cl) & obj.data.contrast_cond(:,2) == cVals(cr));
+                    E = obj.getrow(obj.data,obj.data.stimulus(:,1) == cVals(cl) & obj.data.stimulus(:,2) == cVals(cr));
                     for i=1:3
                         prop(cl,cr,i) = sum(E.response==i)/length(E.response);
                     end
@@ -921,7 +936,7 @@ classdef GLM
             
             switch(obj.ContrastDimensions)
                 case 1
-                    contrast1D = diff(obj.data.contrast_cond, [], 2);
+                    contrast1D = diff(obj.data.stimulus, [], 2);
                     uniqueC1D = unique(contrast1D);
                     nC = length(uniqueC1D);
                     prop=zeros(nC,3);
@@ -944,7 +959,7 @@ classdef GLM
                         rMax = 3;
                     end                    
 
-                    evalCon = unique(obj.data.contrast_cond,'rows');
+                    evalCon = unique(obj.data.stimulus,'rows');
                     evalC1d = evalCon(:,2) - evalCon(:,1);
                     [~,sortIdx]=sort(evalC1d);
                     evalCon = evalCon(sortIdx,:);
@@ -1091,7 +1106,7 @@ classdef GLM
                 error('Fit model first!');
             end
                                    
-            c = obj.data.contrast_cond;
+            c = obj.data.stimulus;
             H = obj.hessian(obj.parameterFits,c);
             
             %Calculate fisher info
@@ -1159,7 +1174,7 @@ classdef GLM
                 legend({'Var[B_L]','Var[B_R]','Var[S_L]','Var[S_R]','Cov[B_L,S_L]','Cov[B_L,B_R]','Cov[S_L,S_R]','Corr[B_L,S_L]'});
                 
                 hold on;
-                this = std(diff(obj.data.contrast_cond,[],2));
+                this = std(diff(obj.data.stimulus,[],2));
                 line([this,this],[-1 1]);
             end
             
@@ -1170,7 +1185,7 @@ classdef GLM
             for bias = 1:length(Biases)
                 new_p = fitted_p;
                 new_p([1 3]) = Biases(bias);
-                H = obj.hessian(new_p,obj.data.contrast_cond);
+                H = obj.hessian(new_p,obj.data.stimulus);
                 F = -sum(H,3);
                 cov = inv(F);
                 varS(bias,:) = [cov(1,1) cov(2,2) cov(3,3) cov(4,4) cov(3,1) cov(2,1) cov(4,3)];
@@ -1196,7 +1211,7 @@ classdef GLM
             for bias = 1:length(Biases)
                 new_p = fitted_p;
                 new_p(1) = Biases(bias);
-                H = obj.hessian(new_p,obj.data.contrast_cond);
+                H = obj.hessian(new_p,obj.data.stimulus);
                 F = -sum(H,3);
                 cov = inv(F);
                 varS(bias,:) = [cov(1,1) cov(2,2) cov(3,3) cov(4,4) cov(3,1) cov(2,1) cov(4,3)];
@@ -1212,7 +1227,7 @@ classdef GLM
         function plotPspace_mnrvsnested(obj)
             %use mnrfit to fit rudimentary models MNR and NESTED and
             %compare directly
-            cont = obj.data.contrast_cond;
+            cont = obj.data.stimulus;
             resp = obj.data.response;
             resp_nes = resp; resp_nes(resp_nes==3)=0; resp_nes=resp_nes+1;
 

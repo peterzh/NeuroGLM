@@ -19,15 +19,29 @@ classdef deltaGLM_Armin
     
     methods
         function obj = deltaGLM_Armin
-            files = dir([obj.baseDir,'\*.mat']);
+            type = dir(obj.baseDir); type(1:2)=[];
+            type = {type.name};
+            
+            files = cell(1,length(type));
+            types = cell(1,length(type));
+            for t = 1:length(type)
+                f = dir([obj.baseDir '\' type{t} '\*.mat']);
+                files{1,t} = {f.name};
+                types{1,t} = repmat({type{t}},1,length({f.name}));
+            end
+            
+            files = [files{:}];
+            types = [types{:}];
+            
             numSubjects = length(files);
             obj.expRefs = cell(1,numSubjects);
             obj.names = cell(1,numSubjects);
             obj.data = cell(1,numSubjects);
             
             for n = 1:numSubjects
-                obj.names{n} = files(n).name(1:end-21);
-                s = load(fullfile(obj.baseDir,files(n).name));
+                name = files{n}(1:end-21);
+                obj.names{n} = [name ' ' types{n}];
+                s = load(fullfile(obj.baseDir,types{n},files{n}));
                 obj.expRefs{n} = cellfun(@(str)str(1:end-10),s.list(:),'uni',0);
                 
                 obj.data{n} = struct;
@@ -44,20 +58,36 @@ classdef deltaGLM_Armin
                         d.session(t,1) = b;
                         d.RT(t,1) = trials(t).responseMadeTime - trials(t).interactiveStartedTime;
                         try
-                            d.DA(t,1) = trials(t).condition.rewardVolume(2)>0 & trials(t).feedbackType==1;
+                            d.rewardVolume(t,:) = trials(t).condition.rewardVolume;
                         catch
-                            d.DA(t,1)= 0;
+                            d.rewardVolume(t,:) = [nan nan];
                         end
                     end
-                                        
-                    %identify dopamine session type
-                    DA_side = unique(d.response(d.DA==1));
-                    if isempty(DA_side)
-                        DA_side = 0;
-                    elseif length(DA_side) == 2
-                        DA_side = 3;
+                          
+                    
+                    switch(types{n})
+                        case {'Dopamine', 'Arch'}
+                            d.perturb = d.rewardVolume(:,2)>0 & d.reward==1;
+                            DA_side = unique(d.response(d.perturb==1));
+                            if isempty(DA_side)
+                                DA_side = 0;
+                            elseif length(DA_side) == 2
+                                DA_side = 3;
+                            end
+                            d.StimulationSession = ones(size(d.response))*DA_side; %Find trials with DA on the right
+                            
+                        case 'Water'
+                            d.perturb = d.rewardVolume(:,1).*d.reward;
+                            Water_side = unique(d.response(d.perturb==max(d.perturb)));
+                            if isempty(Water_side)
+                                Water_side = 0;
+                            elseif length(Water_side) == 2
+                                Water_side = 3;
+                            end
+                            d.StimulationSession = ones(size(d.response))*Water_side; %Choice with higher reward
+                            
+                            
                     end
-                    d.DAsession = ones(length(d.response),1)*DA_side; %Find trials with DA on the right
 
                     obj.data{n} = addstruct(obj.data{n},d);
                                         
@@ -105,44 +135,35 @@ classdef deltaGLM_Armin
                 obj.data{n}.perturbation = nan(size(obj.data{n}.response));
                 
                 switch(which)
-                    case 'DA L/R' %DA on left as 'non perturbation' condition
-                        obj.perturbation{n} = {'Left DA sessions','Right DA sessions'};
+                    case 'L/R' %DA on left as 'non perturbation' condition
+                        obj.perturbation{n} = {'Active on Left Choices','Active on Right Choices'};
                         obj.data{n}.perturbation = nan(length(obj.data{n}.response),1);
                         
-                        idx = obj.data{n}.DAsession == 1;
+                        idx = obj.data{n}.StimulationSession == 1;
                         obj.data{n}.perturbation(idx) = 0;
                         
-                        idx = obj.data{n}.DAsession == 2;
+                        idx = obj.data{n}.StimulationSession == 2;
                         obj.data{n}.perturbation(idx) = 1;
                         
-                    case 'DA R/L' %DA on right as 'non perturbation' condition
-                        obj.perturbation{n} = {'Right DA sessions','Left DA sessions'};                        
-                        obj.data{n}.perturbation = nan(length(obj.data{n}.response),1);
-                        
-                        idx = obj.data{n}.DAsession == 1;
-                        obj.data{n}.perturbation(idx) = 1;
-                        
-                        idx = obj.data{n}.DAsession == 2;
-                        obj.data{n}.perturbation(idx) = 0;
-                    case 'DA L/R per session'
+                    case 'L/R per session'
                         %No perturbation: DA_L sessions all grouped
                         %together
                         %Perturbation: DA_R sessions fit individually
                         obj.data{n}.perturbation = nan(length(obj.data{n}.response),1);
                         
-                        idx = obj.data{n}.DAsession == 1;
+                        idx = obj.data{n}.StimulationSession == 1;
                         obj.data{n}.perturbation(idx) = 0;
                         
-                        idx = obj.data{n}.DAsession == 2;
+                        idx = obj.data{n}.StimulationSession == 2;
                         sess = unique(obj.data{n}.session(idx));
                         
                         for s = 1:length(sess)
-                            idx = obj.data{n}.DAsession == 2 & obj.data{n}.session == sess(s);
+                            idx = obj.data{n}.StimulationSession == 2 & obj.data{n}.session == sess(s);
                             obj.data{n}.perturbation(idx) = s;
                         end
                         
-                        labels = arrayfun(@(id)['Right DA ' num2str(id)],sess,'uni',0);
-                        obj.perturbation{n} = ['Left DA sessions',labels'];
+                        labels = arrayfun(@(id)['Right ' num2str(id)],sess,'uni',0);
+                        obj.perturbation{n} = ['Left sessions',labels'];
                         
                     otherwise
                         error('Doesnt exist');
@@ -343,8 +364,8 @@ classdef deltaGLM_Armin
             for n = 1:numSubjects
                 
                 %Get session IDs
-                DA_L = unique(obj.data{n}.session(obj.data{n}.DAsession==1));
-                DA_R = unique(obj.data{n}.session(obj.data{n}.DAsession==2));
+                DA_L = unique(obj.data{n}.session(obj.data{n}.StimulationSession==1));
+                DA_R = unique(obj.data{n}.session(obj.data{n}.StimulationSession==2));
                 
                 paramsL = nan(length(DA_L),length(model.pLabels));
                 paramsR = nan(length(DA_R),length(model.pLabels));

@@ -5,6 +5,7 @@ classdef omnibusLaserGLM
         expRefs;
         inactivationCoords;
         data;
+        data_shuffle;
         model;
         lambda;
         fitData;
@@ -42,58 +43,60 @@ classdef omnibusLaserGLM
             for n = 1:numSubjects
                 D = struct;
                 for session = 1:length(obj.expRefs{n})
-                    eRef = obj.expRefs{n}{session};
-                    try
-                        L=load(dat.expFilePath(eRef, 'laserManip', 'm'));
-                        L.laserCoordByTrial;
-                    catch
-                        getLaserLabels(eRef);
-                        L=load(dat.expFilePath(inputData, 'laserManip', 'm'));
-                        L.laserCoordByTrial; %Test if this variable exists, that's all...
-                    end
-                    
-                    %if bilateral then replace each row by its virtual
-                    %coordinate
-                    try
-                        L.coordList_unadjusted(1,:); %in bilat expts this field exists
-                        for i=1:size(L.laserCoordByTrial,1)
-                            if ~isnan(L.laserCoordByTrial(i,1))
-                                matchIdx = sum(abs(bsxfun(@minus,L.laserCoordByTrial(i,:),L.coordList)),2)==0;
-                                L.laserCoordByTrial(i,:) = [L.coordList_unadjusted(matchIdx,:) 0];
-                            end
-                        end
-                        
-                    catch
-                    end
-                    
-                    if size(L.laserCoordByTrial,2)==2
-                        L.laserCoordByTrial = [L.laserCoordByTrial zeros(size(L.laserCoordByTrial,1),1)];
-                    end
-                    
-                    d = struct('stimulus',[],'response',[],'repeatNum',[],'feedbackType',[],'RT',[]);
-                    block = dat.loadBlock(eRef);
-                    trials = block.trial;
-                    
-                    hist=nan(block.numCompletedTrials,12);
-                    for t=1:block.numCompletedTrials
-                        d.stimulus(t,:) = trials(t).condition.visCueContrast';
-                        d.response(t,1) = trials(t).responseMadeID';
-                        d.repeatNum(t,1) = trials(t).condition.repeatNum;
-                        d.feedbackType(t,1) = trials(t).feedbackType;
-                        d.RT(t,1) = trials(t).responseMadeTime-trials(t).interactiveStartedTime;
-                        
-                        if t > 5
-                            hist(t,:) = [NaN d.response(t-5:t-1)' NaN d.feedbackType(t-5:t-1)'];
-                        end
-                    end
-                    d.stimulus = [d.stimulus hist];
-                    
-                    d.laserCoord = L.laserCoordByTrial;
-                    
-                    if obj.moreData == 1
-                        pupil = obj.addPupilData(n,obj.expt);
-                        d.pupil = pupil{session};
-                    end
+                    d = loadData(obj.expRefs{n}{session});
+%                     
+%                     eRef = obj.expRefs{n}{session};
+%                     try
+%                         L=load(dat.expFilePath(eRef, 'laserManip', 'm'));
+%                         L.laserCoordByTrial;
+%                     catch
+%                         getLaserLabels(eRef);
+%                         L=load(dat.expFilePath(inputData, 'laserManip', 'm'));
+%                         L.laserCoordByTrial; %Test if this variable exists, that's all...
+%                     end
+%                     
+%                     %if bilateral then replace each row by its virtual
+%                     %coordinate
+%                     try
+%                         L.coordList_unadjusted(1,:); %in bilat expts this field exists
+%                         for i=1:size(L.laserCoordByTrial,1)
+%                             if ~isnan(L.laserCoordByTrial(i,1))
+%                                 matchIdx = sum(abs(bsxfun(@minus,L.laserCoordByTrial(i,:),L.coordList)),2)==0;
+%                                 L.laserCoordByTrial(i,:) = [L.coordList_unadjusted(matchIdx,:) 0];
+%                             end
+%                         end
+%                         
+%                     catch
+%                     end
+%                     
+%                     if size(L.laserCoordByTrial,2)==2
+%                         L.laserCoordByTrial = [L.laserCoordByTrial zeros(size(L.laserCoordByTrial,1),1)];
+%                     end
+%                     
+%                     d = struct('stimulus',[],'response',[],'repeatNum',[],'feedbackType',[],'RT',[]);
+%                     block = dat.loadBlock(eRef);
+%                     trials = block.trial;
+%                     
+%                     hist=nan(block.numCompletedTrials,12);
+%                     for t=1:block.numCompletedTrials
+%                         d.stimulus(t,:) = trials(t).condition.visCueContrast';
+%                         d.response(t,1) = trials(t).responseMadeID';
+%                         d.repeatNum(t,1) = trials(t).condition.repeatNum;
+%                         d.feedbackType(t,1) = trials(t).feedbackType;
+%                         d.RT(t,1) = trials(t).responseMadeTime-trials(t).interactiveStartedTime;
+%                         
+%                         if t > 5
+%                             hist(t,:) = [NaN d.response(t-5:t-1)' NaN d.feedbackType(t-5:t-1)'];
+%                         end
+%                     end
+%                     d.stimulus = [d.stimulus hist];
+%                     
+%                     d.laserCoord = L.laserCoordByTrial;
+%                     
+%                     if obj.moreData == 1
+%                         pupil = obj.addPupilData(n,obj.expt);
+%                         d.pupil = pupil{session};
+%                     end
                     d = structfun(@(x)(x(6:(end-14),:)),d,'uni',0); %trim first 5 trials and last 15
                     
                     d.sessionID = ones(length(d.response),1)*session;
@@ -116,7 +119,7 @@ classdef omnibusLaserGLM
             %match laserIdx over all subjects
             %create laserIdx variable
             allD = [obj.data{:}];
-            allLas = cat(1,allD.laserCoord);
+            allLas = cat(1,allD.laser);
             [sites,~,ic] = unique(allLas,'rows');
             nanIdx = find(isnan(sites(:,1)),1,'first');
             inactivationSite = sites(1:nanIdx-1,:);
@@ -128,7 +131,7 @@ classdef omnibusLaserGLM
                 ic(1:N(1)) = [];
                 N(1)=[];
                 
-                obj.data{n}.areaIdx = obj.identifyArea(obj.data{n}.laserCoord);
+                obj.data{n}.areaIdx = obj.identifyArea(obj.data{n}.laser);
             end
             obj.inactivationCoords = inactivationSite;
             
@@ -329,12 +332,46 @@ classdef omnibusLaserGLM
                 end
             end
         end
+        
+        function data_shuffle = shuffleData(obj,n)
+            
+            %Per session, contrast condition,
+            %shuffle laser location identities
+
+            data_shuffle = obj.data{n};
+            numSessions = max(obj.data{n}.sessionID);
+            
+            cont = obj.data{n}.stimulus(:,1:2);
+            c_0 = sum(cont,2)==0;
+            c_L = cont(:,1) > 0 & cont(:,2)==0;
+            c_R = cont(:,2) > 0 & cont(:,1)==0;
+            c_LR = ( cont(:,1) == cont(:,2) ) & ~c_0;
+            cont = 4*c_0 + 1*c_L + 2*c_R + 3*c_LR;
+            
+            for sess = 1:numSessions
+                for con = 1:4
+                    idx = obj.data{n}.sessionID==sess & cont == con;
+                    
+                    old_lasIdx = obj.data{n}.laserIdx(idx);
+                    new_lasIdx = old_lasIdx(randperm(length(old_lasIdx)));
+                    
+                    data_shuffle.laserIdx(idx) = new_lasIdx;
+                    
+                    old_areaIdx = obj.data{n}.areaIdx(idx);
+                    new_areaIdx = old_areaIdx(randperm(length(old_areaIdx)));
+                    
+                    data_shuffle.areaIdx(idx) = new_areaIdx;
+                end
+            end
+            
+            
+        end
 
         function obj = fit(obj,nonLaserModel,LaserModel)
 %             f=figure;
             obj.model = obj.getModel2(nonLaserModel,LaserModel);
-            obj.fitData.perSession = 1;
-            obj.fitData.groupAreas = 1;
+            obj.fitData.perSession = 0;
+            obj.fitData.groupAreas = 0;
             obj.lambda = 0.0001;
             
             if strcmp(nonLaserModel(end-5:end),'NESTED')
@@ -1506,6 +1543,7 @@ classdef omnibusLaserGLM
 %             legend(obj.names(1:end-1));
 
         end
+
         
         function plotFit_Laser(obj,varargin) 
             if isempty(varargin)
@@ -1548,8 +1586,8 @@ classdef omnibusLaserGLM
                     for i = 1:size(plotVal,2)
                         subplot(numSubjects,size(plotVal,2),size(plotVal,2)*n-size(plotVal,2) + i);
                         
-                        ap = obj.inactivationCoords(:,1);
-                        ml = obj.inactivationCoords(:,2);
+                        ap = obj.inactivationCoords(:,2);
+                        ml = obj.inactivationCoords(:,1);
                         dot = dotSize(:,i);
                         if obj.bilateral_flag==1
                             ap = [ap; ap];
@@ -1618,8 +1656,8 @@ classdef omnibusLaserGLM
                 for i = 1:size(plotVal,2)
                     subplot(size(plotVal,2)/2,2,i);
                     
-                    ap = obj.inactivationCoords(:,1);
-                    ml = obj.inactivationCoords(:,2);
+                    ap = obj.inactivationCoords(:,2);
+                    ml = obj.inactivationCoords(:,1);
                     dot = dotSize(:,i);
                     if obj.bilateral_flag==1
                         ap = [ap; ap];
@@ -1662,16 +1700,16 @@ classdef omnibusLaserGLM
             end
 %             
             if obj.bilateral_flag==0
-                siteLabels = {'Left V1','Right V1','Left M2','Right M2'};%,'Left Barrel','Right Barrel'};
+                siteLabels = {'Right V1','Right M2','Right Barrel'};
                 if obj.fitData.groupAreas==1
-                    siteID = [1 2 5 6];
+                    siteID = [2 6 4];
                 else
                     siteID = [10 15 48 49 ];%25 32];
                 end
             elseif obj.bilateral_flag==1
-                siteLabels = {'V1','M2'};
+                siteLabels = {'V1','M2','Barrel'};
                 if obj.fitData.groupAreas==1
-                    siteID = [2 6];
+                    siteID = [2 6 4];
                 else
                     siteID = [7 24 ];
                 end
@@ -1680,8 +1718,12 @@ classdef omnibusLaserGLM
             choiceLabels = {'Choose Left','Choose Right','NoGo'};
             
             for n = subjID
+%                 figure('name',[obj.names{n} ' ' obj.model.name{1} ' [' obj.model.name{2} ']'],'color','w'); 
 
+                
                 for site = 1:length(siteLabels)
+                
+%                     subplot(1,length(siteLabels),site);
                     
                     cont = obj.data{n}.stimulus(:,1:2);
                     resp = obj.data{n}.response;
@@ -2045,8 +2087,8 @@ classdef omnibusLaserGLM
                     val_stim = [val_stim, zeros(size(val_stim,1),1)];
                 end
                 
-                ap = obj.inactivationCoords(:,1);
-                ml = obj.inactivationCoords(:,2);
+                ap = obj.inactivationCoords(:,2);
+                ml = obj.inactivationCoords(:,1);
                 if obj.bilateral_flag==1
                     ap = [ap; ap];
                     ml = [ml; -ml];
@@ -2121,8 +2163,8 @@ classdef omnibusLaserGLM
             %             val_stim = bsxfun(@minus,val_stim(2:end,:),val_stim(1,:));
             %             val_resp = bsxfun(@minus,val_resp(2:end,:),val_resp(1,:));
             %
-            %             ap = obj.inactivationCoords(:,1);
-            %             ml = obj.inactivationCoords(:,2);
+            %             ap = obj.inactivationCoords(:,2);
+            %             ml = obj.inactivationCoords(:,1);
             %             if obj.bilateral_flag==1
             %                 ap = [ap; ap];
             %                 ml = [ml; -ml];
@@ -2546,481 +2588,568 @@ classdef omnibusLaserGLM
             
         end
         
-        function plotChoiceEffects(obj)
+        function plotChoiceEffects(obj,n,varargin)
             %Plot model-free delta pL,pR,pNG, and if available compare with model predicted delta pL,pR,pNG
+            
+            dotShape = 'o';
+            
             cmap = [ linspace(0,1,100)' linspace(0,1,100)' ones(100,1);
                 ones(100,1) linspace(1,0,100)' linspace(1,0,100)'];
             
             img=imread('D:\kirkcaldie_brain_BW_outline.png');
             
-            numSubjects = length(obj.names);
+            %             numSubjects = length(obj.names);
             
-            fisherExactP = nan(4,6,2,numSubjects);
-            for n = 1:numSubjects
- 
-                cont = obj.data{n}.stimulus(:,1:2);
-                c_0 = sum(cont,2)==0;
-                c_L = cont(:,1) > 0 & cont(:,2)==0;
-                c_R = cont(:,2) > 0 & cont(:,1)==0;
-                c_LR = ( cont(:,1) == cont(:,2) ) & ~c_0;
-%                 c_L = cont(:,1) == 0.54 & cont(:,2)==0;
-%                 c_R = cont(:,2) == 0.54 & cont(:,1)==0;
-%                 c_LR = ( cont(:,1) == 0.54 & cont(:,2)== 0.54 ) & ~c_0;
-                stim = 4*c_0 + 1*c_L + 2*c_R + 3*c_LR;
-                stim_labels = {'CL only','CR only','CL=CR','C=[0 0]'};
-%                 stim_labels = {'High CL','High CR','High CL&CR','C=[0 0]'};
-                col_labels = {'Chose Left','Chose Right','NoGo'};
-                resp = obj.data{n}.response;
-                laser = obj.data{n}.laserIdx;
-                sess = obj.data{n}.sessionID;
-                
-%                 %Print Chi2 test for laser effects (collapsing over
-%                 %stimuli, area, choices)
-                areaLabels = {'Left V1','Right V1','Left S1','Right S1','Left M2','Right M2'};
-                sigString = {'ns','*','**','***','****'};
-                disp(obj.names{n});
-                
-                try
-                    for a = 1:6
-                        disp(['    ' areaLabels{a}]);
-                        idx = (obj.data{n}.areaIdx==a | obj.data{n}.areaIdx==999);
-                        
-                        %If left hemisphere, then test Left+NoGo/Right on
-                        %trials with CR>CL
-                        if mod(a,2) == 1
-                            idx = idx & (cont(:,2)>cont(:,1));
-                            [c,~,p]=crosstab(obj.data{n}.response(idx)==2,obj.data{n}.areaIdx(idx));
-                            txt = 'L+NG/R vs Lsr/NoLsr';
-                        else
-                            %If right hemisphere, test Right+Nogo/Left on trials
-                            %with CL>CR
-                            idx = idx & (cont(:,1)>cont(:,2));
-                            [c,~,p]=crosstab(obj.data{n}.response(idx)==1,obj.data{n}.areaIdx(idx));
-                            txt = 'R+NG/L vs Lsr/NoLsr';
-                        end
-                        
-                        [~,p,~] = fishertest(c);
-                        numStars = 1 + (p < 0.0001) + (p < 0.001) + (p < 0.01) + (p < 0.05);
-                        disp(['    ' '    ' txt ' ' sigString{numStars} ' ' num2str(p)]);
-                    end
-                    disp(' ');
-                catch
+            withShuffle = 0;
+            if nargin>2
+                if contains(varargin{:},'withShuffle')
+                    withShuffle = 1;
+                    
                 end
+            end
+            
+            fisherExactP = nan(4,6,2);
+            
+            if withShuffle == 1
+                numIter = 1000;
                 
+                val_stim_diff_null = nan((size(obj.inactivationCoords,1)), 4, 3, numIter);
                 
-                fx1=figure('name',obj.names{n},'color','w');
-                resp(stim==0) = [];
-                laser(stim==0) = [];
-                cont(stim==0,:) = [];
-                sess(stim==0)=[];
-                stim(stim==0)= [];
-                
-                AX = [];
-                %Plot actual data
-                val_stim_diffR=[];
-                for r = 1:3
-                    val = (resp==r);
-                    val_stim = nan(size(obj.inactivationCoords,1)+1,4);
-%                     for session=1:max(sess)
+                for iter = 1:numIter
+                    shuf = obj.shuffleData(n);
+                    
+                    cont = shuf.stimulus(:,1:2);
+                    c_0 = sum(cont,2)==0;
+                    c_L = cont(:,1) > 0 & cont(:,2)==0;
+                    c_R = cont(:,2) > 0 & cont(:,1)==0;
+                    c_LR = ( cont(:,1) == cont(:,2) ) & ~c_0;
+                    stim = 4*c_0 + 1*c_L + 2*c_R + 3*c_LR;
+                    
+                    resp = shuf.response;
+                    laser = shuf.laserIdx;
+                    resp(stim==0) = [];
+                    laser(stim==0) = [];
+                    cont(stim==0,:) = [];
+                    stim(stim==0)= [];
+                    
+                    for r = 1:3
+                        val = (resp==r);
+                        val_stim = nan(size(obj.inactivationCoords,1)+1,4);
+                        
                         for site = 1:(size(obj.inactivationCoords,1)+1)
                             for s = 1:4
                                 val_stim(site,s) = nanmean(val(laser==(site-1) & stim==s));
                             end
                         end
-%                     end
-%                     val_stim = nanmean(val_stim,3);
-                    
-%                     %Change pNoGo to pGo
-%                     if r==3
-%                         val_stim = 1 - val_stim;
-%                     end
-                    
-                    %compute change in metric from nonLaser condition
-                    val_stim_diff = bsxfun(@minus,val_stim(2:end,:),val_stim(1,:));
-                    
-                    if r==2
-                        val_stim_diffR = val_stim_diff;
+                        
+                        val_stim_diff_null(:,:, r, iter) = bsxfun(@minus,val_stim(2:end,:),val_stim(1,:));
+                        
                     end
                     
-                    ap = obj.inactivationCoords(:,1);
-                    ml = obj.inactivationCoords(:,2);
+                end
+            end
+            
+            
+            
+            d = obj.data{n};
+            
+            cont = d.stimulus(:,1:2);
+            c_0 = sum(cont,2)==0;
+            c_L = cont(:,1) > 0 & cont(:,2)==0;
+            c_R = cont(:,2) > 0 & cont(:,1)==0;
+            c_LR = ( cont(:,1) == cont(:,2) ) & ~c_0;
+            %                 c_L = cont(:,1) == 0.54 & cont(:,2)==0;
+            %                 c_R = cont(:,2) == 0.54 & cont(:,1)==0;
+            %                 c_LR = ( cont(:,1) == 0.54 & cont(:,2)== 0.54 ) & ~c_0;
+            stim = 4*c_0 + 1*c_L + 2*c_R + 3*c_LR;
+            stim_labels = {'CL only','CR only','CL=CR','C=[0 0]'};
+            %                 stim_labels = {'High CL','High CR','High CL&CR','C=[0 0]'};
+            col_labels = {'Chose Left','Chose Right','NoGo'};
+            
+            resp = d.response;
+            laser = d.laserIdx;
+            sess = d.sessionID;
+            
+            resp(stim==0) = [];
+            laser(stim==0) = [];
+            cont(stim==0,:) = [];
+            sess(stim==0)=[];
+            stim(stim==0)= [];
+            %                 %Print Chi2 test for laser effects (collapsing over
+            %                 %stimuli, area, choices)
+            %                 areaLabels = {'Left V1','Right V1','Left S1','Right S1','Left M2','Right M2'};
+            %                 sigString = {'ns','*','**','***','****'};
+            %                 disp(obj.names{n});
+            %
+            %                 try
+            %                     for a = 1:6
+            %                         disp(['    ' areaLabels{a}]);
+            %                         idx = (d.areaIdx==a | d.areaIdx==999);
+            %
+            %                         %If left hemisphere, then test Left+NoGo/Right on
+            %                         %trials with CR>CL
+            %                         if mod(a,2) == 1
+            %                             idx = idx & (cont(:,2)>cont(:,1));
+            %                             [c,~,p]=crosstab(d.response(idx)==2,d.areaIdx(idx));
+            %                             txt = 'L+NG/R vs Lsr/NoLsr';
+            %                         else
+            %                             %If right hemisphere, test Right+Nogo/Left on trials
+            %                             %with CL>CR
+            %                             idx = idx & (cont(:,1)>cont(:,2));
+            %                             [c,~,p]=crosstab(d.response(idx)==1,d.areaIdx(idx));
+            %                             txt = 'R+NG/L vs Lsr/NoLsr';
+            %                         end
+            %
+            %                         [~,p,~] = fishertest(c);
+            %                         numStars = 1 + (p < 0.0001) + (p < 0.001) + (p < 0.01) + (p < 0.05);
+            %                         disp(['    ' '    ' txt ' ' sigString{numStars} ' ' num2str(p)]);
+            %                     end
+            %                     disp(' ');
+            %                 catch
+            %                 end
+            
+            
+            
+            
+            
+            fx1=figure('name',obj.names{n},'color','w');
+            
+            AX = [];
+            %Plot actual data
+            val_stim_diffR=[];
+            for r = 1:3
+                val = (resp==r);
+                val_stim = nan(size(obj.inactivationCoords,1)+1,4);
+                %                     for session=1:max(sess)
+                for site = 1:(size(obj.inactivationCoords,1)+1)
+                    for s = 1:4
+                        val_stim(site,s) = nanmean(val(laser==(site-1) & stim==s));
+                    end
+                end
+                %                     end
+                %                     val_stim = nanmean(val_stim,3);
+                
+                %                     %Change pNoGo to pGo
+                %                     if r==3
+                %                         val_stim = 1 - val_stim;
+                %                     end
+                
+                %compute change in metric from nonLaser condition
+                val_stim_diff = bsxfun(@minus,val_stim(2:end,:),val_stim(1,:));
+                
+                if r==2
+                    val_stim_diffR = val_stim_diff;
+                end
+                
+                ap = obj.inactivationCoords(:,2);
+                ml = obj.inactivationCoords(:,1);
+                if obj.bilateral_flag==1
+                    ap = [ap; ap];
+                    ml = [ml; -ml];
+                    val_stim_diff = [val_stim_diff; val_stim_diff];
+                end
+                
+                q = quantile(val_stim_diff(:),[0.025 0.975]);
+                q = max(abs(q));
+                
+                
+                for s = 1:4
+                    %                         AX(r,s)=subplot(3,4,s + 4*(r-1));
+                    
+                    if withShuffle == 1
+                        
+                        pValue = nan(size(obj.inactivationCoords,1) , 1);
+                        null = val_stim_diff_null(:,s,r,:);
+                        null = null(:);
+                        
+                        for site = 1:(size(obj.inactivationCoords,1))
+                            point = val_stim_diff(site,s);
+%                             null = squeeze(val_stim_diff_null(site,s,r,:));
+                            pValue(site) = min([mean(point<=null) mean(point>=null)]);
+                        end
+                        
+                        dotSize = (pValue<0.001)*50 + (pValue<0.01)*50 + (pValue<0.05)*25 + 1;
+                        if obj.bilateral_flag==1
+                            dotSize = [dotSize; dotSize];
+                        end
+                    else
+                        dotSize = ones(size(val_stim_diff(:,s)))*125;
+                    end
+                    
+
+                
+                    
+                    AX(s,r)=subplot(4,3,3*(s-1) + r);
+                    hold on;
+                    imX=imagesc(linspace(-4.5,4.5,1000),linspace(3.75,-5.2,1000),img,'Parent',AX(s,r));
+                    set(gca,'ydir','normal');
+                    set(imX,'alphadata',0.7);
+                    h=scatter(ml,ap,dotSize,val_stim_diff(:,s),dotShape,'filled'); axis equal;  drawnow;
+                    h.MarkerEdgeColor=[1 1 1]*0.75;
+                    %                         caxis([-1 1]*q);
+                    caxis([-1 1]*0.8);
+                    set(gca,'xtick','','ytick','','xcolor','w','ycolor','w');
+                    hold on;
+                    if r == 1
+                        %                             title('Actual & Pred');
+                    end
+                    
+                    if s == 4
+                        set(gca,'xcolor','k'); xlabel(col_labels{r});
+                    end
+                    
+                    if r == 1
+                        set(gca,'ycolor','k'); ylabel(stim_labels{s});
+                    end
+                end
+            end
+            
+            try
+                
+                nonlaserparams = median(obj.fitData.params{n},1);
+                
+                if obj.fitData.perSession == 1
+                    
+                    warning('Model predictions not appropriate when doing per session fits as it requires averaging session parameters');
+                end
+                
+                laserparams = obj.fitData.deltaParams{n};
+                
+                
+                %                     [ZL,ZR] = obj.getModel(obj.fitData.nonLaserModel,obj.fitData.biasMode,n);
+                %                     [ZL_las,ZR_las] = obj.getModel(obj.fitData.laserModel,obj.fitData.biasMode,n);
+                nonLaserP = [];
+                LaserP = [];
+                dR = [];
+                for s = 1:4
+                    c = cont(stim==s,:);
+                    nonLaserP(:,:,s) = mean(obj.calculatePhat(obj.model.ZL,obj.model.ZR,[],nonlaserparams,c),1);
+                    for site = 1:size(obj.inactivationCoords,1)
+                        LaserP(site,:,s) = mean(obj.calculatePhat(obj.model.deltaZL,obj.model.deltaZR,nonlaserparams,laserparams(site,:),c),1);
+                    end
+                    
+                    %                         %flip pNG to pG
+                    %                         nonLaserP(:,3,s) = 1-nonLaserP(:,3,s);
+                    %                         LaserP(:,3,s) = 1-LaserP(:,3,s);
+                    
+                    dP = bsxfun(@minus,LaserP(:,:,s),nonLaserP(:,:,s));
+                    dR = [dR, dP(:,2)];
+                    %                                                 figure(fx2); subplot(1,4,s);
+                    %                                                 plot(val_stim_diff(:,s),dP(:,3),'o'); xlabel('Actual dNG'); ylabel('Pred dNG');
+                    %                                                 set(gca,'box','off');
+                    %                                                 figure(fx1);
+                    %
+                    ap = obj.inactivationCoords(:,2);
+                    ml = obj.inactivationCoords(:,1);
                     if obj.bilateral_flag==1
                         ap = [ap; ap];
                         ml = [ml; -ml];
-                        val_stim_diff = [val_stim_diff; val_stim_diff];
+                        dP = [dP; dP];
                     end
                     
-                    q = quantile(val_stim_diff(:),[0.025 0.975]);
-                    q = max(abs(q));
-                    
-                    for s = 1:4
-                        %                         AX(r,s)=subplot(3,4,s + 4*(r-1));
-                        AX(s,r)=subplot(4,3,3*(s-1) + r);
-                        hold on;
-                        imX=imagesc(linspace(-4.5,4.5,1000),linspace(3.75,-5.2,1000),img,'Parent',AX(s,r));
-                        set(gca,'ydir','normal');
+                    for r = 1:3
+                        imX=imagesc(linspace(-4.5,4.5,1000)+11,linspace(3.75,-5.2,1000),img,'Parent',AX(s,r)); set(gca,'ydir','normal');
                         set(imX,'alphadata',0.7);
-                        h=scatter(ml,ap,200,val_stim_diff(:,s),'s','filled'); axis equal;
-                        h.MarkerEdgeColor=[1 1 1]*0.95;
-                        %                         caxis([-1 1]*q);
-                        caxis([-1 1]*0.4);
-                        set(gca,'xtick','','ytick','','xcolor','w','ycolor','w');
-                        hold on;
-                        if r == 1
-                            %                             title('Actual & Pred');
-                        end
-                        
-                        if s == 4
-                            set(gca,'xcolor','k'); xlabel(col_labels{r});
-                        end
-                        
-                        if r == 1
-                            set(gca,'ycolor','k'); ylabel(stim_labels{s});
-                        end
+                        h=scatter(AX(s,r),ml+11,ap,125,dP(:,r),dotShape,'filled'); axis equal;
+                        h.MarkerEdgeColor=[1 1 1]*0.75;
                     end
                 end
+                %                     keyboard;
+                %                     titleText = 'Actual & Pred';
                 
-                try
-                    
-                    nonlaserparams = median(obj.fitData.params{n},1);
-                    warning('Model predictions not appropriate when doing per session fits as it requires averaging session parameters');
-                    laserparams = obj.fitData.deltaParams{n};
-                    
-                    
-%                     [ZL,ZR] = obj.getModel(obj.fitData.nonLaserModel,obj.fitData.biasMode,n);
-%                     [ZL_las,ZR_las] = obj.getModel(obj.fitData.laserModel,obj.fitData.biasMode,n);
-                    nonLaserP = [];
-                    LaserP = [];
-                    dR = [];
-                    for s = 1:4
-                        c = cont(stim==s,:);
-                        nonLaserP(:,:,s) = mean(obj.calculatePhat(obj.model.ZL,obj.model.ZR,[],nonlaserparams,c),1);
-                        for site = 1:size(obj.inactivationCoords,1)
-                            LaserP(site,:,s) = mean(obj.calculatePhat(obj.model.deltaZL,obj.model.deltaZR,nonlaserparams,laserparams(site,:),c),1);
-                        end
-                        
-%                         %flip pNG to pG
-%                         nonLaserP(:,3,s) = 1-nonLaserP(:,3,s);
-%                         LaserP(:,3,s) = 1-LaserP(:,3,s);
-                                                
-                        dP = bsxfun(@minus,LaserP(:,:,s),nonLaserP(:,:,s));
-                        dR = [dR, dP(:,2)];
-%                                                 figure(fx2); subplot(1,4,s);
-%                                                 plot(val_stim_diff(:,s),dP(:,3),'o'); xlabel('Actual dNG'); ylabel('Pred dNG');
-%                                                 set(gca,'box','off');
-%                                                 figure(fx1);
-%                         
-                        ap = obj.inactivationCoords(:,1);
-                        ml = obj.inactivationCoords(:,2);
-                        if obj.bilateral_flag==1
-                            ap = [ap; ap];
-                            ml = [ml; -ml];
-                            dP = [dP; dP];
-                        end
-                        
-                        for r = 1:3
-                            imX=imagesc(linspace(-4.5,4.5,1000)+11,linspace(3.75,-5.2,1000),img,'Parent',AX(s,r)); set(gca,'ydir','normal');
-                            set(imX,'alphadata',0.7);
-                            h=scatter(AX(s,r),ml+11,ap,200,dP(:,r),'s','filled'); axis equal;
-                            h.MarkerEdgeColor=[1 1 1]*0.95;
-                        end
-                    end
-%                     keyboard;
-                    %                     titleText = 'Actual & Pred';
-                    
-                    
-                catch
-                    
-                    %                     titleText = '';
-                end
-                set(get(gcf,'children'),'box','off');
-                colormap(cmap);
-
-                fx1=figure('name',obj.names{n},'color','w');
-                for s=1:4
-                    %compute ZL and ZR
-                    z=[];
-                    for site = 1:(size(obj.inactivationCoords,1)+1)
-                        r = resp(laser==(site-1) & stim==s);
-                        r=sum([r==1 r==2 r==3],1)/length(r);
-                        
-                        z(site,1) = log(r(1)/r(3));
-                        z(site,2) = log(r(2)/r(3));
-                    end
-                    
-                    dz = bsxfun(@minus,z(2:end,:),z(1,:));
-                    for i = 1:2
-                        subplot(4,2,(s-1)*2 + i);
-                        hold on;
-                        imX=imagesc(linspace(-4.5,4.5,1000),linspace(3.75,-5.2,1000),img);
-                        set(gca,'ydir','normal');
-                        set(imX,'alphadata',0.7);
-                        h=scatter(ml,ap,200,dz(:,i),'s','filled'); axis equal;
-                        h.MarkerEdgeColor=[1 1 1]*0.95;
-                        %                         caxis([-1 1]*q);
-                        caxis([-1 1]*0.4);
-                        set(gca,'xtick','','ytick','','xcolor','w','ycolor','w');
-                        if s==1
-                            labels={'delta ZL','delta ZR'};
-                            title(labels{i});
-                        end
-                        
-                        if i==1
-                            set(gca,'ycolor','k'); ylabel(stim_labels{s});
-                        end
-                        
-                    end
-                    
-                    
-                end
-                colormap(cmap);
-%                 try
-%                     figure('name',obj.names{n},'color','w');
-%                     ezplot('y=x'); hold on;
-%                     
-%                     plot(val_stim_diffR(:),dR(:),'ko');
-%                     xlabel('Empirical \Delta p(R)');
-%                     ylabel('Predicted \Delta p(R)');
-%                     title('');
-%                     set(gca,'box','off');
-%                     xlim([-1 1]); ylim([-1 1]); axis square;
-%                 catch
-%                 end
-%                 
-%                Now plot as a scatter plot of pL vs pR
                 
-%                 figure('name',obj.names{n},'color','w');
-%                 subplot(4,3,2);
-%                 kimg=imread('\\basket.cortexlab.net\home\stuff\kirkcaldie_brain_BW.PNG');
-%                 imX=image(-5:1:5,4:-1:-6,kimg); axis square; set(gca,'ydir','normal','xtick','','ytick','','box','off','xcolor','w','ycolor','w');
-%                 set(imX,'alphadata',0.7); hold on;
-%                 numSites = size(obj.inactivationCoords,1);
-%                 
-%                 %                 cols = get(gca,'ColorOrder');
-%                 %                 cols = [1 0 0;
-%                 %                         0.5 0 0;
-%                 %                         1 0 1;
-%                 %                         0.5 0 0.5;
-%                 %                         0 1 0;
-%                 %                         0 0.5 0;
-%                 %                         0.5 0.5 0.5];
-%                 %                 cols = cols(obj.identifyArea(obj.inactivationCoords),:);
-%                 %                 cols = [linspace(0,1,numSites)' linspace(1,0,numSites)' zeros(numSites,1) ];
-%                 %                 cols(obj.inactivationCoords(:,2)>0,3) = 1;
-%                 %
-%                 
-%                 cols = [69, 198, 234;
-%                     65, 140, 202;
-%                     234, 155, 196;
-%                     176, 115, 175;
-%                     182, 216, 150;
-%                     252, 200, 102;
-%                     201, 54, 0;
-%                     243, 237, 73;
-%                     125 125 125]/255;
-%                 
-%                 if obj.bilateral_flag==0
-%                     areaID = [1 1 2 3 3 2 1 1,...
-%                         1 1 2 3 3 2 1 1,...
-%                         5 4 4 3 3 4 4 5,...
-%                         5 5 5 3 3 5 5 5,...
-%                         5 5 6 7 7 6 5 5,...
-%                         6 6 7 7 6 6,...
-%                         7 7 7 7,...
-%                         8 8,...
-%                         9];
-%                     
-%                     sym = {'o','o'};
-%                     
-%                 else
-%                     areaID = [3 2 1 1,...
-%                         3 2 1 1,...
-%                         3 4 4 5,...
-%                         3 5 5 5,...
-%                         7 6 5 5,...
-%                         7 6 6,...
-%                         7 7,...
-%                         8];
-%                     sym = {'o','o'};
-%                 end
-%                 cols = cols(areaID,:);
-%                 
-%                 
-%                 plotCols = cols;
-%                 ap = obj.inactivationCoords(:,1);
-%                 ml = obj.inactivationCoords(:,2);
-%                 Lidx = ml<0;
-%                 Ridx = ~Lidx;
-%                 if obj.bilateral_flag==1
-%                     ap = [ap; ap];
-%                     ml = [ml; -ml];
-%                     plotCols = [plotCols; plotCols];
-%                 end
-%                 
-%                 %                 scatter(ml,ap,200,plotCols,sym{1},'filled');
-%                 h=scatter(ml(Lidx),ap(Lidx),200,plotCols(Lidx,:),sym{1});
-%                 set(h,'linewidth',2);
-%                 scatter(ml(Ridx),ap(Ridx),200,plotCols(Ridx,:),sym{2},'filled');
-%                 ylim([-6 6]);
-%                 %
-%                 val_stim = nan(size(obj.inactivationCoords,1)+1,4,3);
-%                 NL = cell(3,4);
-%                 NLci = cell(3,4);
-%                 for r = 1:3
-%                     val = (resp==r);
-%                     for site = 1:(size(obj.inactivationCoords,1)+1)
-%                         for s = 1:4
-%                             val_stim(site,s,r) = nanmean(val(laser==(site-1) & stim==s));
-%                         end
-%                     end
-%                     
-%                     %nonlaser p and pci
-%                     for s = 1:4
-%                         nonLasertrials = val(laser==0 & stim==s);
-%                         [NL{r,s},NLci{r,s}] = binofit(sum(nonLasertrials),length(nonLasertrials));
-%                     end
-%                 end
-%                 
-%                 for s = 1:4
-%                     subplot(4,4,s+4); hold on;
-%                     %                                             scatter(val_stim(2:end,s,2),val_stim(2:end,s,1),50,cols,'filled');
-%                     h=scatter(val_stim(1+find(Lidx),s,2),val_stim(1+find(Lidx),s,1),50,cols(Lidx,:),sym{1});
-%                     set(h,'linewidth',2);
-%                     scatter(val_stim(1+find(Ridx),s,2),val_stim(1+find(Ridx),s,1),50,cols(Ridx,:),sym{2},'filled');
-%                     
-%                     scatter(val_stim(1,s,2),val_stim(1,s,1),100,[0 0 0],'filled');
-%                     %                     l=line(ones(1,2)*NL{2,s},NLci{1,s}); set(l,'linewidth',4,'color',[0 0 0]);
-%                     %                     l=line(NLci{2,s},ones(1,2)*NL{1,s}); set(l,'linewidth',4,'color',[0 0 0]);
-%                     
-%                     pL = val_stim(1,s,1);
-%                     pR = val_stim(1,s,2);
-%                     pNG = val_stim(1,s,3);
-%                     zl = log(pL/pNG);
-%                     zr = log(pR/pNG);
-%                     
-%                     pLn = @(pRn)( 1 - pRn*(1+ exp(-zr)));
-%                     ezplot(pLn);
-%                     pLn = @(pRn)( (1 - pRn)/(1+ exp(-zl)));
-%                     a=ezplot(pLn); a.LineStyle='--';
-%                     
-%                     xlabel('pR'); ylabel('pL'); xlim([0 1]); ylim([0 1]); axis square;
-%                     title(stim_labels{s});
-%                     
-%                     try
-%                         LaserP; %should throw error if model wasn't fitted
-%                         subplot(4,4,s+8); hold on;
-%                         h=scatter(LaserP(Lidx,2,s),LaserP(Lidx,1,s),50,cols(Lidx,:),sym{1});
-%                         set(h,'linewidth',2);
-%                         scatter(LaserP(Ridx,2,s),LaserP(Ridx,1,s),50,cols(Ridx,:),sym{2},'filled');
-%                         scatter(nonLaserP(1,2,s),nonLaserP(1,1,s),100,[0 0 0],'filled');
-%                         pL = nonLaserP(1,1,s);
-%                         pR = nonLaserP(1,2,s);
-%                         pNG = nonLaserP(1,3,s);
-%                         zl = log(pL/pNG);
-%                         zr = log(pR/pNG);
-%                         
-%                         pLn = @(pRn)( 1 - pRn*(1+ exp(-zr)));
-%                         ezplot(pLn);
-%                         pLn = @(pRn)( (1 - pRn)/(1+ exp(-zl)));
-%                         a=ezplot(pLn); a.LineStyle='--';
-%                         
-%                         xlabel('pR'); ylabel('pL'); xlim([0 1]); ylim([0 1]); axis square;
-%                         title('Prediction');
-%                     catch
-%                         warning('Need to fit model to plot model predictions');
-%                     end
-%                 end
+            catch
                 
-                %false alarm vs contrtalateral biasing plot
-%                 FA_L(n) = val_stim(1,1,1);
-%                 FA_R(n) = val_stim(1,1,2);
-%                 CL_pR(n) = max(val_stim(:,2,2));
-%                 CR_pL(n) = max(val_stim(:,3,1));
-                
-                %                 %Another view: plot pL vs pR for each possible stimulus
-                %                 %configuration, at each site
-                % %                 keyboard;
-                %                 cVal = unique(cont(:));
-                %                 cols = {[3/3 3/3 3/3] [2/3 3/3 2/3] [1/3 3/3 1/3] [0/3 3/3 0/3];
-                %                         [3/3 2/3 2/3] [0.78 0.78 0.44] [0.56 0.89 0.22] [1/3 3/3 0/3];
-                %                         [3/3 1/3 1/3] [0.89 0.56 0.22] [0.78 0.78 0.11] [2/3 3/3 0/3];
-                %                         [3/3 0/3 0/3] [3/3 1/3 0/3] [3/3 2/3 0/3] [3/3 3/3 0/3]};
-                %                 [a,b] = meshgrid(cVal);
-                %                 val_stim = nan(length(cVal),length(cVal),3,size(obj.inactivationCoords,1)+1);
-                %                 for r = 1:3
-                %                     val = (resp==r);
-                %                     for site = 1:(size(obj.inactivationCoords,1)+1)
-                %                         for cl = 1:length(cVal)
-                %                             for cr = 1:length(cVal)
-                %                                 val_stim(cl,cr,r,site) = nanmean(val(laser==(site-1) & cont(:,1)==cVal(cl) & cont(:,2)==cVal(cr)));
-                %                             end
-                %                         end
-                %                     end
-                %                 end
-                %
-                %                 figure('name',obj.names{n},'color','w');
-                % %                 kimg=imread('D:\kirkcaldie_brain_BW.PNG');
-                % %                 imX=image(-5:1:5,4:-1:-6,kimg); set(gca,'ydir','normal');
-                % %                 set(gca,'Position',[0 0 1 1]);
-                %                 for site = 1:size(obj.inactivationCoords,1)
-                %                     posIn = obj.inactivationCoords(site,1:2)/10 + [0.58 0.465];
-                %                     axes; hold on;
-                %
-                %                     %plot non-laser dots
-                %                     pL = val_stim(:,:,1,1);
-                %                     pR = val_stim(:,:,2,1);
-                %                     scatter(pR(:),pL(:),50,1-cat(1,cols{:}),'o');
-                %
-                %                     %Plot site dots
-                %                     pL = val_stim(:,:,1,site+1);
-                %                     pR = val_stim(:,:,2,site+1);
-                %                     scatter(pR(:),pL(:),50,1-cat(1,cols{:}),'o','filled');
-                %
-                %
-                %                     xlabel('pR'); ylabel('pL'); xlim([0 1]); ylim([0 1]); axis square;
-                %                     set(gca,'Position',[posIn(2) posIn(1) 0.07 0.07],'box','off','xtick','','ytick','');
-                %                 end
-                %
-                %                 axes; scatter(a(:),b(:),100,1-cat(1,cols{:}),'filled'); xlabel('CR'); ylabel('CL');
-                %                 set(gca,'Position',[0.8 0.8 0.07 0.07],'box','off'); axis square; xlim([0 max(cVal)]); ylim([0 max(cVal)]);
+                %                     titleText = '';
             end
+            set(get(gcf,'children'),'box','off');
+            colormap(cmap);
             
-%             %Plot results of significance testing as maps
-% %             keyboard;
-%             figure('color','w');
-%             titles={'(R+NG)/L vs Laser/noLaser','(L+NG)/R vs Laser/noLaser'};
-%             for n = 1:numSubjects
-%                 
-%                 for i=1:2
-%                     subplot(numSubjects,2,2*n -2 + i);
-%                     imagesc((fisherExactP(:,:,i,n)<0.05) + (fisherExactP(:,:,i,n)<0.01) + (fisherExactP(:,:,i,n)<0.001)); axis square;
-%                     
-%                     if n<numSubjects
-%                         set(gca,'xtick','','ytick','');
-%                     else
-%                         set(gca,'xtick',1:6,'XTickLabel',areaLabels,'xticklabelrotation',45,'ytick',1:4,'yticklabel',stim_labels);
-%                     end
-%                     
-%                     if n ==1
-%                         title(titles{i});
-%                     end
-%                     
-%                     if i == 1
-%                         ylabel(obj.names{n});
-%                     end
-%                 end
-%             end
-%             
-%             colormap('gray');
-%             
-%             %false alarm plots
-%             %             figure('color','w');
-%             %             subplot(1,2,1);
-%             %             plot(FA_L(1:end-1),CR_pL(1:end-1),'o'); xlabel('False alarm left choices'); ylabel('max pL during CR with inactivation');
-%             %             xlim([0 1]); ylim([0 1]); axis square;
-%             %             subplot(1,2,2);
-%             %             plot(FA_R(1:end-1),CL_pR(1:end-1),'o'); xlabel('False alarm right choices'); ylabel('max pR during CL with inactivation');
-%             %             xlim([0 1]); ylim([0 1]); axis square;
+            %                 fx1=figure('name',obj.names{n},'color','w');
+            %                 for s=1:4
+            %                     %compute ZL and ZR
+            %                     z=[];
+            %                     for site = 1:(size(obj.inactivationCoords,1)+1)
+            %                         r = resp(laser==(site-1) & stim==s);
+            %                         r=sum([r==1 r==2 r==3],1)/length(r);
+            %
+            %                         z(site,1) = log(r(1)/r(3));
+            %                         z(site,2) = log(r(2)/r(3));
+            %                     end
+            %
+            %                     dz = bsxfun(@minus,z(2:end,:),z(1,:));
+            %                     for i = 1:2
+            %                         subplot(4,2,(s-1)*2 + i);
+            %                         hold on;
+            %                         imX=imagesc(linspace(-4.5,4.5,1000),linspace(3.75,-5.2,1000),img);
+            %                         set(gca,'ydir','normal');
+            %                         set(imX,'alphadata',0.7);
+            %                         h=scatter(ml,ap,200,dz(:,i),'s','filled'); axis equal;
+            %                         h.MarkerEdgeColor=[1 1 1]*0.95;
+            %                         %                         caxis([-1 1]*q);
+            %                         caxis([-1 1]*0.4);
+            %                         set(gca,'xtick','','ytick','','xcolor','w','ycolor','w');
+            %                         if s==1
+            %                             labels={'delta ZL','delta ZR'};
+            %                             title(labels{i});
+            %                         end
+            %
+            %                         if i==1
+            %                             set(gca,'ycolor','k'); ylabel(stim_labels{s});
+            %                         end
+            %
+            %                     end
+            %
+            %
+            %                 end
+            %                 colormap(cmap);
+            %                 try
+            %                     figure('name',obj.names{n},'color','w');
+            %                     ezplot('y=x'); hold on;
+            %
+            %                     plot(val_stim_diffR(:),dR(:),'ko');
+            %                     xlabel('Empirical \Delta p(R)');
+            %                     ylabel('Predicted \Delta p(R)');
+            %                     title('');
+            %                     set(gca,'box','off');
+            %                     xlim([-1 1]); ylim([-1 1]); axis square;
+            %                 catch
+            %                 end
+            %
+            %                Now plot as a scatter plot of pL vs pR
+            
+            %                 figure('name',obj.names{n},'color','w');
+            %                 subplot(4,3,2);
+            %                 kimg=imread('\\basket.cortexlab.net\home\stuff\kirkcaldie_brain_BW.PNG');
+            %                 imX=image(-5:1:5,4:-1:-6,kimg); axis square; set(gca,'ydir','normal','xtick','','ytick','','box','off','xcolor','w','ycolor','w');
+            %                 set(imX,'alphadata',0.7); hold on;
+            %                 numSites = size(obj.inactivationCoords,1);
+            %
+            %                 %                 cols = get(gca,'ColorOrder');
+            %                 %                 cols = [1 0 0;
+            %                 %                         0.5 0 0;
+            %                 %                         1 0 1;
+            %                 %                         0.5 0 0.5;
+            %                 %                         0 1 0;
+            %                 %                         0 0.5 0;
+            %                 %                         0.5 0.5 0.5];
+            %                 %                 cols = cols(obj.identifyArea(obj.inactivationCoords),:);
+            %                 %                 cols = [linspace(0,1,numSites)' linspace(1,0,numSites)' zeros(numSites,1) ];
+            %                 %                 cols(obj.inactivationCoords(:,2)>0,3) = 1;
+            %                 %
+            %
+            %                 cols = [69, 198, 234;
+            %                     65, 140, 202;
+            %                     234, 155, 196;
+            %                     176, 115, 175;
+            %                     182, 216, 150;
+            %                     252, 200, 102;
+            %                     201, 54, 0;
+            %                     243, 237, 73;
+            %                     125 125 125]/255;
+            %
+            %                 if obj.bilateral_flag==0
+            %                     areaID = [1 1 2 3 3 2 1 1,...
+            %                         1 1 2 3 3 2 1 1,...
+            %                         5 4 4 3 3 4 4 5,...
+            %                         5 5 5 3 3 5 5 5,...
+            %                         5 5 6 7 7 6 5 5,...
+            %                         6 6 7 7 6 6,...
+            %                         7 7 7 7,...
+            %                         8 8,...
+            %                         9];
+            %
+            %                     sym = {'o','o'};
+            %
+            %                 else
+            %                     areaID = [3 2 1 1,...
+            %                         3 2 1 1,...
+            %                         3 4 4 5,...
+            %                         3 5 5 5,...
+            %                         7 6 5 5,...
+            %                         7 6 6,...
+            %                         7 7,...
+            %                         8];
+            %                     sym = {'o','o'};
+            %                 end
+            %                 cols = cols(areaID,:);
+            %
+            %
+            %                 plotCols = cols;
+            %                 ap = obj.inactivationCoords(:,2);
+            %                 ml = obj.inactivationCoords(:,1);
+            %                 Lidx = ml<0;
+            %                 Ridx = ~Lidx;
+            %                 if obj.bilateral_flag==1
+            %                     ap = [ap; ap];
+            %                     ml = [ml; -ml];
+            %                     plotCols = [plotCols; plotCols];
+            %                 end
+            %
+            %                 %                 scatter(ml,ap,200,plotCols,sym{1},'filled');
+            %                 h=scatter(ml(Lidx),ap(Lidx),200,plotCols(Lidx,:),sym{1});
+            %                 set(h,'linewidth',2);
+            %                 scatter(ml(Ridx),ap(Ridx),200,plotCols(Ridx,:),sym{2},'filled');
+            %                 ylim([-6 6]);
+            %                 %
+            %                 val_stim = nan(size(obj.inactivationCoords,1)+1,4,3);
+            %                 NL = cell(3,4);
+            %                 NLci = cell(3,4);
+            %                 for r = 1:3
+            %                     val = (resp==r);
+            %                     for site = 1:(size(obj.inactivationCoords,1)+1)
+            %                         for s = 1:4
+            %                             val_stim(site,s,r) = nanmean(val(laser==(site-1) & stim==s));
+            %                         end
+            %                     end
+            %
+            %                     %nonlaser p and pci
+            %                     for s = 1:4
+            %                         nonLasertrials = val(laser==0 & stim==s);
+            %                         [NL{r,s},NLci{r,s}] = binofit(sum(nonLasertrials),length(nonLasertrials));
+            %                     end
+            %                 end
+            %
+            %                 for s = 1:4
+            %                     subplot(4,4,s+4); hold on;
+            %                     %                                             scatter(val_stim(2:end,s,2),val_stim(2:end,s,1),50,cols,'filled');
+            %                     h=scatter(val_stim(1+find(Lidx),s,2),val_stim(1+find(Lidx),s,1),50,cols(Lidx,:),sym{1});
+            %                     set(h,'linewidth',2);
+            %                     scatter(val_stim(1+find(Ridx),s,2),val_stim(1+find(Ridx),s,1),50,cols(Ridx,:),sym{2},'filled');
+            %
+            %                     scatter(val_stim(1,s,2),val_stim(1,s,1),100,[0 0 0],'filled');
+            %                     %                     l=line(ones(1,2)*NL{2,s},NLci{1,s}); set(l,'linewidth',4,'color',[0 0 0]);
+            %                     %                     l=line(NLci{2,s},ones(1,2)*NL{1,s}); set(l,'linewidth',4,'color',[0 0 0]);
+            %
+            %                     pL = val_stim(1,s,1);
+            %                     pR = val_stim(1,s,2);
+            %                     pNG = val_stim(1,s,3);
+            %                     zl = log(pL/pNG);
+            %                     zr = log(pR/pNG);
+            %
+            %                     pLn = @(pRn)( 1 - pRn*(1+ exp(-zr)));
+            %                     ezplot(pLn);
+            %                     pLn = @(pRn)( (1 - pRn)/(1+ exp(-zl)));
+            %                     a=ezplot(pLn); a.LineStyle='--';
+            %
+            %                     xlabel('pR'); ylabel('pL'); xlim([0 1]); ylim([0 1]); axis square;
+            %                     title(stim_labels{s});
+            %
+            %                     try
+            %                         LaserP; %should throw error if model wasn't fitted
+            %                         subplot(4,4,s+8); hold on;
+            %                         h=scatter(LaserP(Lidx,2,s),LaserP(Lidx,1,s),50,cols(Lidx,:),sym{1});
+            %                         set(h,'linewidth',2);
+            %                         scatter(LaserP(Ridx,2,s),LaserP(Ridx,1,s),50,cols(Ridx,:),sym{2},'filled');
+            %                         scatter(nonLaserP(1,2,s),nonLaserP(1,1,s),100,[0 0 0],'filled');
+            %                         pL = nonLaserP(1,1,s);
+            %                         pR = nonLaserP(1,2,s);
+            %                         pNG = nonLaserP(1,3,s);
+            %                         zl = log(pL/pNG);
+            %                         zr = log(pR/pNG);
+            %
+            %                         pLn = @(pRn)( 1 - pRn*(1+ exp(-zr)));
+            %                         ezplot(pLn);
+            %                         pLn = @(pRn)( (1 - pRn)/(1+ exp(-zl)));
+            %                         a=ezplot(pLn); a.LineStyle='--';
+            %
+            %                         xlabel('pR'); ylabel('pL'); xlim([0 1]); ylim([0 1]); axis square;
+            %                         title('Prediction');
+            %                     catch
+            %                         warning('Need to fit model to plot model predictions');
+            %                     end
+            %                 end
+            
+            %false alarm vs contrtalateral biasing plot
+            %                 FA_L(n) = val_stim(1,1,1);
+            %                 FA_R(n) = val_stim(1,1,2);
+            %                 CL_pR(n) = max(val_stim(:,2,2));
+            %                 CR_pL(n) = max(val_stim(:,3,1));
+            
+            %                 %Another view: plot pL vs pR for each possible stimulus
+            %                 %configuration, at each site
+            % %                 keyboard;
+            %                 cVal = unique(cont(:));
+            %                 cols = {[3/3 3/3 3/3] [2/3 3/3 2/3] [1/3 3/3 1/3] [0/3 3/3 0/3];
+            %                         [3/3 2/3 2/3] [0.78 0.78 0.44] [0.56 0.89 0.22] [1/3 3/3 0/3];
+            %                         [3/3 1/3 1/3] [0.89 0.56 0.22] [0.78 0.78 0.11] [2/3 3/3 0/3];
+            %                         [3/3 0/3 0/3] [3/3 1/3 0/3] [3/3 2/3 0/3] [3/3 3/3 0/3]};
+            %                 [a,b] = meshgrid(cVal);
+            %                 val_stim = nan(length(cVal),length(cVal),3,size(obj.inactivationCoords,1)+1);
+            %                 for r = 1:3
+            %                     val = (resp==r);
+            %                     for site = 1:(size(obj.inactivationCoords,1)+1)
+            %                         for cl = 1:length(cVal)
+            %                             for cr = 1:length(cVal)
+            %                                 val_stim(cl,cr,r,site) = nanmean(val(laser==(site-1) & cont(:,1)==cVal(cl) & cont(:,2)==cVal(cr)));
+            %                             end
+            %                         end
+            %                     end
+            %                 end
+            %
+            %                 figure('name',obj.names{n},'color','w');
+            % %                 kimg=imread('D:\kirkcaldie_brain_BW.PNG');
+            % %                 imX=image(-5:1:5,4:-1:-6,kimg); set(gca,'ydir','normal');
+            % %                 set(gca,'Position',[0 0 1 1]);
+            %                 for site = 1:size(obj.inactivationCoords,1)
+            %                     posIn = obj.inactivationCoords(site,1:2)/10 + [0.58 0.465];
+            %                     axes; hold on;
+            %
+            %                     %plot non-laser dots
+            %                     pL = val_stim(:,:,1,1);
+            %                     pR = val_stim(:,:,2,1);
+            %                     scatter(pR(:),pL(:),50,1-cat(1,cols{:}),'o');
+            %
+            %                     %Plot site dots
+            %                     pL = val_stim(:,:,1,site+1);
+            %                     pR = val_stim(:,:,2,site+1);
+            %                     scatter(pR(:),pL(:),50,1-cat(1,cols{:}),'o','filled');
+            %
+            %
+            %                     xlabel('pR'); ylabel('pL'); xlim([0 1]); ylim([0 1]); axis square;
+            %                     set(gca,'Position',[posIn(2) posIn(1) 0.07 0.07],'box','off','xtick','','ytick','');
+            %                 end
+            %
+            %                 axes; scatter(a(:),b(:),100,1-cat(1,cols{:}),'filled'); xlabel('CR'); ylabel('CL');
+            %                 set(gca,'Position',[0.8 0.8 0.07 0.07],'box','off'); axis square; xlim([0 max(cVal)]); ylim([0 max(cVal)]);
+            
+            
+            %             %Plot results of significance testing as maps
+            % %             keyboard;
+            %             figure('color','w');
+            %             titles={'(R+NG)/L vs Laser/noLaser','(L+NG)/R vs Laser/noLaser'};
+            %             for n = 1:numSubjects
+            %
+            %                 for i=1:2
+            %                     subplot(numSubjects,2,2*n -2 + i);
+            %                     imagesc((fisherExactP(:,:,i,n)<0.05) + (fisherExactP(:,:,i,n)<0.01) + (fisherExactP(:,:,i,n)<0.001)); axis square;
+            %
+            %                     if n<numSubjects
+            %                         set(gca,'xtick','','ytick','');
+            %                     else
+            %                         set(gca,'xtick',1:6,'XTickLabel',areaLabels,'xticklabelrotation',45,'ytick',1:4,'yticklabel',stim_labels);
+            %                     end
+            %
+            %                     if n ==1
+            %                         title(titles{i});
+            %                     end
+            %
+            %                     if i == 1
+            %                         ylabel(obj.names{n});
+            %                     end
+            %                 end
+            %             end
+            %
+            %             colormap('gray');
+            %
+            %             %false alarm plots
+            %             %             figure('color','w');
+            %             %             subplot(1,2,1);
+            %             %             plot(FA_L(1:end-1),CR_pL(1:end-1),'o'); xlabel('False alarm left choices'); ylabel('max pL during CR with inactivation');
+            %             %             xlim([0 1]); ylim([0 1]); axis square;
+            %             %             subplot(1,2,2);
+            %             %             plot(FA_R(1:end-1),CL_pR(1:end-1),'o'); xlabel('False alarm right choices'); ylabel('max pR during CL with inactivation');
+            %             %             xlim([0 1]); ylim([0 1]); axis square;
         end
         
         
@@ -3237,7 +3366,7 @@ classdef omnibusLaserGLM
                                 
                             case 'sparse_unilateral_2D'
                                 stim = p.parameters.visCueContrast;
-                                if ~any(min(stim,[],1)>0)
+                                if ~any(min(stim,[],2)>0)
                                     good(b)=0;
                                 end
                                 
@@ -3331,6 +3460,20 @@ classdef omnibusLaserGLM
                                     good(b)=0;
                                 end
                                 
+                            case 'galvo_unilateral_2D'
+                                block = dat.loadBlock(eRefs{b});
+                                block.events;
+                                
+                                if ~any(min(l.data.stimulus,[],2) > 0)
+                                    good(b)=0;
+                                end
+                                
+                                if length(l.data.response)<150
+                                    good(b)=0;
+                                end
+                                
+%                                 keyboard;
+                                
                             otherwise
                                 error('choose something');
                         end
@@ -3414,14 +3557,14 @@ classdef omnibusLaserGLM
             for t = 1:length(areaID)
                 pos = laserCoord(t,1:2);
                 
-                if pos(1) <= -2 && abs(pos(2))>1 %vis
-                    areaID(t) = (pos(2)<0)*1 + (pos(2)>0)*2;
-                elseif pos(1) == 0 && abs(pos(2)) > 1 %s1
-                    areaID(t) = (pos(2)<0)*3 + (pos(2)>0)*4;
-                elseif 2 <= pos(1) && pos(1) <= 3 %m2
-                    areaID(t) = (pos(2)<0)*5 + (pos(2)>0)*6;
-                elseif pos(1) <= -2 && abs(pos(2)) < 1 %retrosplenial
-                    areaID(t) = (pos(2)<0)*7 + (pos(2)>0)*8;
+                if pos(2) <= -2 && abs(pos(1))>1 %vis
+                    areaID(t) = (pos(1)<0)*1 + (pos(1)>0)*2;
+                elseif pos(2) == 0 && abs(pos(1)) > 1 %s1
+                    areaID(t) = (pos(1)<0)*3 + (pos(1)>0)*4;
+                elseif 2 <= pos(2) && pos(2) <= 3 %m2
+                    areaID(t) = (pos(1)<0)*5 + (pos(1)>0)*6;
+                elseif pos(2) <= -2 && abs(pos(1)) < 1 %retrosplenial
+                    areaID(t) = (pos(1)<0)*7 + (pos(1)>0)*8;
                 else
                     areaID(t) = 9;
                 end
