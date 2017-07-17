@@ -87,6 +87,23 @@ classdef GLM
         end
         
         function obj = setModel(obj,modelString)
+%             Function which contains the model definitions. Each
+%             definition requires a set of parameter Labels, estimation
+%             bounds, and some anonymous functions. The functions ZL and
+%             ZR define the two linear models in 3-class multinomial
+%             regression for 3-choice behaviour. For 2-choice behaviour,
+%             only ZL needs to be defined for logistic regression. The
+%             Zinput function provides input data to ZL and ZR. Often
+%             this will be simply the trial contrast but it can also be
+%             any other feature of interest.
+%             
+%             ZL and ZR always take to inputs P and IN. P is a vector of
+%             parameter values. IN is a matrix of model inputs as derived
+%             from the Zinput function
+%             
+%             Zinput always takes in the data struct and outputs a matrix of
+%             variables to be used in the model
+
             obj.modelString = modelString;
             obj.parameterFits = [];
             obj.parameterStart = [];
