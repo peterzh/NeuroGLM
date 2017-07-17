@@ -14,7 +14,12 @@ function D = loadData(expRef)
             
         D.repeatNum = block.events.repeatNumValues';
         D.feedbackType = block.events.feedbackValues';
-        D.RT = block.events.responseTimes' - block.events.stimulusOnTimes';
+        
+        stimOnTime = block.events.stimulusOnTimes';
+        stimOnTime = stimOnTime(1:length(D.response));
+        respTime = block.events.responseTimes';
+        respTime = respTime(1:length(D.response));
+        D.RT = respTime - stimOnTime;
         
         try %Try finding laser data
             coords = block.events.galvoCoordsValues(:,1:2);
@@ -23,11 +28,36 @@ function D = loadData(expRef)
             coords(:,1) = sign(pos).*coords(:,1);
             
             laserType = block.events.laserTypeValues';
-            coords(laserType<2,:) = nan;
+            coords(laserType==0,:) = nan;
             D.laser = coords;
             D.laserType = laserType;
             D.laserPower = block.events.laserPowerValues';
             
+            try
+            D.laserOnset = block.events.laserOnsetDelayValues';
+            catch
+            end
+            
+            %Load galvo log file. There may be some trials missing in the
+            %log, indicating that the galvo machine lagged on those trials.
+            %Therefore those missing trials in the log were actually
+            %non-laser trials. The trial after that trial should also be
+            %removed.
+            expPath = dat.expPath(expRef,'expInfo', 'm');
+            gl = load(fullfile(expPath,[expRef '_galvoLog.mat']));
+            missingTrials = setdiff(1:length(D.response),gl.trialNum);
+            if ~isempty(missingTrials)
+                D.laser(missingTrials,:) = NaN;
+                D.laserType(missingTrials) = 0;
+                
+                goodTrials = (1:length(D.response))';
+                goodTrials(missingTrials+1) = [];
+                
+                D = structfun(@(f)f(goodTrials,:),D,'uni',0);
+                numT = length(D.response);
+            end
+            disp(['loaded laser data ' expRef]);
+
         catch
             warning('no laser data');
         end
@@ -66,12 +96,14 @@ function D = loadData(expRef)
             D.laser = [L.laserCoordByTrial(:,2) L.laserCoordByTrial(:,1)];
             D.laserType = nan(size(D.response));
             D.laserPower = nan(size(D.response));
+            
+            disp(['loaded laser data ' expRef]);
         catch
             warning('no laser data');
         end
     else
-        warning('unidentified type');
-        keyboard;
+        error('unidentified type');
+%         keyboard;
     end
     
     D = structfun(@(f)(f(1:numT,:)),D,'uni',0);
