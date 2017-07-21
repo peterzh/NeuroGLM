@@ -1,6 +1,6 @@
 function D = loadData(expRef)
     block = dat.loadBlock(expRef);
-    D = struct;
+    D = struct('stimulus',[],'response',[],'repeatNum',[],'feedbackType',[],'RT',[]);
     
     if isfield(block,'events') %SIGNALS
         type = 'signals';
@@ -32,9 +32,11 @@ function D = loadData(expRef)
             D.laser = coords;
             D.laserType = laserType;
             D.laserPower = block.events.laserPowerValues';
+            D.laserPower(isnan(D.laser(:,1))) = NaN;
             
             try
-            D.laserOnset = block.events.laserOnsetDelayValues';
+                D.laserOnset = block.events.laserOnsetDelayValues';
+                D.laserOnset(isnan(D.laser(:,1))) = NaN;
             catch
             end
             
@@ -96,13 +98,18 @@ function D = loadData(expRef)
             D.laser = [L.laserCoordByTrial(:,2) L.laserCoordByTrial(:,1)];
             D.laserType = nan(size(D.response));
             D.laserPower = nan(size(D.response));
+            D.laserPower(isnan(D.laser(:,1))) = NaN;
+
             
             disp(['loaded laser data ' expRef]);
         catch
             warning('no laser data');
         end
     else
-        error('unidentified type');
+        warning('unidentified type/no data found');
+        
+        numT=0;
+
 %         keyboard;
     end
     
