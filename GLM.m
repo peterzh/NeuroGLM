@@ -40,27 +40,29 @@ classdef GLM
                 
                 D = loadData(inputData);
                 
-                if any(strcmp(fieldnames(D),'laser'))
-                    warning('Data contains laser trials, use laserGLM instead');
-                end
+%                 if any(strcmp(fieldnames(D),'laser'))
+%                     warning('Data contains laser trials, use laserGLM instead');
+%                 end
 %                 D = struct('stimulus',[],'response',[],'repeatNum',[],'feedbackType',[],'RT',[]);
 %                 
+% 
 %                 try
-%                     block = dat.loadBlock(obj.expRef);
-%                     trials = block.trial;
-%                     
-%                     for t=1:block.numCompletedTrials
-%                         D.stimulus(t,:) = trials(t).condition.visCueContrast';
-%                         D.response(t,1) = trials(t).responseMadeID';
-%                         D.repeatNum(t,1) = trials(t).condition.repeatNum;
-%                         D.feedbackType(t,1) = trials(t).feedbackType;
-%                         D.RT(t,1) = trials(t).responseMadeTime-trials(t).interactiveStartedTime;
-%                         
-% %                         if D.RT(t,1) > 4
-% %                             keyboard;
-% %                         end
-%                     end
+% %                     block = dat.loadBlock(obj.expRef);
+% %                     trials = block.trial;
+% %                     
+% %                     for t=1:block.numCompletedTrials
+% %                         D.stimulus(t,:) = trials(t).condition.visCueContrast';
+% %                         D.response(t,1) = trials(t).responseMadeID';
+% %                         D.repeatNum(t,1) = trials(t).condition.repeatNum;
+% %                         D.feedbackType(t,1) = trials(t).feedbackType;
+% %                         D.RT(t,1) = trials(t).responseMadeTime-trials(t).interactiveStartedTime;
+% %                         
+% % %                         if D.RT(t,1) > 4
+% % %                             keyboard;
+% % %                         end
+% %                     end
 %                 catch
+%                     D = struct('stimulus',[],'response',[],'repeatNum',[],'feedbackType',[],'RT',[]);
 %                     warning('session data empty');
 %                 end
                 

@@ -344,9 +344,15 @@ classdef deltaGLM_Armin
         end
         
         function fitSeparate(obj,behavModel)
-
             
             model = obj.getModel(behavModel,[]);
+            
+            if obj.lapseFlag == 1
+                model.pLabels = [model.pLabels 'lapse'];
+                model.LB = [model.LB, 0];
+                model.UB = [model.UB, 1];
+            end
+                
             numParams = length(model.pLabels);
             figure('color','w');
             
@@ -356,7 +362,7 @@ classdef deltaGLM_Armin
                 hold on;
             end
             
-            obj.lapseFlag = 0;
+            
 
             obj.lambda = 0.001;
             
@@ -384,8 +390,7 @@ classdef deltaGLM_Armin
                     paramsR(dar,:) = obj.util_optim(model.Z,[],cont,resp,model.LB,model.UB);
                 end
                 paramsR(:,model.LB==0 & model.UB==0) = paramsR(:,find(model.LB==0 & model.UB==0) - 1);
-                
-            
+
                 for p = 1:numParams
                     h(p)=subplot(1,numParams,p);
                     h2 = notBoxPlot(paramsL(:,p) ,ones(length(paramsL(:,p)),1)*n);
@@ -405,6 +410,32 @@ classdef deltaGLM_Armin
                     h2.data.Color=[0 1 0];
                     h2.semPtch.EdgeColor=[0 1 0];
                     h2.semPtch.FaceAlpha=0;
+                    
+                    pSig=ranksum(paramsL(:,p),paramsR(:,p));
+                    
+                    if pSig<0.05
+                        nStars = (pSig<0.05) + (pSig<0.01) + (pSig<0.001);
+                        
+                        hold on;
+                        txt=text(n,max([paramsR(:,p); paramsL(:,p)]) + 0.5,repmat('*',nStars,1));
+                        txt.FontSize=10;
+                        txt.HorizontalAlignment='center';
+                        hold off;
+                    end
+                    
+                    switch(obj.names{n}(end))
+                        case 'e' %dopaminE
+                            col = [1 0 1];
+                        case 'h' %arcH
+                            col = [0 1 1];
+                        case 'r' %wateR.
+                            col = [0 0 1];
+                    end
+%                     
+                    hold on;
+                    fx=fill([n-0.5 n+0.5 n+0.5 n-0.5],[-1 -1 1 1]*5,col);
+                    fx.EdgeAlpha=0;
+                    fx.FaceAlpha=0.1;
                 end
                 
             end
