@@ -1469,6 +1469,121 @@ classdef omnibusLaserGLM
             %             xlim([0 1]);
         end
         
+        function plot_history(obj,type,n)
+            d = obj.data{n};
+            d = getrow(d,d.laserType==0); %Only non-laser trials
+            
+            cols = [        0    0.4470    0.7410
+    0.8500    0.3250    0.0980
+    0.4940    0.1840    0.5560
+    0.4660    0.6740    0.1880
+    0.3010    0.7450    0.9330
+    0.6350    0.0780    0.1840];
+
+           
+            
+            choiceLabels = {'Left','Right','NoGo'};
+            
+            switch(type)
+                case 'stim'
+                    e = {};
+                    e{1} = getrow(d,d.prev_stimulus(:,1) > d.prev_stimulus(:,2));
+                    e{2} = getrow(d,d.prev_stimulus(:,1) < d.prev_stimulus(:,2));
+                    e{3} = getrow(d,d.prev_stimulus(:,1) == 0 & d.prev_stimulus(:,2) == 0);
+                    
+                    legendLabel = {'Stimulus CL>CR','Stimulus CR>CL','Stimulus Zero'};
+                case 'choice'
+                    e = {};
+                    e{1} = getrow(d,d.prev_response == 1);
+                    e{2} = getrow(d,d.prev_response == 2);
+                    e{3} = getrow(d,d.prev_response == 3);
+                    
+                    legendLabel = {'Response Left','Response Right','Response NoGo'};
+                case 'reward'
+                    e = {};
+                    e{1} = getrow(d,d.prev_feedback == 1);
+                    e{2} = getrow(d,d.prev_feedback == -1);
+                    
+                    legendLabel = {'Rewarded','Punished'};
+                case 'rewardGo'
+                    e = {};
+                    e{1} = getrow(d,d.prev_response < 3 & d.prev_feedback == 1);
+                    e{2} = getrow(d,d.prev_response < 3 & d.prev_feedback == -1);
+                    
+                    legendLabel = {'Rewarded Go','Punished Go'};
+                case 'rewardLeft'
+                    e = {};
+                    e{1} = getrow(d,d.prev_response == 1 & d.prev_feedback == 1);
+                    e{2} = getrow(d,d.prev_response == 1 & d.prev_feedback == -1);
+                    
+                    legendLabel = {'Rewarded Left','Punished Left'};
+                    
+                case 'rewardRight'
+                    e = {};
+                    e{1} = getrow(d,d.prev_response == 2 & d.prev_feedback == 1);
+                    e{2} = getrow(d,d.prev_response == 2 & d.prev_feedback == -1);
+                    
+                    legendLabel = {'Rewarded Right','Punished Right'};
+            end
+            
+            g = {};
+            for subset = 1:length(e)
+                g{subset} = GLM(e{subset}).setModel('C50-subset').fit;
+            end
+            
+            %Overlay fitted curves
+            cVal = unique(d.stimulus(:));
+            numPedestals = length(cVal) - 1;
+            
+            %Plot non-laser predictions and data
+            figure('color','w','name',obj.names{n});
+            for ped = 1:numPedestals
+                
+                testCont = [linspace( 0.54 - cVal(ped) + 0.1 ,0,100)' zeros(100,1); zeros(100,1) linspace(0,0.54 - cVal(ped) + 0.1,100)'] + cVal(ped);
+                
+                phat = {};
+                for subset = 1:length(e)
+                    phat{subset} = g{subset}.calculatePhat(g{subset}.parameterFits,testCont);
+                end
+                
+                ii=1;
+                for r = [1 3 2]
+                    subplot(numPedestals,3,3*ped -3 + ii); hold on;
+                    
+                    for subset = 1:length(e)
+                        hx=plot(diff(testCont,[],2),phat{subset}(:,r),'linewidth',1.5);
+                        hx.Color = cols(subset,:);
+                    end
+
+                    xlim([-1 1]*(max(cVal)+0.1)); ylim([0 1]);
+                    
+                    ii=ii+1;
+                    
+                    if ped==1
+                        title(choiceLabels{r});
+                    end
+                    
+                    if ped < numPedestals
+                        set(gca,'xtick','','xcolor','w');
+                    end
+                    
+                    if r > 1
+                        set(gca,'ytick','','ycolor','w');
+                    end
+                end
+                
+                
+            end
+            
+            legend(legendLabel);
+            legend boxoff;
+            
+            
+            
+      
+            
+        end
+        
         function plotFit_NonLaser(obj)
             numSubjects = length(obj.names);
             
@@ -2501,16 +2616,16 @@ classdef omnibusLaserGLM
                     warning('error on ezplot of contours');
                 end
                 
-%                 pL = p(:,:,1);
-%                 pR = p(:,:,2);
-%                 pLLas = pLas(:,:,1);
-%                 pRLas = pLas(:,:,2);
-%                 scatter(pR(:),pL(:),50,'o','filled'); hold on;
-%                 quiver(pR(:),pL(:),pRLas(:)-pR(:),pLLas(:)-pL(:),0);
-%                 plot(pR,pL,'k:');
-%                 plot(pR',pL','k:');
-
-
+                %                 pL = p(:,:,1);
+                %                 pR = p(:,:,2);
+                %                 pLLas = pLas(:,:,1);
+                %                 pRLas = pLas(:,:,2);
+                %                 scatter(pR(:),pL(:),50,'o','filled'); hold on;
+                %                 quiver(pR(:),pL(:),pRLas(:)-pR(:),pLLas(:)-pL(:),0);
+                %                 plot(pR,pL,'k:');
+                %                 plot(pR',pL','k:');
+                
+                
                 %                     l=line([ZR(:)'; ZR(:)'],[ZL_ciLOW(:)';ZL_ciHIGH(:)']);
                 %                     set(l,'color',[0 0.4470 0.7410],'linestyle','-');
                 %                     l=line([ZR_ciLOW(:)';ZR_ciHIGH(:)'],[ZL(:)'; ZL(:)']);
@@ -2556,11 +2671,11 @@ classdef omnibusLaserGLM
                 
                 
                 %                 try
-%                 if cell2mat(strfind(varargin,'withField')) == 1
-%                     cSet = {cVal,linspace(0,0.54,30)'};
-%                 else
-                    cSet = {cVal};
-%                 end
+                %                 if cell2mat(strfind(varargin,'withField')) == 1
+                %                     cSet = {cVal,linspace(0,0.54,30)'};
+                %                 else
+                cSet = {cVal};
+                %                 end
                 
                 h2(area)=subplot(2,size(areaList,1),area+size(areaList,1)); hold on;
                 %                     if obj.nestedModel_flag == 0
@@ -2673,9 +2788,169 @@ classdef omnibusLaserGLM
             %             end
             
         end
-         
-         function plotEffectOfTime(obj,n)
+        
+        function plotEffectOfTime(obj,n,type)
+            d = obj.data{n};
+            d = getrow(d, (d.stimulus(:,1)>0 | d.stimulus(:,2)>0) & d.stimulus(:,1)~=d.stimulus(:,2) );
+            
             %Plots the effect of inactivating at different timepoints
+            if length(unique(d.laserPower)) > 2
+                powers = unique(d.laserPower);
+                powers = powers(2:end);
+                
+                fprintf('<strong> Laser powers available, please select one </strong>\n');
+                for i = 1:length(powers)
+                    fprintf('%i) %0.1f mW\n',i,powers(i));
+                end
+                
+                p = input('ID=');
+                
+                if p <= length(powers)
+                    sessions = d.sessionID(d.laserPower==powers(p));
+                    sessions = unique(sessions);
+                    d = getrow(d, any(d.sessionID==sessions',2)); %Only get data from sessions using that power
+                else
+                    error('not valid power option');
+                end
+            end
+            
+            switch(type)
+                case 'relStim'
+                    d.plotDelay = d.laserOnset;
+                    xlab = 'time of laser onset relative to stimulus onset';
+                case 'relMove'
+                    d = getrow(d,d.response<3);
+                    d.plotDelay = d.RT - d.laserOnset;
+                    xlab = 'time of movement onset relative to laser onset';
+            end
+            
+            %Create figs
+            fig = figure('name',obj.names{n},'color','w');
+            ax_delays = subplot(5,1,1); hold on; title(ax_delays,'delays')
+            ax_rtCorr = subplot(5,1,2); hold on; title(ax_rtCorr,'RT on correct go trials');
+            ax_rtIncorr = subplot(5,1,3); hold on; title(ax_rtIncorr,'RT on incorrect go trials');
+            ax_perf = subplot(5,1,4); hold on; title(ax_perf,'Performance');
+            ax_png = subplot(5,1,5); hold on; title(ax_png,'proportion of NoGo choices');
+            xlabel(ax_png,xlab)
+            linkaxes([ax_delays ax_rtCorr ax_rtIncorr ax_perf ax_png],'x');
+            xlim([-0.4 0.4]);
+            
+            %First: discretise laser onset delays. Given that the total
+            %dataset is not uniformly sampled, use clustering.
+            numBins = 30;
+            [bins,edges] = discretize(d.plotDelay,numBins);
+            centroids = edges(1:end-1) + 0.5*(edges(2)-edges(1));
+            for clu = 1:numBins
+                hx = histogram(ax_delays,d.plotDelay(bins==clu),linspace(-0.5,0.5,1000),'Normalization','count');
+                hx.EdgeAlpha=0;
+            end
+            d.plotDelay = centroids(bins)';
+            plot(ax_delays,centroids,0,'r.','Markersize',20)
+            
+            %
+            %             if length(delays) > 20
+            % %                 [bins,edges] = discretize(obj.data{n}.laserOnset,12);
+            % %                 centroids = edges(1:end-1) + 0.5*(edges(2)-edges(1));
+            % %
+            % %                 histogram(obj.data{n}.laserOnset,100);
+            % %
+            % %
+            %                 numClusters = 15;
+            %                 [IDX, centroids] = kmeans(d.plotDelay, numClusters);
+            %                 for clu = 1:numClusters
+            %                     hx = histogram(ax_delays,d.plotDelay(IDX==clu),linspace(-0.5,0.5,1000),'Normalization','count');
+            %                     hx.EdgeAlpha=0;
+            %                 end
+            %                 plot(ax_delays,centroids,0,'r.','Markersize',30)
+            %                 d.plotDelay = centroids(IDX);
+            %             else
+            %                 centroids = delays;
+            %                 histogram(ax_delays,d.plotDelay,100,'Normalization','count');
+            %                 title(ax_delays,'Preset delay (not measured)');
+            %             end
+            %             xlim([min(centroids) max(centroids)] + [-0.05 +0.05]);
+            
+            %Second, calculate non-laser measures of
+            %choices/performance/reaction time. Only looking at trials
+            %where CL>CR or CR>CL
+            %             d = obj.data{n};
+            %             d = getrow(d, (d.stimulus(:,1)>0 | d.stimulus(:,2)>0) & d.stimulus(:,1)~=d.stimulus(:,2) );
+            
+            nl = struct;
+            nl.idx = d.laserType==0;
+            nl.reactiontimeCorr = mean( d.RT(d.feedbackType==1 & nl.idx) ); %avg RT on correct go trials
+            nl.reactiontimeIncorr = mean( d.RT(d.feedbackType==0 & d.response<3 & nl.idx) ); %avg RT on incorrect go trials
+            nl.performance = mean(d.feedbackType(nl.idx)); %Overall performance on nonlaser trials
+            nl.pNoGo = mean(d.response(nl.idx)==3);
+            
+            
+            %Now calculate the value of these at each timepoint of delay
+            
+            %             laserOnsets = unique(d.laserOnset(~isnan(d.laserOnset)));
+            laserLocations = [1 5];
+            locationLabels = {'contra V1 (LV1 for CR>CL)+(RV1 for CL>CR)','contra M2 (LM2 for CR>CL)+(RM2 for CL>CR)'};
+            locationCols = [      0    0.4470    0.7410;
+                0.8500    0.3250    0.0980;
+                0.9290    0.6940    0.1250;
+                0.4940    0.1840    0.5560;
+                0.4660    0.6740    0.1880];
+            jitter = linspace(-0.01,0.01,length(laserLocations))/10;
+            
+            %Also add a field for movement time relative to laser onset
+            
+            
+            for laserPos = 1:length(laserLocations)
+                %Select contrasts where contra>ipsi for a given
+                %inactivation location
+                e = getrow(d, (d.areaIdx == laserLocations(laserPos) & d.stimulus(:,2)>d.stimulus(:,1)) | (d.areaIdx == laserLocations(laserPos)+1 & d.stimulus(:,1)>d.stimulus(:,2)) );
+                
+                las = struct;
+                for onset = 1:length(centroids)
+                    las.idx = e.plotDelay==centroids(onset);
+                    
+                    rt = e.RT(e.feedbackType==1 & las.idx);
+                    las.reactiontimeCorr(onset,1) = mean( rt );
+                    las.reactiontimeCorr_err(onset,1) = std( rt )/sqrt(length(rt));
+                    
+                    rt = e.RT(e.feedbackType==0 & e.response<3 & las.idx);
+                    las.reactiontimeIncorr(onset,1) = mean( rt );
+                    las.reactiontimeIncorr_err(onset,1) = std( rt )/sqrt(length(rt));
+                    
+                    [p,pci]=binofit(sum(e.feedbackType(las.idx)), length(e.feedbackType(las.idx)));
+                    las.performance(onset,1) = p;
+                    las.performance_ci(onset,:) = pci;
+                    
+                    [p,pci]=binofit(sum(e.response(las.idx)==3),length(e.response(las.idx)));
+                    las.pNoGo(onset,1) = p;
+                    las.pNoGo_ci(onset,:) = pci;
+                end
+                
+                %Plot
+                h=[];
+                h(1) = errorbar(ax_rtCorr,centroids + jitter(laserPos),las.reactiontimeCorr,las.reactiontimeCorr_err);
+                h(2) = errorbar(ax_rtIncorr,centroids + jitter(laserPos),las.reactiontimeIncorr,las.reactiontimeIncorr_err);
+                h(3) = errorbar(ax_perf,centroids + jitter(laserPos),las.performance,las.performance-las.performance_ci(:,1),las.performance_ci(:,2)-las.performance);
+                h(4) = errorbar(ax_png,centroids + jitter(laserPos),las.pNoGo,las.pNoGo-las.pNoGo_ci(:,1),las.pNoGo_ci(:,2)-las.pNoGo);
+                set(h,'Color',locationCols(laserPos,:),'Capsize',0,'Marker','.','MarkerSize',20,'LineStyle','-');
+            end
+            legend(ax_png,locationLabels,'Location','north');
+            legend boxoff;
+            
+            %Plot nonLaser values as lines
+            l=[];
+            l(1) = line(ax_rtCorr,get(ax_rtCorr,'XLim'),[1 1]*nl.reactiontimeCorr);
+            l(2) = line(ax_rtIncorr,get(ax_rtIncorr,'XLim'),[1 1]*nl.reactiontimeIncorr);
+            l(3) = line(ax_perf,get(ax_perf,'XLim'),[1 1]*nl.performance);
+            l(4) = line(ax_png,get(ax_png,'XLim'),[1 1]*nl.pNoGo);
+            set(l,'Color',[1 1 1]*0.5,'LineStyle',':');
+            
+            %             ylim(ax_rtCorr,[0 0.5]);
+            %             ylim(ax_rtIncorr,[0 0.5]);
+            
+            
+        end
+        
+        function plotEffectOfTime_scatter(obj,n)
             if length(unique(obj.data{n}.laserPower)) > 2
                 powers = unique(obj.data{n}.laserPower);
                 powers = powers(2:end);
@@ -2694,138 +2969,7 @@ classdef omnibusLaserGLM
                 end
             end
             
-            %Get only data where CL>CR or CR>CL
-            d = obj.data{n};
-            d = getrow(d, (d.stimulus(:,1)>0 | d.stimulus(:,2)>0) & d.stimulus(:,1)~=d.stimulus(:,2) );
             
-            %Create figs
-            fig = figure('name',obj.names{n},'color','w');
-            ax_delays = subplot(4,1,1); hold on; title(ax_delays,'Measured delay: stimulus onset -> laser onset')
-            ax_rt = subplot(4,1,2); hold on; title(ax_rt,'RT on correct trials');
-            ax_perf = subplot(4,1,3); hold on; title(ax_perf,'Performance');
-            ax_png = subplot(4,1,4); hold on; title(ax_png,'proportion of NoGo choices');
-            xlabel(ax_png,'time of laser onset relative to stimulus onset (s)')
-            linkaxes([ax_delays ax_rt ax_perf ax_png],'x');
-            xlim([-0.4 0.4]);
-            
-            %First: discretise laser onset delays. Given that the total
-            %dataset is not uniformly sampled, use clustering.
-            delays = unique(obj.data{n}.laserOnset);
-            
-            if length(delays) > 20
-%                 [bins,edges] = discretize(obj.data{n}.laserOnset,12);
-%                 centroids = edges(1:end-1) + 0.5*(edges(2)-edges(1));
-%                 
-%                 histogram(obj.data{n}.laserOnset,100);
-%                 
-%                 
-                numClusters = 20;
-                [IDX, centroids] = kmeans(obj.data{n}.laserOnset, numClusters);
-                for clu = 1:numClusters
-                    hx = histogram(ax_delays,obj.data{n}.laserOnset(IDX==clu),linspace(-0.5,0.5,1000),'Normalization','count');
-                    hx.EdgeAlpha=0;
-                end
-                plot(ax_delays,centroids,0,'r.','Markersize',30)
-                obj.data{n}.laserOnset = centroids(IDX);
-            else
-                centroids = delays;
-                histogram(ax_delays,obj.data{n}.laserOnset,100,'Normalization','count');
-                title(ax_delays,'Preset delay stimulus onset -> laser onset (not measured)');
-            end
-%             xlim([min(centroids) max(centroids)] + [-0.05 +0.05]);
-
-            %Second, calculate non-laser measures of
-            %choices/performance/reaction time. Only looking at trials
-            %where CL>CR or CR>CL
-            d = obj.data{n};
-            d = getrow(d, (d.stimulus(:,1)>0 | d.stimulus(:,2)>0) & d.stimulus(:,1)~=d.stimulus(:,2) );
-
-            nl = struct;
-            nl.idx = d.laserType==0;
-            nl.reactiontime = median( d.RT(d.feedbackType==1 & nl.idx) ); %Median RT on correct trials
-            nl.performance = mean(d.feedbackType(nl.idx)); %Overall performance on all trials
-            nl.pNoGo = mean(d.response(nl.idx)==3);
-               
-            
-            %Now calculate the value of these at each timepoint of
-            %inactivation
-            laserOnsets = unique(d.laserOnset(~isnan(d.laserOnset)));
-            laserLocations = [1 5];
-            locationLabels = {'contra V1 (LV1 for CR>CL)+(RV1 for CL>CR)','contra M2 (LM2 for CR>CL)+(RM2 for CL>CR)'};
-            locationCols = [      0    0.4470    0.7410;
-                    0.8500    0.3250    0.0980;
-                    0.9290    0.6940    0.1250;
-                    0.4940    0.1840    0.5560;
-                    0.4660    0.6740    0.1880];
-            jitter = linspace(-0.01,0.01,length(laserLocations))/5;
-
-            %Also add a field for movement time relative to laser onset
-            
-                
-            for laserPos = 1:length(laserLocations)
-                %Select contrasts where contra>ipsi for a given
-                %inactivation location
-                e = getrow(d, (d.areaIdx == laserLocations(laserPos) & d.stimulus(:,2)>d.stimulus(:,1)) | (d.areaIdx == laserLocations(laserPos)+1 & d.stimulus(:,1)>d.stimulus(:,2)) );
-                    
-                las = struct;
-                for onset = 1:length(laserOnsets)
-                    las.idx = e.laserOnset==laserOnsets(onset);
-                    
-                    rt = e.RT(e.feedbackType==1 & las.idx);
-                    las.reactiontime(onset,1) = median( rt );
-                    las.reactiontime_err(onset,1) = std( rt )/sqrt(length(rt));
-                    
-                    [p,pci]=binofit(sum(e.feedbackType(las.idx)), length(e.feedbackType(las.idx)));
-                    las.performance(onset,1) = p;
-                    las.performance_ci(onset,:) = pci;
-                    
-                    [p,pci]=binofit(sum(e.response(las.idx)==3),length(e.response(las.idx)));
-                    las.pNoGo(onset,1) = p;
-                    las.pNoGo_ci(onset,:) = pci;   
-                end
-                
-                %Plot
-                h=[];
-                h(1) = errorbar(ax_rt,laserOnsets + jitter(laserPos),las.reactiontime,las.reactiontime_err);
-                h(2) = errorbar(ax_perf,laserOnsets + jitter(laserPos),las.performance,las.performance-las.performance_ci(:,1),las.performance_ci(:,2)-las.performance);
-                h(3) = errorbar(ax_png,laserOnsets + jitter(laserPos),las.pNoGo,las.pNoGo-las.pNoGo_ci(:,1),las.pNoGo_ci(:,2)-las.pNoGo);
-                set(h,'Color',locationCols(laserPos,:),'Capsize',0,'Marker','.','MarkerSize',20,'LineStyle','-');
-            end
-            legend(ax_png,locationLabels,'Location','north');
-            legend boxoff;
-            
-            %Plot nonLaser values as lines
-            l=[];
-            l(1) = line(ax_rt,get(ax_rt,'XLim'),[1 1]*nl.reactiontime);
-            l(2) = line(ax_perf,get(ax_perf,'XLim'),[1 1]*nl.performance);
-            l(3) = line(ax_png,get(ax_png,'XLim'),[1 1]*nl.pNoGo);
-            set(l,'Color',[1 1 1]*0.5,'LineStyle',':');             
-            
-            ylim(ax_rt,[0 0.5]);
-            
-            
-         end
-         
-         function plotEffectOfTime_scatter(obj,n)
-             if length(unique(obj.data{n}.laserPower)) > 2
-                 powers = unique(obj.data{n}.laserPower);
-                 powers = powers(2:end);
-                 
-                 fprintf('<strong> Laser powers available, please select one </strong>\n');
-                 for i = 1:length(powers)
-                     fprintf('%i) %0.1f mW\n',i,powers(i));
-                 end
-                 
-                 p = input('ID=');
-                 
-                 if p <= length(powers)
-                     obj.data{n} = getrow(obj.data{n}, obj.data{n}.laserPower==0 | obj.data{n}.laserPower==powers(p));
-                 else
-                     error('not valid power option');
-                 end
-             end
-             
-             
             d = obj.data{n};
             d.RT(d.response==3) = 0;
             
@@ -2845,117 +2989,23 @@ classdef omnibusLaserGLM
             for laserLoc = 1:size(laserLocations,1)
                 for s = 1:4
                     
-                    subplot(size(laserLocations,1),4,s + 4*(laserLoc-1)); 
+                    subplot(size(laserLocations,1),4,s + 4*(laserLoc-1));
                     hold on;
-                                        
+                    
                     for r=1:3
                         e = getrow(d,d.areaIdx==laserLocations{laserLoc,2} & d.stim==s & d.response==r);
                         h=plot(e.laserOnset,e.RT,'.','MarkerSize',5);
                         h.Color = responseColours{r};
                     end
                     
-                	ezplot('y=x'); xlim([-1 1]*0.4); ylim([0 1]);
+                    ezplot('y=x'); xlim([-1 1]*0.4); ylim([0 1]);
                     title({contrastLabels{s},laserLocations{laserLoc,1}});
-                                        xlabel('laser time'); ylabel('movement time');
-
+                    xlabel('laser time'); ylabel('movement time');
+                    
                 end
             end
-
-         end
-         
-         function plotEffectOfTime_laserRelMov(obj,n)
-            %Plots the effect of inactivating but aligned to the movement
-            %onset times
-            d = obj.data{n};
-            d = getrow(d, (d.stimulus(:,1)>0 | d.stimulus(:,2)>0) & d.stimulus(:,1)~=d.stimulus(:,2) );
-            d = getrow(d, d.response<3);
             
-            fig = figure('name',obj.names{n},'color','w');
-            ax_delays = subplot(4,1,1); hold on; title(ax_delays,'Measured delay: laser onset -> movement onset')
-            ax_rt = subplot(4,1,2); hold on; title(ax_rt,'RT on correct GO trials');
-            ax_perf = subplot(4,1,3); hold on; title(ax_perf,'Performance on GO trials');
-            ax_png = subplot(4,1,4); hold on; title(ax_png,'proportion of NoGo choices');
-            xlabel(ax_png,'time of movement relative to laser time (s)')
-            linkaxes([ax_delays ax_rt ax_perf ax_png],'x');
-            
-            %First: discretise laser onset delays. Given that the total
-            %dataset is not uniformly sampled, use clustering.
-            d.plotDelay = d.RT - d.laserOnset;
-            
-            numClusters = 10;
-            [IDX, centroids] = kmeans(d.plotDelay, numClusters);
-            for clu = 1:numClusters
-                hx = histogram(ax_delays,d.plotDelay(IDX==clu),100,'Normalization','count');
-                hx.EdgeAlpha=0;
-            end
-            d.plotDelay = centroids(IDX);
-            plot(ax_delays,centroids,0,'r.','Markersize',30)
-            xlim([min(centroids) max(centroids)] + [-0.05 +0.05]);
-
-            nl = struct;
-            nl.idx = d.laserType==0;
-            nl.reactiontime = median( d.RT(d.feedbackType==1 & nl.idx) ); %Median RT on correct trials
-            nl.performance = mean(d.feedbackType(nl.idx)); %Overall performance on all trials
-%             nl.pNoGo = mean(d.response(nl.idx)==3);
-               
-            
-            %Now calculate the value of these at each timepoint of
-            %inactivation
-%             laserOnsets = unique(d.laserOnset(~isnan(d.laserOnset)));
-            timepoints = unique(d.plotDelay);
-            laserLocations = [1 5];
-            locationLabels = {'contra V1 (LV1 for CR>CL)+(RV1 for CL>CR)','contra M2 (LM2 for CR>CL)+(RM2 for CL>CR)'};
-            locationCols = [      0    0.4470    0.7410;
-                    0.8500    0.3250    0.0980;
-                    0.9290    0.6940    0.1250;
-                    0.4940    0.1840    0.5560;
-                    0.4660    0.6740    0.1880];
-            jitter = linspace(-0.01,0.01,length(laserLocations))/5;
-
-            %Also add a field for movement time relative to laser onset
-            
-                
-            for laserPos = 1:length(laserLocations)
-                %Select contrasts where contra>ipsi for a given
-                %inactivation location
-                e = getrow(d, (d.areaIdx == laserLocations(laserPos) & d.stimulus(:,2)>d.stimulus(:,1)) | (d.areaIdx == laserLocations(laserPos)+1 & d.stimulus(:,1)>d.stimulus(:,2)) );
-                    
-                las = struct;
-                for t = 1:length(timepoints)
-                    las.idx = e.plotDelay==timepoints(t);
-                    las.reactiontime(t,1) = median( e.RT(e.feedbackType==1 & las.idx) );
-                    las.reactiontime_mad(t,1) = mad( e.RT(e.feedbackType==1 & las.idx) );
-                    
-                    [p,pci]=binofit(sum(e.feedbackType(las.idx)), length(e.feedbackType(las.idx)));
-                    las.performance(t,1) = p;
-                    las.performance_ci(t,:) = pci;
-                    
-%                     [p,pci]=binofit(sum(e.response(las.idx)==3),length(e.response(las.idx)));
-%                     las.pNoGo(t,1) = p;
-%                     las.pNoGo_ci(t,:) = pci;   
-                end
-                
-                %Plot
-                h=[];
-                h(1) = errorbar(ax_rt,timepoints + jitter(laserPos),las.reactiontime,las.reactiontime_mad);
-                h(2) = errorbar(ax_perf,timepoints + jitter(laserPos),las.performance,las.performance-las.performance_ci(:,1),las.performance_ci(:,2)-las.performance);
-%                 h(3) = errorbar(ax_png,timepoints + jitter(laserPos),las.pNoGo,las.pNoGo-las.pNoGo_ci(:,1),las.pNoGo_ci(:,2)-las.pNoGo);
-                set(h,'Color',locationCols(laserPos,:),'Capsize',0,'Marker','.','MarkerSize',20,'LineStyle','-');
-            end
-            legend(ax_rt,locationLabels,'Location','north');
-            legend(ax_rt,'boxoff');
-            
-            %Plot nonLaser values as lines
-            l=[];
-            l(1) = line(ax_rt,get(ax_rt,'XLim'),[1 1]*nl.reactiontime);
-            l(2) = line(ax_perf,get(ax_perf,'XLim'),[1 1]*nl.performance);
-%             l(3) = line(ax_png,get(ax_png,'XLim'),[1 1]*nl.pNoGo);
-            set(l,'Color',[1 1 1]*0.5,'LineStyle',':');             
-            
-%             ylim(ax_rt,[0 0.5]);
-            
-            
-         end
+        end
         
         function plotChoiceEffects(obj,n)
             %Plot model-free delta pL,pR,pNG, and if available compare with model predicted delta pL,pR,pNG
@@ -2967,7 +3017,7 @@ classdef omnibusLaserGLM
                 for i = 1:length(powers)
                     fprintf('%i) %0.1f mW\n',i,powers(i));
                 end
-
+                
                 p = input('ID=');
                 
                 if p <= length(powers)
@@ -3912,7 +3962,7 @@ classdef omnibusLaserGLM
         function eRefs = getExpRefs(~,name,expt)
             eRefs = dat.listExps(name);
             concatenateNew = 0;
-
+            
             try
                 e=load(['\\basket.cortexlab.net\home\omnibus_files\' expt '_' name '_EXPREFS.mat']);
                 
@@ -3943,7 +3993,7 @@ classdef omnibusLaserGLM
                         l = laserGLM(eRefs{b}); %check if any lasermanip problems
                         
                         good = 1;
-
+                        
                         %If no laser trials in the block at all, exclude
                         if max(l.data.laserType)==0
                             good = 0;
@@ -4158,10 +4208,10 @@ classdef omnibusLaserGLM
                                 if max(l.data.laserDuration) ~= 1.5
                                     good = 0;
                                 end
-%                                 
-%                                 if max(l.data.laserPower) ~= 3.25
-%                                     good = 0;
-%                                 end
+                                %
+                                %                                 if max(l.data.laserPower) ~= 3.25
+                                %                                     good = 0;
+                                %                                 end
                                 %                                 if exist();
                                 
                                 %                                 if size(l.inactivationSite,1) > 8
@@ -4206,11 +4256,11 @@ classdef omnibusLaserGLM
                                 if strcmp(l.data,'2017-08-18_1_Nyx')
                                     keyboard
                                 end
-
-%                                 if p.parameters.laserPower ~= 1.36
-%                                     good = 0;
-%                                 end
-   
+                                
+                                %                                 if p.parameters.laserPower ~= 1.36
+                                %                                     good = 0;
+                                %                                 end
+                                
                             otherwise
                                 error('choose something');
                         end
@@ -4224,7 +4274,7 @@ classdef omnibusLaserGLM
                     end
                     
                     eRefs{b,2}=good;
-                end  
+                end
                 
                 if concatenateNew == 1
                     eRefs = [e.eRefs; eRefs];

@@ -9,6 +9,7 @@ analysesFile = fullfile('\\basket.cortexlab.net\homes\peterzh\analyses',[expRef 
 try
     D = load(analysesFile);
     D.response;
+%     error('hi');
 catch
     fprintf('behavioural postproc file not found for %s, reloading and saving\n',expRef);
     %LOAD BLOCK DATA
@@ -21,7 +22,7 @@ catch
         warning(['corrupted block file ' expRef]);
     end
     
-    D = struct('stimulus',[],'response',[],'repeatNum',[],'feedbackType',[],'RT',[]);
+%     D = struct('stimulus',[],'response',[],'repeatNum',[],'feedbackType',[],'RT',[]);
     
     if dataExists
         if isfield(block,'events') %SIGNALS
@@ -65,43 +66,83 @@ catch
             respTime = [trials.responseMadeTime]'; goCueTime = goCueTime(1:length(respTime));
         end
         
+        %Add history terms
+        for tr = 2:length(D.response)
+            D.prev_stimulus(tr,:) = D.stimulus(tr-1,:);
+            D.prev_response(tr,1) = D.response(tr-1);
+            D.prev_feedback(tr,1) = D.feedbackType(tr-1);
+        end
+        
         %MEASURE ACTUAL RESPONSE TIMES using nick's code
         Fs = 1000;
-        params.makePlots = false;
-        [moveOnsets, moveOffsets] = wheel.findWheelMoves3(pos, t, Fs, params);
-        
-        intStartTime = goCueTime;
-        resp = D.response;
-        hasTurn = resp==1|resp==2;
-        
-        moveType = wheel.classifyWheelMoves(t, pos, moveOnsets, moveOffsets, intStartTime(hasTurn), respTime(hasTurn), resp(hasTurn));
-        
-        clear dm; dm.moveOnsets = moveOnsets; dm.moveOffsets = moveOffsets; dm.moveType = moveType;
-        %     plotWheel(t, pos, dm); drawnow; hold on;
+        rawT = t; rawPos = pos; 
+        t = rawT(1):1/Fs:rawT(end);
+        pos = interp1(rawT, rawPos, t);
+%         params.makePlots = false;
+%         [moveOnsets, moveOffsets] = wheel.findWheelMoves3(pos, t, Fs, params);
+%         
+%         intStartTime = goCueTime;
+%         resp = D.response;
+%         hasTurn = resp==1|resp==2;
+%         
+%         moveType = wheel.classifyWheelMoves(t, pos, moveOnsets, moveOffsets, intStartTime(hasTurn), respTime(hasTurn), resp(hasTurn));
+%         
+%         clear dm; dm.moveOnsets = moveOnsets; dm.moveOffsets = moveOffsets; dm.moveType = moveType;
+%             plotWheel(t, pos, dm); drawnow; hold on;
+%         plot(t,pos);
         
         %Go through each response Time and find the nearest onset time
         D.startMoveTime = nan(size(D.response));
         for i = 1:length(D.response)
             if D.response(i)<3
-                idx = find((moveOnsets - respTime(i))<=0,1,'last');
-                D.startMoveTime(i) = moveOnsets(idx);
-                estRT = moveOnsets(idx) - goCueTime(i);
-                if abs(D.RT(i) - estRT)>0.5 || estRT < 0
-                    warning('something is wrong with the reaction time estimate, reverting back to old RT for this trial');
-                    %                 xlim([-1 +1]+D.startMoveTime(i));
-                    %                 plot(respTime(i),0,'r.','markersize',30);
-                    %                 plot(goCueTime(i),0,'g.','markersize',30);
-                    %                 h = input('ACCEPT? [y/n]: ','s');
+                idx = goCueTime(i) < t & t < goCueTime(i)+1;
+                pos1 = pos(idx);
+                t1 = t(idx);
+                
+                %Transform to common scaling
+                pos1 = pos1 - pos1(1);
+                pos1 = pos1/max(abs(pos1));
+                
+                if D.response(i) == 1
+                    idx = find(pos1 > +0.1,1,'first');
+                elseif D.response(i) == 2
+                    idx = find(pos1 < -0.1,1,'first');
+                end
+                
+                if ~isempty(idx)
                     
-                    %                 switch(h)
+                    D.startMoveTime(i) = t1(idx);
+                    
+                    %                 pos1 = abs(pos1);
+                    
+%                     plot(t1,pos1,'k:.'); title(D.response(i)); hold on
+                    
+                    %                 xlim([0 +1]+goCueTime(i));
+                    %
+                    %                 idx = find(moveOnsets < respTime(i),1,'last');
+                    % %                 idx = find((moveOnsets - respTime(i))<=0,1,'last');
+                    %                 D.startMoveTime(i) = moveOnsets(idx);
+                    %                 estRT = moveOnsets(idx) - goCueTime(i);
+                    %                 if abs(D.RT(i) - estRT)>0.5 || estRT < 0
+                    %                     warning('something is wrong with the reaction time estimate, reverting back to old RT for this trial');
+                    %                                     xlim([-1 +1]+D.startMoveTime(i));
+%                     plot(respTime(i),0,'r.','markersize',30);
+%                     plot(goCueTime(i),0,'g.','markersize',30);
+%                     plot(D.startMoveTime(i),0,'ko','markersize',15);
+%                     hold off;
+                    %                     %                 h = input('ACCEPT? [y/n]: ','s');
+                    %
+                    %                     %                 switch(h)
                     %                     case {'Y','y'}
                     %                     case {'N','n'}
-                    estRT = D.RT(i);
+                    estRT = D.startMoveTime(i) - goCueTime(i);
                     %                     otherwise
                     %                         error('Not an option')
+                    %                     %                 end
                     %                 end
+                    D.RT(i) = estRT;
                 end
-                D.RT(i) = estRT;
+%                 D.RT(i) = estRT;
             end
         end
         
@@ -214,7 +255,16 @@ catch
                     b.TTL_onsets = block.outputs.rewardTimes';
                 elseif any(contains(vars,'TTL'))
                     t.TTL = t.Timeline.rawDAQData(:,strcmp(vars,'TTL'));
-                    b.TTL_onsets = block.outputs.TTLTimes';
+                    try
+                        b.TTL_onsets = block.outputs.digitalTTLTimes';
+                        b.TTL_onsets = b.TTL_onsets(1:2:end);
+                    catch
+                        b.TTL_onsets = block.outputs.TTLTimes';
+                    end
+                    b.OnsetDelay = (b.TTL_onsets - b.VisOnTimes);
+                    b.IntendedOnsetDelay = D.laserOnset;
+                    b.IntendedOnsetDelay = b.IntendedOnsetDelay(1:length(b.OnsetDelay));
+                    figure; plot(b.IntendedOnsetDelay,b.OnsetDelay - b.IntendedOnsetDelay,'ro');
                 end
                 t.TTL = t.TTL-min(t.TTL);
                 t.TTL = t.TTL/max(t.TTL);
@@ -235,6 +285,8 @@ catch
                 fig=figure('name',expRef);
                 delay = nan(size(D.response));
                 pd_relStim = nan(length(D.response), 1001);
+                dt = t.timebase(2);
+
                 for tr = 1:length(D.response)
                     %Get idx of trial time period
                     trial_idx = t.trialStartTimes(tr)+0.5 < t.timebase & t.timebase < t.trialStartTimes(tr)+5;
@@ -242,15 +294,17 @@ catch
                     
                     %Get photodiode measure for that time, and normalise it
                     pd = t.photodiode(trial_idx);
-                    pd_noise = [mean(pd(1:2000)) std(pd(1:2000))];
-                    pd = (pd - pd_noise(1))/pd_noise(2);
+                    preStimWindowIdx = 1:(1/dt);
+                    
+                    pd = ( pd - mean(pd(preStimWindowIdx)) ) /std(pd(preStimWindowIdx));
+                    pd = pd/std(pd(preStimWindowIdx));
                     pd = abs(pd);
                     
-                    %                 plot(time,pd/max(pd))
+                    %                 plot(time,pd)
                     
                     %Find time when photodiode changes significantly. That is
                     %the stimulus onset time
-                    ix = find(pd > 20,1,'first');
+                    ix = find(pd > 15,1,'first');
                     t.screenOnTime(tr,1) = time(ix);
                     
                     %Get the TTL measure
@@ -270,29 +324,31 @@ catch
                     delay(tr) = t.laserOnTime(tr) - t.screenOnTime(tr,1);
                     fprintf('%s %d/%d laserDelay %0.2g\n', expRef, tr, length(D.response), delay(tr));
                     
-                    %                                  plot(time,pd/max(pd),time,ttl,t.screenOnTime(tr,1),0,'r.',t.laserOnTime(tr),0,'g.','markersize',30);
+%                     plot(time,pd/max(pd),time,ttl,t.screenOnTime(tr,1),0,'r.',t.laserOnTime(tr),0,'g.','markersize',30);
                     
                     
                     D.laserOnset(tr) = delay(tr); %Overwrite laserOnset with actual delay
                     
                     %Collate pd measures relative to stimulus onset to verify
                     %at the end that all went well
-                    pd_relStim(tr,:) = pd( (ix-500):(ix+500) )';
+%                     pd_relStim(tr,:) = pd( (ix-500):(ix+500) )';
                 end
-                h(1)=subplot(3,1,1);
-                hist(block.events.laserOnsetDelayValues',100); title('Instructed delays');
-                h(2)=subplot(3,1,2);
-                hist(b.TTL_onsets - b.VisOnTimes,100); title('Delays in block file');
-                
+%                 h(1)=subplot(3,1,1);
+%                 hist(block.events.laserOnsetDelayValues',100); title('Instructed delays');
+%                 h(2)=subplot(3,2,3);
+%                 hist(b.TTL_onsets - b.VisOnTimes,100); title('Delays in block file');
+%                 h(3)=subplot(3,2,4);
+%                 plot(D.laserOnset(1:1224),b.OnsetDelay - D.laserOnset(1:1224),'ro')
+%                 keyboard;
 %                 subplot(3,3,1);
 %                 imagesc(pd_relStim);
 %                 caxis([0 20])
 %                 title('Photodiode relative to detected stimulus onset time'); ylabel('Trial');
 %                 set(gca,'xtick',''); xlabel('time');
-                h(3)=subplot(3,1,3);
-                hist(delay,100); title('Measured delays from Timeline');
-                
-                linkaxes(h,'x');
+%                 h(4)=subplot(3,1,3);
+%                 hist(delay,100); title('Measured delays from Timeline');
+%                 
+%                 linkaxes(h,'x');
                 
 %                 subplot(3,3,4);
 %                 hist(t.TTL_onsets - b.TTL_onsets,100); 
@@ -300,7 +356,7 @@ catch
 %                 subplot(3,3,5);
 %                 hist(t.screenOnTime - b.VisOnTimes,100); 
 %                 title('Timeline vis stim onset - Sessions vis stim onset');
-                drawnow;
+%                 drawnow;
                 %             keyboard;
                 %             fig.delete;
             end
