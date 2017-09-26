@@ -39,33 +39,6 @@ classdef GLM
                 obj.expRef = inputData;
                 
                 D = loadData(inputData);
-                
-%                 if any(strcmp(fieldnames(D),'laser'))
-%                     warning('Data contains laser trials, use laserGLM instead');
-%                 end
-%                 D = struct('stimulus',[],'response',[],'repeatNum',[],'feedbackType',[],'RT',[]);
-%                 
-% 
-%                 try
-% %                     block = dat.loadBlock(obj.expRef);
-% %                     trials = block.trial;
-% %                     
-% %                     for t=1:block.numCompletedTrials
-% %                         D.stimulus(t,:) = trials(t).condition.visCueContrast';
-% %                         D.response(t,1) = trials(t).responseMadeID';
-% %                         D.repeatNum(t,1) = trials(t).condition.repeatNum;
-% %                         D.feedbackType(t,1) = trials(t).feedbackType;
-% %                         D.RT(t,1) = trials(t).responseMadeTime-trials(t).interactiveStartedTime;
-% %                         
-% % %                         if D.RT(t,1) > 4
-% % %                             keyboard;
-% % %                         end
-% %                     end
-%                 catch
-%                     D = struct('stimulus',[],'response',[],'repeatNum',[],'feedbackType',[],'RT',[]);
-%                     warning('session data empty');
-%                 end
-                
                 obj.data = D;
             else
                 error('GLM:constructorFail', 'Must pass either an expRef or data struct to GLM constructor');
@@ -80,7 +53,7 @@ classdef GLM
                 end
                 
                 tab = tabulate(obj.data.response);
-                tab = tab(:,3)/100;
+                tab = [tab{:,3}]/100;
                 obj.guess_bpt=sum(tab.*log2(tab));
             else
                 obj.ContrastDimensions = NaN;
@@ -200,13 +173,13 @@ classdef GLM
                     obj.ZL = @(P,in)(P(1) + P(2).*(in(:,1).^P(5))./(in(:,1).^P(5) + P(6)^P(5)) + P(7).*in(:,3) );
                     obj.ZR = @(P,in)(P(3) + P(4).*(in(:,2).^P(5))./(in(:,2).^P(5) + P(6)^P(5)) + P(8).*in(:,3) );
                case 'neur'
-                    obj.parameterLabels = {'neurL','neurR'};
-                    obj.parameterBounds = [-inf -inf;
-                        +inf +inf ];
+                    obj.parameterLabels = {'Bias_L','Bias_R','neurL','neurR'};
+                    obj.parameterBounds = [-inf -inf -inf -inf;
+                        +inf +inf +inf +inf];
                     
                     obj.Zinput = @(D)(D.neur(:,1));
-                    obj.ZL = @(P,in)( P(1).*in(:,1) );
-                    obj.ZR = @(P,in)( P(2).*in(:,1) );
+                    obj.ZL = @(P,in)( P(1) + P(3).*in(:,1) );
+                    obj.ZR = @(P,in)( P(2) + P(4).*in(:,1) );
 
                             
                 case 'C50-subset-biasAsContrast'
@@ -499,7 +472,7 @@ classdef GLM
             end
             
             obj.parameterFits = nan(C.NumTestSets,length(obj.parameterLabels));
-            obj.p_hat = [];
+            obj.p_hat = nan(length(obj.data.response),max(obj.data.response));
             for f=1:C.NumTestSets
                 disp(['Model: ' obj.modelString '. Fold: ' num2str(f) '/' num2str(C.NumTestSets)]);
                 trainIdx = find(C.training(f)==1);
@@ -535,15 +508,16 @@ classdef GLM
 
                 
                 phat = obj.calculatePhat(obj.parameterFits(f,:), testInputs);
+                obj.p_hat(testIdx,:) = phat;
+%                 
+%                 for i = 1:length(testResponse)
+%                     obj.p_hat(testIdx(i),1) = phat(i,testResponse(i));
+%                 end
                 
-                for i = 1:length(testResponse)
-                    obj.p_hat(testIdx(i),1) = phat(i,testResponse(i));
-                end
-                
-                LL(f)=mean(-log2(obj.p_hat(testIdx)));
+%                 LL(f)=mean(-log2(obj.p_hat(testIdx)));
             end
             
-            varargout = {LL};
+%             varargout = {LL};
         end
         
         function h = plotData(obj)
@@ -556,9 +530,9 @@ classdef GLM
                     prop_ci=[];
                     for c = 1:length(uniqueC1D)
                         D = obj.getrow(obj.data,contrast1D == uniqueC1D(c));
-                        p = sum([D.response==1 D.response==2 D.response==3],1)/length(D.response);
+%                         p = sum([D.response=='Left' D.response=='Right' D.response=='NoGo'],1)/length(D.response);
                         
-                        [p,pci]=binofit(sum([D.response==1 D.response==2 D.response==3],1),length(D.response),0.05);
+                        [p,pci]=binofit(sum([D.response=='Left' D.response=='Right' D.response=='NoGo'],1),length(D.response),0.05);
                         
                         prop_ci(:,:,c) = pci;
                         
@@ -573,10 +547,10 @@ classdef GLM
                     
                     err = [prop - squeeze(prop_ci(:,1,:))', squeeze(prop_ci(:,2,:))' - prop];
                     
-                    if max(obj.data.response) == 2 %for 2AFC tasks
-                        r = 2;
-                    else
+                    if any(obj.data.response == 'NoGo') %for 2AUC tasks
                         r = 3;
+                    else
+                        r = 2;
                     end
                     
                     if length(uniqueC1D)<50
@@ -599,7 +573,7 @@ classdef GLM
                         for cr = 1:length(uniqueCR)
                             E = obj.getrow(obj.data,obj.data.stimulus(:,1) == uniqueCL(cl) & obj.data.stimulus(:,2) == uniqueCR(cr));
                             for i=1:3
-                                prop(cl,cr,i) = sum(E.response==i)/length(E.response);
+                                prop(cl,cr,i) = sum(double(E.response)==i)/length(E.response);
                             end
                         end
                     end
@@ -896,7 +870,7 @@ classdef GLM
                 for cr = 1:length(cVals)
                     E = obj.getrow(obj.data,obj.data.stimulus(:,1) == cVals(cl) & obj.data.stimulus(:,2) == cVals(cr));
                     for i=1:3
-                        prop(cl,cr,i) = sum(E.response==i)/length(E.response);
+                        prop(cl,cr,i) = sum(double(E.response)==i)/length(E.response);
                     end
                     pd.propChooseLeft(cl,cr) = prop(cl,cr,1);
                     pd.propChooseRight(cl,cr) = prop(cl,cr,2);
@@ -1311,7 +1285,8 @@ classdef GLM
     methods (Access= {?GLM})        
         function logLik = calculateLogLik(obj,testParams, inputs, responses)
             phat = obj.calculatePhat(testParams, inputs);
-            logLik = -sum(log2( phat(sub2ind(size(phat), [1:length(responses)]', responses)) ));
+            ph = phat(:,1).*(responses=='Left') + phat(:,2).*(responses=='Right') + phat(:,3).*(responses=='NoGo');
+            logLik = -sum(log2(ph));
         end
         function row = getrow(~,D,numrow)
             % Version 1.0 9/18/03

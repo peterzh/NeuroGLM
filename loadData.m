@@ -1,28 +1,45 @@
 function D = loadData(expRef)
-if ~dat.expExists(expRef)
-    error('expRef does not exist');
+
+[subj,date,num] = dat.parseExpRef(expRef);
+
+baseDirs = {'\\zserver.cortexlab.net\Data2\Subjects';
+            '\\zserver.cortexlab.net\Data\expInfo';
+            '\\zserver.cortexlab.net\Data\Subjects'};
+        
+blockFiles = fullfile(baseDirs,subj,datestr(date,'YYYY-mm-DD'),num2str(num),[expRef '_Block.mat']);
+blockFilesExist = cellfun(@(f)exist(f,'file'),blockFiles); blockFilesExist = blockFilesExist==2;
+
+idx = find(blockFilesExist);
+if length(idx) > 1
+    fprintf('More than one block file found, please choose\n');
+    disp([num2cell(idx') blockFiles(idx)]);
+    keyboard;
+%     idx = input('File id: ');
 end
 
-expPath = dat.expPath(expRef,'expInfo', 'm');
+blockFile = blockFiles{idx};
+
+
 analysesFile = fullfile('\\basket.cortexlab.net\homes\peterzh\analyses',[expRef '_analyses.mat']);
 %Try loading behavioural data
 try
     D = load(analysesFile);
     D.response;
-%     error('hi');
+        error('hi');
 catch
     fprintf('behavioural postproc file not found for %s, reloading and saving\n',expRef);
     %LOAD BLOCK DATA
     
     try
-        block = dat.loadBlock(expRef);
+%         block = dat.loadBlock(expRef);
+        load(blockFile);
         if isempty(block); dataExists=0; else; dataExists=1; end
     catch
         dataExists=0;
         warning(['corrupted block file ' expRef]);
     end
     
-%     D = struct('stimulus',[],'response',[],'repeatNum',[],'feedbackType',[],'RT',[]);
+    D = struct('stimulus',[],'response',[],'repeatNum',[],'feedbackType',[],'RT',[],'responseTime',[]);
     
     if dataExists
         if isfield(block,'events') %SIGNALS
@@ -41,6 +58,7 @@ catch
             respTime = block.events.responseTimes';
             respTime = respTime(1:length(D.response));
             D.RT = respTime - goCueTime;
+            D.responseTime = respTime;
             
             %load wheel position
             pos = block.inputs.wheelValues';
@@ -50,12 +68,16 @@ catch
             trials = block.trial;
             numT = block.numCompletedTrials;
             
+%             stimulus = arrayfun(@(tr) tr.condition.visCueContrast', trials, 'uni', 0)';
+%             stimulus = cat(1,stimulus{:});
+
             for t=1:numT
                 D.stimulus(t,:) = trials(t).condition.visCueContrast';
                 D.response(t,1) = trials(t).responseMadeID';
                 D.repeatNum(t,1) = trials(t).condition.repeatNum;
                 D.feedbackType(t,1) = trials(t).feedbackType;
                 D.RT(t,1) = trials(t).responseMadeTime-trials(t).interactiveStartedTime;
+                D.responseTime(t,1) = trials(t).responseMadeTime;
             end
             
             %load wheel position
@@ -66,35 +88,32 @@ catch
             respTime = [trials.responseMadeTime]'; goCueTime = goCueTime(1:length(respTime));
         end
         
-        %Add history terms
-        for tr = 2:length(D.response)
-            D.prev_stimulus(tr,:) = D.stimulus(tr-1,:);
-            D.prev_response(tr,1) = D.response(tr-1);
-            D.prev_feedback(tr,1) = D.feedbackType(tr-1);
-        end
+        %Convert response to categorical
+        D.response = categorical(D.response,1:3,{'Left','Right','NoGo'});
+        
         
         %MEASURE ACTUAL RESPONSE TIMES using nick's code
         Fs = 1000;
-        rawT = t; rawPos = pos; 
+        rawT = t; rawPos = pos;
         t = rawT(1):1/Fs:rawT(end);
         pos = interp1(rawT, rawPos, t);
-%         params.makePlots = false;
-%         [moveOnsets, moveOffsets] = wheel.findWheelMoves3(pos, t, Fs, params);
-%         
-%         intStartTime = goCueTime;
-%         resp = D.response;
-%         hasTurn = resp==1|resp==2;
-%         
-%         moveType = wheel.classifyWheelMoves(t, pos, moveOnsets, moveOffsets, intStartTime(hasTurn), respTime(hasTurn), resp(hasTurn));
-%         
-%         clear dm; dm.moveOnsets = moveOnsets; dm.moveOffsets = moveOffsets; dm.moveType = moveType;
-%             plotWheel(t, pos, dm); drawnow; hold on;
-%         plot(t,pos);
+        %         params.makePlots = false;
+        %         [moveOnsets, moveOffsets] = wheel.findWheelMoves3(pos, t, Fs, params);
+        %
+        %         intStartTime = goCueTime;
+        %         resp = D.response;
+        %         hasTurn = resp==1|resp==2;
+        %
+        %         moveType = wheel.classifyWheelMoves(t, pos, moveOnsets, moveOffsets, intStartTime(hasTurn), respTime(hasTurn), resp(hasTurn));
+        %
+        %         clear dm; dm.moveOnsets = moveOnsets; dm.moveOffsets = moveOffsets; dm.moveType = moveType;
+        %             plotWheel(t, pos, dm); drawnow; hold on;
+        %         plot(t,pos);
         
         %Go through each response Time and find the nearest onset time
         D.startMoveTime = nan(size(D.response));
         for i = 1:length(D.response)
-            if D.response(i)<3
+            if D.response(i) ~= 'NoGo'
                 idx = goCueTime(i) < t & t < goCueTime(i)+1;
                 pos1 = pos(idx);
                 t1 = t(idx);
@@ -103,9 +122,9 @@ catch
                 pos1 = pos1 - pos1(1);
                 pos1 = pos1/max(abs(pos1));
                 
-                if D.response(i) == 1
+                if D.response(i) == 'Left'
                     idx = find(pos1 > +0.1,1,'first');
-                elseif D.response(i) == 2
+                elseif D.response(i) == 'Right'
                     idx = find(pos1 < -0.1,1,'first');
                 end
                 
@@ -115,7 +134,7 @@ catch
                     
                     %                 pos1 = abs(pos1);
                     
-%                     plot(t1,pos1,'k:.'); title(D.response(i)); hold on
+                    %                     plot(t1,pos1,'k:.'); title(D.response(i)); hold on
                     
                     %                 xlim([0 +1]+goCueTime(i));
                     %
@@ -126,10 +145,10 @@ catch
                     %                 if abs(D.RT(i) - estRT)>0.5 || estRT < 0
                     %                     warning('something is wrong with the reaction time estimate, reverting back to old RT for this trial');
                     %                                     xlim([-1 +1]+D.startMoveTime(i));
-%                     plot(respTime(i),0,'r.','markersize',30);
-%                     plot(goCueTime(i),0,'g.','markersize',30);
-%                     plot(D.startMoveTime(i),0,'ko','markersize',15);
-%                     hold off;
+                    %                     plot(respTime(i),0,'r.','markersize',30);
+                    %                     plot(goCueTime(i),0,'g.','markersize',30);
+                    %                     plot(D.startMoveTime(i),0,'ko','markersize',15);
+                    %                     hold off;
                     %                     %                 h = input('ACCEPT? [y/n]: ','s');
                     %
                     %                     %                 switch(h)
@@ -142,15 +161,24 @@ catch
                     %                 end
                     D.RT(i) = estRT;
                 end
-%                 D.RT(i) = estRT;
+                %                 D.RT(i) = estRT;
             end
+        end
+        
+        %Add history terms
+        for tr = 2:length(D.response)
+            D.prev_stimulus(tr,:) = D.stimulus(tr-1,:);
+            D.prev_response(tr,1) = D.response(tr-1);
+            D.prev_feedback(tr,1) = D.feedbackType(tr-1);
         end
         
         %Trim trials
         D = structfun(@(f)(f(1:length(D.response),:)),D,'uni',0);
+        
+        %Save to analyses folder
+        save(analysesFile,'-struct','D');
     end
-    %Save to analyses folder
-    save(analysesFile,'-struct','D');
+    
 end
 
 
@@ -158,19 +186,20 @@ end
 %Try loading laser data
 try
     D = load(analysesFile);
-    D.laser;
-%         error('hi');
+    D.laserCoord;
+%             error('hi');
 catch
     fprintf('laser data not found for %s, reloading and saving\n',expRef);
     %LOAD BLOCK DATA
     if isempty(D.response)
-        D.laser = nan(size(D.stimulus));
+        D.laserCoord = nan(size(D.stimulus));
         D.laserType = zeros(size(D.response));
         D.laserDuration = zeros(size(D.response));
         D.laserPower = zeros(size(D.response));
         D.laserOnset = nan(size(D.response));
     else
-        block = dat.loadBlock(expRef);
+%         block = dat.loadBlock(expRef);
+        load(blockFile);
         
         
         if isfield(block,'events') %SIGNALS
@@ -184,7 +213,7 @@ catch
             laserType = block.events.laserTypeValues';
             %         if min(laserType)>0; warn
             coords(laserType==0,:) = nan;
-            D.laser = coords;
+            D.laserCoord = coords;
             D.laserType = laserType;
             D.laserPower = block.events.laserPowerValues';
             
@@ -198,7 +227,7 @@ catch
                 D.laserPower = arrayfun(@(e) newpower(e==oldpower), D.laserPower);
             end
             
-            laserTrials = ~isnan(D.laser(:,1));
+            laserTrials = ~isnan(D.laserCoord(:,1));
             
             D.laserPower(~laserTrials) = 0;
             
@@ -220,7 +249,7 @@ catch
                 warning('Mismatch in trial count with galvo log');
                 %                 keyboard;
                 %
-                D.laser(missingTrials,:) = NaN;
+                D.laserCoord(missingTrials,:) = NaN;
                 D.laserType(missingTrials) = 0;
                 
                 goodTrials = (1:length(D.response))';
@@ -264,7 +293,7 @@ catch
                     b.OnsetDelay = (b.TTL_onsets - b.VisOnTimes);
                     b.IntendedOnsetDelay = D.laserOnset;
                     b.IntendedOnsetDelay = b.IntendedOnsetDelay(1:length(b.OnsetDelay));
-                    figure; plot(b.IntendedOnsetDelay,b.OnsetDelay - b.IntendedOnsetDelay,'ro');
+                    %                     figure; plot(b.IntendedOnsetDelay,b.OnsetDelay - b.IntendedOnsetDelay,'ro');
                 end
                 t.TTL = t.TTL-min(t.TTL);
                 t.TTL = t.TTL/max(t.TTL);
@@ -282,11 +311,11 @@ catch
                 
                 %Now go through each trial, and identify the time of the laser
                 %and stimulus onset
-                fig=figure('name',expRef);
+                %                 fig=figure('name',expRef);
                 delay = nan(size(D.response));
                 pd_relStim = nan(length(D.response), 1001);
                 dt = t.timebase(2);
-
+                
                 for tr = 1:length(D.response)
                     %Get idx of trial time period
                     trial_idx = t.trialStartTimes(tr)+0.5 < t.timebase & t.timebase < t.trialStartTimes(tr)+5;
@@ -324,39 +353,39 @@ catch
                     delay(tr) = t.laserOnTime(tr) - t.screenOnTime(tr,1);
                     fprintf('%s %d/%d laserDelay %0.2g\n', expRef, tr, length(D.response), delay(tr));
                     
-%                     plot(time,pd/max(pd),time,ttl,t.screenOnTime(tr,1),0,'r.',t.laserOnTime(tr),0,'g.','markersize',30);
+                    %                     plot(time,pd/max(pd),time,ttl,t.screenOnTime(tr,1),0,'r.',t.laserOnTime(tr),0,'g.','markersize',30);
                     
                     
                     D.laserOnset(tr) = delay(tr); %Overwrite laserOnset with actual delay
                     
                     %Collate pd measures relative to stimulus onset to verify
                     %at the end that all went well
-%                     pd_relStim(tr,:) = pd( (ix-500):(ix+500) )';
+                    %                     pd_relStim(tr,:) = pd( (ix-500):(ix+500) )';
                 end
-%                 h(1)=subplot(3,1,1);
-%                 hist(block.events.laserOnsetDelayValues',100); title('Instructed delays');
-%                 h(2)=subplot(3,2,3);
-%                 hist(b.TTL_onsets - b.VisOnTimes,100); title('Delays in block file');
-%                 h(3)=subplot(3,2,4);
-%                 plot(D.laserOnset(1:1224),b.OnsetDelay - D.laserOnset(1:1224),'ro')
-%                 keyboard;
-%                 subplot(3,3,1);
-%                 imagesc(pd_relStim);
-%                 caxis([0 20])
-%                 title('Photodiode relative to detected stimulus onset time'); ylabel('Trial');
-%                 set(gca,'xtick',''); xlabel('time');
-%                 h(4)=subplot(3,1,3);
-%                 hist(delay,100); title('Measured delays from Timeline');
-%                 
-%                 linkaxes(h,'x');
+                %                 h(1)=subplot(3,1,1);
+                %                 hist(block.events.laserOnsetDelayValues',100); title('Instructed delays');
+                %                 h(2)=subplot(3,2,3);
+                %                 hist(b.TTL_onsets - b.VisOnTimes,100); title('Delays in block file');
+                %                 h(3)=subplot(3,2,4);
+                %                 plot(D.laserOnset(1:1224),b.OnsetDelay - D.laserOnset(1:1224),'ro')
+                %                 keyboard;
+                %                 subplot(3,3,1);
+                %                 imagesc(pd_relStim);
+                %                 caxis([0 20])
+                %                 title('Photodiode relative to detected stimulus onset time'); ylabel('Trial');
+                %                 set(gca,'xtick',''); xlabel('time');
+                %                 h(4)=subplot(3,1,3);
+                %                 hist(delay,100); title('Measured delays from Timeline');
+                %
+                %                 linkaxes(h,'x');
                 
-%                 subplot(3,3,4);
-%                 hist(t.TTL_onsets - b.TTL_onsets,100); 
-%                 title('Timeline TTL onset -  ');
-%                 subplot(3,3,5);
-%                 hist(t.screenOnTime - b.VisOnTimes,100); 
-%                 title('Timeline vis stim onset - Sessions vis stim onset');
-%                 drawnow;
+                %                 subplot(3,3,4);
+                %                 hist(t.TTL_onsets - b.TTL_onsets,100);
+                %                 title('Timeline TTL onset -  ');
+                %                 subplot(3,3,5);
+                %                 hist(t.screenOnTime - b.VisOnTimes,100);
+                %                 title('Timeline vis stim onset - Sessions vis stim onset');
+                %                 drawnow;
                 %             keyboard;
                 %             fig.delete;
             end
@@ -389,14 +418,29 @@ catch
                     L.laserCoordByTrial(:,3) = [];
                 end
                 
-                D.laser = [L.laserCoordByTrial(:,2) L.laserCoordByTrial(:,1)];
+                D.laserCoord = [L.laserCoordByTrial(:,2) L.laserCoordByTrial(:,1)];
                 D.laserType = ones(size(D.response))*laserType;
-                D.laserType(isnan(D.laser(:,1))) = 0;
+                D.laserType(isnan(D.laserCoord(:,1))) = 0;
                 D.laserPower = 1.5*ones(size(D.response));
-                D.laserPower(isnan(D.laser(:,1))) = 0;
+                D.laserPower(isnan(D.laserCoord(:,1))) = 0;
+            elseif length(block.trial(1).condition.rewardOnStimulus) == 2 %Some sessions have no laser manip file but still issue laser through rewardOnStimulus vector
+                
+                laser = [];
+                for tr = 1:length(D.response)
+                    laser(tr,1) = block.trial(tr).condition.rewardOnStimulus(2);
+                end
+                laser = laser>0;
+                
+                D.laserCoord = zeros(length(laser),2);
+                D.laserCoord(~laser,:) = nan;
+                D.laserType = ones(size(D.response));
+                D.laserType(isnan(D.laserCoord(:,1))) = 0;
+                D.laserPower = ones(size(D.response));
+                D.laserPower(isnan(D.laserCoord(:,1))) = 0;
+
             else
                 warning('laser data not found');
-                D.laser = nan(size(D.stimulus));
+                D.laserCoord = nan(size(D.stimulus));
                 D.laserType = zeros(size(D.response));
                 D.laserPower = zeros(size(D.response));
             end
@@ -404,9 +448,42 @@ catch
         
         %Trim
         D = structfun(@(f)(f(1:length(D.response),:)),D,'uni',0);
+        
+        %Add region label
+        laserRegion = nan(size(D.response));
+        ML = D.laserCoord(:,1);
+        AP = D.laserCoord(:,2);
+        side = D.laserType;
+        
+        regionLabels = {'LeftVIS','RightVIS','LeftS1','RightS1','LeftM2','RightM2','BilatVIS','BilatS1','BilatM2','Other'};
+%         laserRegion( isnan(ML) & isnan(AP) ) = 1; %Laser off
+        laserRegion( side == 1 & ( AP <= -2 ) & ( ML < -1 ) )           = 1; %Left V1
+        laserRegion( side == 1 & ( AP <= -2 ) & ( ML > 1 ) )            = 2; %Right V1
+        laserRegion( side == 1 & ( AP == 0 ) & ( ML < 0 ) )             = 3; %Left S1
+        laserRegion( side == 1 & ( AP == 0 ) & ( ML > 0 ) )             = 4; %Right S1
+        laserRegion( side == 1 & ( 2 <= AP & AP <= 3 ) & ( ML < 0 ) )   = 5; %Left M2
+        laserRegion( side == 1 & ( 2 <= AP & AP <= 3 ) & ( ML > 0 ) )   = 6; %Right M2
+        
+        laserRegion( side == 2 & ( AP <= -2 ) & ( ML > 1 ) )            = 7; %Bilat V1
+        laserRegion( side == 2 & ( AP == 0 ) & ( ML > 0 ) )             = 8; %Bilat S1
+        laserRegion( side == 2 & ( 2 <= AP & AP <= 3 ) & ( ML > 0 ) )   = 9; %Bilat M2
+        
+        %Mark all other areas as 10
+        laserRegion( ~isnan(AP) & isnan(laserRegion) ) = 10; %Other regions
+        
+        D.laserRegion = categorical(laserRegion,1:10,regionLabels);
+        
+        %Add history terms
+        for tr = 2:length(D.response)
+            D.prev_laser(tr,:) = D.laserCoord(tr-1,:);
+            D.prev_laserType(tr,1) = D.laserType(tr-1);
+            D.prev_laserPower(tr,1) = D.laserPower(tr-1);
+            D.prev_laserRegion(tr,1) = D.laserRegion(tr-1);
+        end
+        
+        %Save to analyses folder
+        save(analysesFile,'-struct','D');
     end
-    %Save to analyses folder
-    save(analysesFile,'-struct','D');
 end
 
 

@@ -42,7 +42,7 @@ switch(name)
         cwe.feedbackStarted(NG_idx) = cwe.goCue(NG_idx) + datasample(GO_delays,numNG);
         
         behav = struct;
-        behav.contrast_cond = [cwl.contrastLeft cwl.contrastRight];
+        behav.stimulus = [cwl.contrastLeft cwl.contrastRight];
         behav.response = cwl.responseMade;
         behav.repeatNum = cwl.repeatNum;
         behav.feedbackType = cwl.feedbackType;
@@ -55,84 +55,55 @@ switch(name)
         
         otherInfo = {dirs{id,2}};
         
-    case 'nick neuropixels'
-        dirs = {'\\zserver.cortexlab.net\Data\Subjects\Cori\2016-12-14','ephys_M2','ephys_V1'; %1 2
-                '\\zserver.cortexlab.net\Data\Subjects\Cori\2016-12-15','ephys_M2','ephys_V1'; %3 4 ...
-                '\\zserver.cortexlab.net\Data\Subjects\Cori\2016-12-16','ephys_AM','ephys_RL'; % 5 6
-                '\\zserver.cortexlab.net\Data\Subjects\Cori\2016-12-17','ephys_LM','ephys_PM';
-                '\\zserver.cortexlab.net\Data\Subjects\Cori\2016-12-18','ephys_AM','ephys_V1';
-                '\\zserver.cortexlab.net\Data\Subjects\Radnitz\2017-01-08','ephys_M2','ephys_V1';
-                '\\zserver.cortexlab.net\Data\Subjects\Radnitz\2017-01-09','ephys_M2','ephys_V1';
-                '\\zserver.cortexlab.net\Data\Subjects\Radnitz\2017-01-10','ephys_AM','ephys_M2';
-                '\\zserver.cortexlab.net\Data\Subjects\Radnitz\2017-01-11','ephys_PM','ephys_RSP';
-                '\\zserver.cortexlab.net\Data\Subjects\Radnitz\2017-01-12','ephys_M1','ephys_S1';
-                '\\zserver.cortexlab.net\Data\Subjects\Radnitz\2017-01-13','ephys_M1','ephys_V1';
-                '\\zserver.cortexlab.net\Data\Subjects\Muller\2017-01-07','ephys_M2','ephys_V1';
-                '\\zserver.cortexlab.net\Data\Subjects\Muller\2017-01-08','ephys_AM','ephys_M2';
-                '\\zserver.cortexlab.net\Data\Subjects\Muller\2017-01-09','ephys_LM','ephys_PM';
-                '\\zserver.cortexlab.net\Data\Subjects\Muller\2017-01-10','ephys_LM','ephys_PM';
-                '\\zserver.cortexlab.net\Data\Subjects\Muller\2017-01-11','ephys_M1','ephys_S1';
-                '\\zserver.cortexlab.net\Data\Subjects\Muller\2017-01-12','ephys_M1','ephys_V1';
-                };
-        
-        id = varargin{1};
-        session = dirs(round(id/2),:);
-        
-        dat = session{1};
-        ephys_shank = session{2+(mod(id,2)==0)};
+    case 'neuropixels'
+        load('\\basket.cortexlab.net\home\decoding_files\neuropixels_sessions.mat'); 
 
+        session = varargin{1};
         
-        act = load([dat '\activeData.mat']);
+        mouseName = neuropixels_sessions{session,1};
+        thisDate = neuropixels_sessions{session,2};
+        ephysTag = neuropixels_sessions{session,3};
+        
+        
+        %ALF folder only (presumably already time-aligned by nick)
+        [sp, cweA, cwtA, moveData, ~] = alf.loadCWAlf(mouseName, thisDate, ephysTag);
+        
         behav = struct;
-        behav.contrast_cond = [act.cweA.contrastLeft act.cweA.contrastRight];
-        behav.response = act.cweA.choice;
-        behav.repeatNum = act.cweA.repNum;
-        behav.feedbackType = act.cweA.feedback;
+        behav.stimulus = [cweA.contrastLeft cweA.contrastRight];
+        behav.response = cweA.choice;
+        behav.repeatNum = cweA.repNum;
+        behav.feedbackType = cweA.feedback;
 
         behavT = struct;
-        behavT.stimOn = act.cwtA.stimOn;
-        behavT.beeps = act.cwtA.beeps;
-        behavT.moveStart = act.cwtA.moveStart;
-        behav = getrow(behav,act.cweA.inclTrials==1);
-        behavT = getrow(behavT,act.cweA.inclTrials==1);
-        behavT.timestamps = {'stimOn','beeps','moveStart'};
-
+        behavT.stimOn = cwtA.stimOn;
+        behavT.beeps = cwtA.beeps;
+        behavT.feedbackTime = cwtA.feedbackTime;
+%         behavT.moveStart = cwtA.moveStart;
+        behav = getrow(behav,cweA.inclTrials==1);
+        behavT = getrow(behavT,cweA.inclTrials==1);
         
-        ksDir = fullfile(dat,ephys_shank,'sorting');
-
-        spikeStruct = loadParamsPy(fullfile(ksDir, 'params.py'));
-        spikeTemplates = readNPY(fullfile(ksDir, 'spike_templates.npy')); % note: zero-indexed
-        
-        ss = readNPY(fullfile(ksDir, 'spike_times.npy'));
-        st = double(ss)/spikeStruct.sample_rate;
-        
-        %APPLY TIME CORRECTION
-        if mod(id,2)==0 %Needs to be aligned
-            ephys_timingbase = session{1+(mod(id,2)==0)};
-            correctionFile = fullfile(dat,'alignments',['correct_' ephys_shank '_to_' ephys_timingbase '.npy']);
-            correction = readNPY(correctionFile);
-            
-            st = applyCorrection(st,correction);
-            
-            warning(['aligning ' ephys_shank '_to_' ephys_timingbase]);
+        %Add early movements
+                %Add movement onsets
+%         
+        for tr = 1:length(behavT.stimOn)
+%             window = behavT.beeps(tr) - behavT.stimOn(tr);
+            idx = find(moveData.moveOnsets > behavT.stimOn(tr),1,'first');
+            if isempty(idx)
+                behavT.firstMove(tr,1) = behavT.feedbackTime(tr);
+            else
+                behavT.firstMove(tr,1) = moveData.moveOnsets(idx);
+            end
         end
-        
-        if exist(fullfile(ksDir, 'spike_clusters.npy'))
-            clu = readNPY(fullfile(ksDir, 'spike_clusters.npy'));
-        else
-            clu = spikeTemplates;
-        end
-        
-        
-        clusterIDs = unique(clu);
+
+        behavT.timestamps = {'stimOn','firstMove','beeps','feedbackTime'};
+
+        clusterIDs = unique(sp.clu);
         spikeTimes = cell(length(clusterIDs),1);
         for c = 1:length(clusterIDs)
-            spikeTimes{c} = st(clu==clusterIDs(c));
+            spikeTimes{c} = sp.st(sp.clu==clusterIDs(c));
         end
-        
-        parts = strsplit(dat, '\');
-        name = parts{5};
-        otherInfo = {[name ' ' ephys_shank(7:end) ' ' num2str(id)]};
+
+        otherInfo = {sp.clusterDepths, sp.borders, mouseName, thisDate, moveData};
         
 
     case 'sylvia sc'
@@ -159,7 +130,7 @@ switch(name)
         cwe=structfun(@(a)(a(inclTrials)),cwe.cwEvents,'uni',0);
         
         behav = struct;
-        behav.contrast_cond = [cwl.contrastLeft cwl.contrastRight];
+        behav.stimulus = [cwl.contrastLeft cwl.contrastRight];
         behav.response = cwl.responseMade;
         behav.repeatNum = cwl.repeatNum;
         behav.feedbackType = cwl.feedbackType;
