@@ -51,7 +51,7 @@ classdef laserGLM < GLM
 %                 catch
 %                 end
 %             end
-            [sites,~,ic] = unique(obj.data.laser,'rows');
+            [sites,~,ic] = unique(obj.data.laserCoord,'rows');
             nanIdx = find(isnan(sites(:,1)),1,'first');
             
             obj.inactivationSite = sites(1:nanIdx-1,:);

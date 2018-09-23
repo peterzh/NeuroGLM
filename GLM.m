@@ -39,6 +39,7 @@ classdef GLM
                 obj.expRef = inputData;
                 
                 D = loadData(inputData);
+                
                 obj.data = D;
             else
                 error('GLM:constructorFail', 'Must pass either an expRef or data struct to GLM constructor');
@@ -53,7 +54,7 @@ classdef GLM
                 end
                 
                 tab = tabulate(obj.data.response);
-                tab = [tab{:,3}]/100;
+                tab = ( tab(:,3) + 0.5)/100; %Add 0.5 choice to each to regularise
                 obj.guess_bpt=sum(tab.*log2(tab));
             else
                 obj.ContrastDimensions = NaN;
@@ -62,23 +63,23 @@ classdef GLM
         end
         
         function obj = setModel(obj,modelString)
-%             Function which contains the model definitions. Each
-%             definition requires a set of parameter Labels, estimation
-%             bounds, and some anonymous functions. The functions ZL and
-%             ZR define the two linear models in 3-class multinomial
-%             regression for 3-choice behaviour. For 2-choice behaviour,
-%             only ZL needs to be defined for logistic regression. The
-%             Zinput function provides input data to ZL and ZR. Often
-%             this will be simply the trial contrast but it can also be
-%             any other feature of interest.
-%             
-%             ZL and ZR always take to inputs P and IN. P is a vector of
-%             parameter values. IN is a matrix of model inputs as derived
-%             from the Zinput function
-%             
-%             Zinput always takes in the data struct and outputs a matrix of
-%             variables to be used in the model
-
+            %             Function which contains the model definitions. Each
+            %             definition requires a set of parameter Labels, estimation
+            %             bounds, and some anonymous functions. The functions ZL and
+            %             ZR define the two linear models in 3-class multinomial
+            %             regression for 3-choice behaviour. For 2-choice behaviour,
+            %             only ZL needs to be defined for logistic regression. The
+            %             Zinput function provides input data to ZL and ZR. Often
+            %             this will be simply the trial contrast but it can also be
+            %             any other feature of interest.
+            %
+            %             ZL and ZR always take to inputs P and IN. P is a vector of
+            %             parameter values. IN is a matrix of model inputs as derived
+            %             from the Zinput function
+            %
+            %             Zinput always takes in the data struct and outputs a matrix of
+            %             variables to be used in the model
+            
             obj.modelString = modelString;
             obj.parameterFits = [];
             obj.parameterStart = [];
@@ -172,16 +173,16 @@ classdef GLM
                     obj.Zinput = @(D)([D.stimulus(:,1) D.stimulus(:,2) D.neur(:,1)]);
                     obj.ZL = @(P,in)(P(1) + P(2).*(in(:,1).^P(5))./(in(:,1).^P(5) + P(6)^P(5)) + P(7).*in(:,3) );
                     obj.ZR = @(P,in)(P(3) + P(4).*(in(:,2).^P(5))./(in(:,2).^P(5) + P(6)^P(5)) + P(8).*in(:,3) );
-               case 'neur'
+                case 'neur'
                     obj.parameterLabels = {'Bias_L','Bias_R','neurL','neurR'};
                     obj.parameterBounds = [-inf -inf -inf -inf;
                         +inf +inf +inf +inf];
                     
-                    obj.Zinput = @(D)(D.neur(:,1));
-                    obj.ZL = @(P,in)( P(1) + P(3).*in(:,1) );
-                    obj.ZR = @(P,in)( P(2) + P(4).*in(:,1) );
-
-                            
+                    obj.Zinput = @(D)([D.offset_ZL D.offset_ZR D.neur]);
+                    obj.ZL = @(P,in)( in(:,1) + P(1) + P(3).*in(:,3) );
+                    obj.ZR = @(P,in)( in(:,2) + P(2) + P(4).*in(:,3) );
+                    
+                    
                 case 'C50-subset-biasAsContrast'
                     obj.parameterLabels = {'Bias_L','ScaleL_L','Bias_R','ScaleR_R','N','C50'};
                     obj.parameterBounds = [-inf -inf -inf -inf 0 0.001;
@@ -222,7 +223,7 @@ classdef GLM
                     
                     obj.Zinput = @(D)([D.stimulus(:,1) D.stimulus(:,2)]);
                     obj.ZL = @(P,in)(P(1) + P(2).*(in(:,1).^P(5))./(in(:,1).^P(5) + P(6)^P(5)));
-                    obj.ZR = @(P,in)(P(3) + P(4).*(in(:,2).^P(7))./(in(:,2).^P(7) + P(8)^P(7)));    
+                    obj.ZR = @(P,in)(P(3) + P(4).*(in(:,2).^P(7))./(in(:,2).^P(7) + P(8)^P(7)));
                 case 'Clogistic-subset'
                     obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','k','c0_L','c0_R'};
                     obj.parameterBounds = [-inf -inf -inf -inf -inf -inf -inf;
@@ -257,30 +258,30 @@ classdef GLM
                     obj.Zinput = @(D)([D.stimulus(:,1) D.stimulus(:,2)]);
                     obj.ZL = @(P,in)(P(2)*P(1) + P(2)*(in(:,1)-in(:,2)) );
                     obj.ZR = [];
-%                 case 'AFC_multimodalDiff'
-%                     obj.parameterLabels = {'OffsetV','OffsetA','ScaleV','ScaleA'};
-%                     obj.parameterBounds = [-inf -inf -inf -inf ;inf inf inf inf];
-%                     obj.Zinput = @(D)([D.stimulus(:,1) D.stimulus(:,2) D.auditory_cond(:,1) D.auditory_cond(:,2)]);
-%                     obj.ZL = @(P,in)(P(1) + P(2)*(in(:,1)-in(:,2)) );
-%                     obj.ZR = [];
+                    %                 case 'AFC_multimodalDiff'
+                    %                     obj.parameterLabels = {'OffsetV','OffsetA','ScaleV','ScaleA'};
+                    %                     obj.parameterBounds = [-inf -inf -inf -inf ;inf inf inf inf];
+                    %                     obj.Zinput = @(D)([D.stimulus(:,1) D.stimulus(:,2) D.auditory_cond(:,1) D.auditory_cond(:,2)]);
+                    %                     obj.ZL = @(P,in)(P(1) + P(2)*(in(:,1)-in(:,2)) );
+                    %                     obj.ZR = [];
                 case 'C^N-subset-hist-response'
                     obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','HistL_L','HistR_L','HistNG_L','HistL_R','HistR_R','HistNG_R','N'};
                     obj.parameterBounds = [-inf(1,10) 0;
-                                          +inf(1,10) inf];
+                        +inf(1,10) inf];
                     obj.Zinput = @(D)([D.stimulus(:,1) D.stimulus(:,2) D.hist(:,1) D.hist(:,2) D.hist(:,3)]);
                     obj.ZL = @(P,in)( P(1) + P(2).*in(:,1).^P(11) + P(5).*in(:,3) + P(6).*in(:,4) + P(7).*in(:,5) );
                     obj.ZR = @(P,in)( P(3) + P(4).*in(:,2).^P(11) + P(8).*in(:,3) + P(9).*in(:,4) + P(10).*in(:,5) );
                 case 'C^N-subset-hist-contrast'
                     obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','HistL_L','HistR_L','HistNG_L','HistL_R','HistR_R','HistNG_R','N'};
                     obj.parameterBounds = [-inf(1,10) 0;
-                                        +inf(1,10) inf];
+                        +inf(1,10) inf];
                     obj.Zinput = @(D)([D.stimulus(:,1) D.stimulus(:,2) D.hist(:,1) D.hist(:,2) D.hist(:,3)]);
                     obj.ZL = @(P,in)( P(1) + P(2).*in(:,1).^P(11) + P(5).*in(:,3) + P(6).*in(:,4) + P(7).*in(:,5) );
                     obj.ZR = @(P,in)( P(3) + P(4).*in(:,2).^P(11) + P(8).*in(:,3) + P(9).*in(:,4) + P(10).*in(:,5) );
                 case 'C^N-subset-hist-success'
                     obj.parameterLabels = {'Offset_L','ScaleL_L','Offset_R','ScaleR_R','Hist_L','Hist_R','N'};
                     obj.parameterBounds = [-inf(1,6) 0;
-                                        +inf(1,6) inf];
+                        +inf(1,6) inf];
                     obj.Zinput = @(D)([D.stimulus(:,1) D.stimulus(:,2) D.hist]);
                     obj.ZL = @(P,in)( P(1) + P(2).*in(:,1).^P(7) + P(5).*in(:,3) );
                     obj.ZR = @(P,in)( P(3) + P(4).*in(:,2).^P(7) + P(6).*in(:,3) );
@@ -293,7 +294,7 @@ classdef GLM
                 case 'C^N-subset-Qlearning'
                     obj.parameterLabels = {'ScaleL_L','ScaleR_R','Q_L','Q_R','N'};
                     obj.parameterBounds = [-inf(1,2) 1 1 0.1;
-                                            inf(1,2) 1 1 1];
+                        inf(1,2) 1 1 1];
                     obj.Zinput = @(D,B)(behav.GLM_QlearningInputs(D,B));
                     obj.ZL = @(P,in)(P(1).*in(:,1).^P(5) + P(3).*in(:,3) ); %+ P(5).*in(:,5));
                     obj.ZR = @(P,in)(P(2).*in(:,2).^P(5) + P(4).*in(:,4) ); %+ P(5).*in(:,5));
@@ -306,7 +307,7 @@ classdef GLM
                     obj.Zinput = @(D)([D.stimulus(:,1) D.stimulus(:,2)]);
                     obj.ZL = @(P,in)( P(1) + P(2).*in(:,1).^P(4) + P(3).*in(:,2).^P(4)  );
                     obj.parameterStart = [0 0 0 0.1];
-                 
+                    
                 case 'C50-subset-2AFC'
                     obj.parameterLabels = {'Offset','ScaleL','ScaleR','N','C50'};
                     obj.parameterBounds = [-inf -inf -inf 0 0.01;
@@ -345,11 +346,11 @@ classdef GLM
                     error('Model does not exist');
                     
             end
-           
+            
             if isempty(obj.parameterStart)
                 obj.parameterStart = zeros(1,length(obj.parameterLabels));
             end
-
+            
         end
         
         function obj = addLapse(obj)
@@ -361,7 +362,7 @@ classdef GLM
             obj.parameterBounds = [obj.parameterBounds, [0;1]];
             obj.parameterStart = [obj.parameterStart 0];
             
-            obj.lapseFlag=obj.ContrastDimensions;            
+            obj.lapseFlag=obj.ContrastDimensions;
         end
         
         function obj = removeRepeats(obj,varargin)
@@ -374,19 +375,19 @@ classdef GLM
             obj.data = obj.getrow(obj.data,obj.data.repeatNum<=threshold);
         end
         
-        function obj = fit(obj)    
+        function obj = fit(obj)
             %Non crossvalidated fitting
             
             if isempty(obj.ZL)
                 error('Please set a model first using method setModel(...)');
             end
-                        
+            
             %Trim first 5 trials
-%             obj.data = obj.getrow(obj.data,6:length(obj.data.response));
+            %             obj.data = obj.getrow(obj.data,6:length(obj.data.response));
             
             %Remove trials with repeats
-%             obj.data = obj.getrow(obj.data,obj.data.repeatNum==1);
-%             options = optimoptions('fmincon','algorithm','interior-point','MaxFunEvals',100000,'MaxIter',10000);
+            obj.data = obj.getrow(obj.data,obj.data.repeatNum==1);
+            %             options = optimoptions('fmincon','algorithm','interior-point','MaxFunEvals',100000,'MaxIter',10000);
             options = optimset('algorithm','interior-point','MaxFunEvals',100000,'MaxIter',10000);
             
             responses = obj.data.response;
@@ -397,20 +398,20 @@ classdef GLM
                 objective = @(b) (obj.calculateLogLik(b, obj.Zinput(obj.data), responses) + obj.regularise(b));
             end
             
-%             if exist('opti','file')==2 %use opti toolbox if loaded
-%                 options = optiset('display','final','solver','NOMAD');
-%                 Opt = opti('fun',objective,'bounds',obj.parameterBounds(1,:),obj.parameterBounds(2,:),'x0',obj.parameterStart(),'options',options);
-%                 [p,~,exitflag,~] = Opt.solve;
-%                 obj.parameterFits = p';
-%                 if exitflag < 0
-%                     obj.parameterFits = nan(1,length(obj.parameterLabels));
-%                 end
-%             else
-                [obj.parameterFits,~,exitflag] = fmincon(objective, obj.parameterStart(), [], [], [], [], obj.parameterBounds(1,:), obj.parameterBounds(2,:), [], options);
-                if ~any(exitflag == [1,2])
-                    obj.parameterFits = nan(1,length(obj.parameterLabels));
-                end
-%             end
+            %             if exist('opti','file')==2 %use opti toolbox if loaded
+            %                 options = optiset('display','final','solver','NOMAD');
+            %                 Opt = opti('fun',objective,'bounds',obj.parameterBounds(1,:),obj.parameterBounds(2,:),'x0',obj.parameterStart(),'options',options);
+            %                 [p,~,exitflag,~] = Opt.solve;
+            %                 obj.parameterFits = p';
+            %                 if exitflag < 0
+            %                     obj.parameterFits = nan(1,length(obj.parameterLabels));
+            %                 end
+            %             else
+            [obj.parameterFits,~,exitflag] = fmincon(objective, obj.parameterStart(), [], [], [], [], obj.parameterBounds(1,:), obj.parameterBounds(2,:), [], options);
+            if ~any(exitflag == [1,2])
+                obj.parameterFits = nan(1,length(obj.parameterLabels));
+            end
+            %             end
             
         end
         
@@ -436,17 +437,17 @@ classdef GLM
                 end
             end
             
-%             keyboard;
+            %             keyboard;
             
-%             %non-cv log likelihood for naive intercept model (no contrast)
-%             obj = obj.setModel('Offset');            
-%             obj=obj.fit;
-%             ll_naive = obj.calculateLogLik(obj.parameterFits,obj.data.stimulus,obj.data.response);
-
+            %             %non-cv log likelihood for naive intercept model (no contrast)
+            %             obj = obj.setModel('Offset');
+            %             obj=obj.fit;
+            %             ll_naive = obj.calculateLogLik(obj.parameterFits,obj.data.stimulus,obj.data.response);
+            
             r2 = 1 + ll_model/obj.guess_bpt;
             disp(['McFadden Pseudo-R^2: ' num2str(r2)]);
             disp(['Proportion correctly classified: ' num2str(mean(classify))]);
-
+            
             
         end
         
@@ -458,12 +459,12 @@ classdef GLM
             end
             
             %Trim first 5 trials
-%             obj.data = obj.getrow(obj.data,6:length(obj.data.response));
+            %             obj.data = obj.getrow(obj.data,6:length(obj.data.response));
             
             %Remove trials with repeats
-%             obj.data = obj.getrow(obj.data,obj.data.repeatNum==1);
+            %             obj.data = obj.getrow(obj.data,obj.data.repeatNum==1);
             
-            options = optimoptions('fmincon','UseParallel',0,'MaxFunEvals',100000,'MaxIter',2000);
+            options = optimoptions('fmincon','UseParallel',0,'MaxFunEvals',100000,'MaxIter',2000,'Display','off');
             
             if isempty(varargin)
                 C = cvpartition(length(obj.data.response),'LeaveOut');
@@ -472,9 +473,9 @@ classdef GLM
             end
             
             obj.parameterFits = nan(C.NumTestSets,length(obj.parameterLabels));
-            obj.p_hat = nan(length(obj.data.response),max(obj.data.response));
+            obj.p_hat = nan(length(obj.data.response),3);
             for f=1:C.NumTestSets
-                disp(['Model: ' obj.modelString '. Fold: ' num2str(f) '/' num2str(C.NumTestSets)]);
+                %                 disp(['Model: ' obj.modelString '. Fold: ' num2str(f) '/' num2str(C.NumTestSets)]);
                 trainIdx = find(C.training(f)==1);
                 testIdx = find(C.test(f)==1);
                 
@@ -491,37 +492,37 @@ classdef GLM
                     objective = @(b) ( obj.calculateLogLik(b, trainInputs, trainResponses) + obj.regularise(b));
                 end
                 
-%                 if exist('opti','file')==2 %use opti toolbox if loaded
-%                     options = optiset('solver','NLOPT');
-%                     Opt = opti('fun',objective,'bounds',obj.parameterBounds(1,:),obj.parameterBounds(2,:),'x0',obj.parameterStart(),'options',options);
-%                     [p,~,exitflag,~] = Opt.solve;
-%                     obj.parameterFits(f,:) = p';
-%                     if exitflag < 0
-%                         obj.parameterFits = nan(1,length(obj.parameterLabels));
-%                     end
-%                 else
-                    [obj.parameterFits(f,:),~,exitflag] = fmincon(objective, obj.parameterStart(), [], [], [], [], obj.parameterBounds(1,:), obj.parameterBounds(2,:), [], options);
-                    if ~any(exitflag == [1,2])
-                        obj.parameterFits(f,:) = nan(1,length(obj.parameterLabels));
-                    end
-%                 end
-
+                %                 if exist('opti','file')==2 %use opti toolbox if loaded
+                %                     options = optiset('solver','NLOPT');
+                %                     Opt = opti('fun',objective,'bounds',obj.parameterBounds(1,:),obj.parameterBounds(2,:),'x0',obj.parameterStart(),'options',options);
+                %                     [p,~,exitflag,~] = Opt.solve;
+                %                     obj.parameterFits(f,:) = p';
+                %                     if exitflag < 0
+                %                         obj.parameterFits = nan(1,length(obj.parameterLabels));
+                %                     end
+                %                 else
+                [obj.parameterFits(f,:),~,exitflag] = fmincon(objective, obj.parameterStart(), [], [], [], [], obj.parameterBounds(1,:), obj.parameterBounds(2,:), [], options);
+                if ~any(exitflag == [1,2])
+                    obj.parameterFits(f,:) = nan(1,length(obj.parameterLabels));
+                end
+                %                 end
+                
                 
                 phat = obj.calculatePhat(obj.parameterFits(f,:), testInputs);
                 obj.p_hat(testIdx,:) = phat;
-%                 
-%                 for i = 1:length(testResponse)
-%                     obj.p_hat(testIdx(i),1) = phat(i,testResponse(i));
-%                 end
+                %
+                %                 for i = 1:length(testResponse)
+                %                     obj.p_hat(testIdx(i),1) = phat(i,testResponse(i));
+                %                 end
                 
-%                 LL(f)=mean(-log2(obj.p_hat(testIdx)));
+                %                 LL(f)=mean(-log2(obj.p_hat(testIdx)));
             end
             
-%             varargout = {LL};
+            %             varargout = {LL};
         end
         
         function h = plotData(obj)
-                        
+            
             switch(obj.ContrastDimensions)
                 case 1
                     contrast1D = obj.data.stimulus(:,2) - obj.data.stimulus(:,1);
@@ -530,9 +531,9 @@ classdef GLM
                     prop_ci=[];
                     for c = 1:length(uniqueC1D)
                         D = obj.getrow(obj.data,contrast1D == uniqueC1D(c));
-%                         p = sum([D.response=='Left' D.response=='Right' D.response=='NoGo'],1)/length(D.response);
+                        p = sum([D.response==1 D.response==2 D.response==3],1)/length(D.response);
                         
-                        [p,pci]=binofit(sum([D.response=='Left' D.response=='Right' D.response=='NoGo'],1),length(D.response),0.05);
+                        [p,pci]=binofit(sum([D.response==1 D.response==2 D.response==3],1),length(D.response),0.05);
                         
                         prop_ci(:,:,c) = pci;
                         
@@ -543,18 +544,18 @@ classdef GLM
                     
                     
                     
-%                     plot(uniqueC1D,prop,'.','MarkerSize',20);
+                    %                     plot(uniqueC1D,prop,'.','MarkerSize',20);
                     
                     err = [prop - squeeze(prop_ci(:,1,:))', squeeze(prop_ci(:,2,:))' - prop];
                     
-                    if any(obj.data.response == 'NoGo') %for 2AUC tasks
-                        r = 3;
-                    else
+                    if max(obj.data.response) == 2 %for 2AFC tasks
                         r = 2;
+                    else
+                        r = 3;
                     end
                     
                     if length(uniqueC1D)<50
-                        errorbar(repmat(uniqueC1D,1,r),prop(:,1:r),err(:,[1:r]),err(:,[4:(3+r)]),'.','MarkerSize',20);
+                        hx=errorbar(repmat(uniqueC1D,1,r),prop(:,1:r),err(:,[1:r]),err(:,[4:(3+r)]),'.','MarkerSize',20);
                     else
                         plot(repmat(uniqueC1D,1,r),prop(:,1:r),'o');
                     end
@@ -573,7 +574,7 @@ classdef GLM
                         for cr = 1:length(uniqueCR)
                             E = obj.getrow(obj.data,obj.data.stimulus(:,1) == uniqueCL(cl) & obj.data.stimulus(:,2) == uniqueCR(cr));
                             for i=1:3
-                                prop(cl,cr,i) = sum(double(E.response)==i)/length(E.response);
+                                prop(cl,cr,i) = sum(E.response==i)/length(E.response);
                             end
                         end
                     end
@@ -581,20 +582,20 @@ classdef GLM
                     titles = {'p( Left | c)','p( Right | c)','p( NoGo | c)'};
                     for i=1:3
                         h(i)=subplot(2,3,i);
-%                         p_plot = prop(:,:,i);
-%                         p_plot = [p_plot; nan(1,length(uniqueCR))];
-%                         p_plot = [p_plot, nan(length(uniqueCL)+1,1)];
-%                         pcolor([uniqueCR; 1],[uniqueCL; 1],p_plot); caxis([0 1]); shading('flat');
-%                         set(gca,'box','off');
-%                         set(gca,'xtick',0:0.2:1,'ytick',0:0.2:1);
+                        %                         p_plot = prop(:,:,i);
+                        %                         p_plot = [p_plot; nan(1,length(uniqueCR))];
+                        %                         p_plot = [p_plot, nan(length(uniqueCL)+1,1)];
+                        %                         pcolor([uniqueCR; 1],[uniqueCL; 1],p_plot); caxis([0 1]); shading('flat');
+                        %                         set(gca,'box','off');
+                        %                         set(gca,'xtick',0:0.2:1,'ytick',0:0.2:1);
                         imagesc(prop(:,:,i)); caxis([0 1]);
                         set(gca,'xtick',1:length(uniqueCR),'ytick',1:length(uniqueCL),'xticklabels',uniqueCR,'yticklabels',uniqueCL);
                         set(gca,'YDir','normal','box','off');
-%                         xlabel('Contrast right');
-%                         ylabel('Contrast left');
+                        %                         xlabel('Contrast right');
+                        %                         ylabel('Contrast left');
                         title(titles{i});
                         axis square;
-%                         set(gca,'XTick','','YTick',0:0.1:0.5);
+                        %                         set(gca,'XTick','','YTick',0:0.1:0.5);
                         if i > 1
                             set(gca,'XTick',[],'ytick',[]);
                         end
@@ -614,7 +615,7 @@ classdef GLM
             if cell2mat(strfind(varargin,'log')) == 1
                 logFlag=1;
                 obj.data.RT = log(obj.data.RT);
-%                 fcn = @(rt)(log(rt));
+                %                 fcn = @(rt)(log(rt));
             else
                 logFlag=0;
             end
@@ -658,11 +659,11 @@ classdef GLM
                         ylabel(['CL=' num2str(cVal(cl))]);
                     end
                     
-%                     if cr == length(cVal)
-%                         set(gca,'ycolor','k');
-%                         xlabel(['CR=' num2str(cVal(cr))]);
-%                     end
-%                     
+                    %                     if cr == length(cVal)
+                    %                         set(gca,'ycolor','k');
+                    %                         xlabel(['CR=' num2str(cVal(cr))]);
+                    %                     end
+                    %
                     i=i+1;
                 end
             end
@@ -703,156 +704,125 @@ classdef GLM
                 xlabel(['RT ' choiceLab{r}]);
                 legend(labels);
             end
-%             for r = 1:2
-%                 subplot(1,2,r);
-%                 hist(obj.data.RT(obj.data.response==r));
-%                 xlim([0 1.5]);
-%                 title(resplabel{r});
-%                 set(gca,'box','off');
-%             end
+            %             for r = 1:2
+            %                 subplot(1,2,r);
+            %                 hist(obj.data.RT(obj.data.response==r));
+            %                 xlim([0 1.5]);
+            %                 title(resplabel{r});
+            %                 set(gca,'box','off');
+            %             end
             
         end
         
         function fig = plotFit(obj)
             if size(obj.parameterFits,1)==1
-                h=obj.plotData();
                 
-                switch (obj.ContrastDimensions)
-                    case 1
-                        hold on;
-                                                
-                        if ~(strcmp(obj.modelString,'fullContrasts') || strcmp(obj.modelString,'fullContrasts-subset'))
-                            maxC = max(max(obj.data.stimulus));
-                            evalC = [linspace(maxC,0,100)', zeros(100,1);
-                                zeros(100,1), linspace(0,maxC,100)'];
-                            evalC1d = evalC(:,2) - evalC(:,1);
-                            
-                            otherInputs = obj.Zinput(obj.data);
-                            otherInputs(:,1:2)=[];
-                            
-                            if isempty(otherInputs)
-                                inputs = evalC;
-                            else
-                                inputs = [evalC, zeros(length(evalC),size(otherInputs,2))];
-                            end
-                            
-                            phat = obj.calculatePhat(obj.parameterFits,inputs);
-                            set(gca, 'ColorOrderIndex', 1);
-                            plot(h, evalC1d,phat);
-                            title(obj.modelString);
-                            hold off;
-                            h=gca;
-                        else
-                            evalC = unique(obj.data.stimulus,'rows');
-                            evalC1d = evalC(:,2) - evalC(:,1);
-                            [~,sortIdx]=sort(evalC1d);
-                            phat = obj.calculatePhat(obj.parameterFits,evalC);
-                            set(gca, 'ColorOrderIndex', 1);
-                            plot(h, evalC1d(sortIdx),phat(sortIdx,:),':');
-                        end
-                        title(obj.modelString);
-                        hold off;
-                        h=gca;
-                        
-                    case 2
-                        h=obj.plotData;
-                        fig=get(h(1),'Parent');
-                        
-                        evalCL = linspace(0,max(obj.data.stimulus(:,1)),100);
-                        evalCR = linspace(0,max(obj.data.stimulus(:,1)),100);
-%                         evalCL = linspace(0,1,100);
-%                         evalCR = linspace(0,1,100);
-                        prop=nan(length(evalCL),length(evalCR),3);
-                        
-                        for cl = 1:length(evalCL)
-                            for cr = 1:length(evalCR)
-                                p = obj.calculatePhat(obj.parameterFits,[evalCL(cl) evalCR(cr)]);
-                                for i=1:3
-                                    prop(cl,cr,i) = p(i);
-                                end
-                            end
-                        end
-                        
-                        figure(fig);
-%                         titles = {'pred P( left | contrast)','pred P( right | contrast)','pred P( nogo | contrast)'};
-                        for i=1:3
-                            subplot(2,3,i+3);
-                            imagesc(evalCR,evalCL,prop(:,:,i)); caxis([0 1]);
-                            set(gca,'YDir','normal','box','off','YTick',0:0.2:1);
-                            
-                            
-                            if i > 1
-                                set(gca,'XTick',[],'ytick',[]);
-                            end
-                            
-                            if i == 1
-                                xlabel('Contrast right');
-                                ylabel('Contrast left');
-                            end
-%                             xlabel('Contrast right');
-%                             ylabel('Contrast left');
-%                             title(titles{i});
-                            axis square;
-                        end
-                        
-                        figure('color','w');
-                        cont = obj.data.stimulus;
-                        resp = obj.data.response;
-                        cVals = unique(cont(:));
-%                         numPedestals = length(cVals)-1;
-                        numPedestals = length(cVals);
-                        cols = [0 0.4470 0.7410;
-                            0.8500 0.3250 0.0980;
-                            0.4940    0.1840    0.5560];
-                        for ped = 1:numPedestals
-                            subplot(numPedestals,1,ped); hold on;
-                            
-                            set(gca,'colororder',cols);
-                            
-                            %Plot actual datapoints
-                            ped_idx = min(cont,[],2)==cVals(ped);
-                            ped_c_diff = diff(cont(ped_idx,:),[],2);
-                            ped_r = resp(ped_idx);
-                            uC = unique(ped_c_diff);
-                            ph=[];
-                            for c = 1:length(uC)
-                                r = ped_r(ped_c_diff==uC(c));
-                                [ph(c,:),pci] = binofit(sum([r==1 r==2 r==3],1),length(r));
-                                for ch=1:3
-                                    l(1)=line([1 1]*uC(c),pci(ch,:));
-                                    l(2)=line([uC(c)-0.03 uC(c)+0.03],[1 1]*pci(ch,1));
-                                    l(3)=line([uC(c)-0.03 uC(c)+0.03],[1 1]*pci(ch,2));
-                                    set(l,'Color',cols(ch,:),'Linewidth',0.5);
-                                    %                             l.Color = cols{ch};
-                                    %                             l.LineWidth=1;
-                                end
-                            end
-                            set(gca,'ColorOrderIndex',1);
-                            
-                            plot(uC,ph,'.','markersize',15);
-                            
-                            %Plot predictions
-                            testCont = [linspace(max(abs(uC))+0.1,0,100)' zeros(100,1); zeros(100,1) linspace(0,max(abs(uC))+0.1,100)'] + cVals(ped);
-                            p_hat = obj.calculatePhat(obj.parameterFits,testCont);
-                            set(gca,'ColorOrderIndex',1);
-                            h=plot(diff(testCont,[],2),p_hat,'linewidth',1);
-                            if ped == 1
-                                legend(h,{'L','R','NG'}); legend boxoff;
-                            end
-                            xlim([-1 1]*(max(cVals)+0.1)); ylim([0 1]);
-                            
-                            
-                            ylabel(['ped: ' num2str(cVals(ped))]);
-                            
-                            
-                            if ped ~= numPedestals
-                                set(gca,'xtick','','xcolor','w');
-                            end
-                            
-                        end
-                        
-                        
+                fig = figure('color','w');
+                ha = tight_subplot(4,4,0.05,[0.05 0.05],[0.05 0.01]);
+                set(ha([1 5 9 13]),'dataaspectratio',[1 1 1],'xlim',[0 1],'ylim',[0 1]);
+                set(ha,'xcolor','none','ycolor','none');
+%                 set(ha([3 4 7 8 11 12 15 16]),'ytick','','ycolor','none');
+%                 set(ha(14:16),'xticklabelmode','auto');
+%                 set(ha([2 6 10 14]),'yticklabelmode','auto');
+                
+                cont = obj.data.stimulus;
+                resp = obj.data.response;
+%                 cVals = unique(cont(:));
+                cVals = unique(min(cont,[],2));
+                
+                if length(cVals)>4
+                    %Take top 4 instead
+                    tab=tabulate(min(cont,[],2));
+                    tab=sortrows(tab,3,'descend');
+                    cVals = tab(1:4,1);
+                    cVals = sort(cVals);
+%                     keyboard;
                 end
+                
+                numPedestals = length(cVals);
+                cols = [0 0.4470 0.7410;
+                    0.8500 0.3250 0.0980;
+                    0.4940    0.1840    0.5560];
+                
+                set(ha,'xlim',[-1 1]*(max(cont(:))+0.1),'ylim',[0 1]);
+               
+                for ped = 1:numPedestals
+
+                    %Add cartoon on the left of the contrast conditions
+                    %plotted
+                    ha_cartoon = ha( 4*(ped-1) + 1);
+                    ped_idx = min(cont,[],2)==cVals(ped);
+                    ped_c = unique(cont(ped_idx,:),'rows');
+                    
+                    plot(ha_cartoon, ped_c(:,2), ped_c(:,1), 'k.','markersize',15);
+                    set(ha_cartoon,'dataaspectratio',[1 1 1],'xlim',[0 max(cont(:))+0.1],'ylim',[0 max(cont(:))+0.1],'box','off');
+                    set(ha_cartoon,'ytick',unique(ped_c(:)),'xtick',unique(ped_c(:)));
+                    
+                    ha_ped = [ ha(4*(ped-1) + 2) ha(4*(ped-1) + 4) ha(4*(ped-1) + 3)];
+                    set(ha_ped(1),'yticklabelmode','auto','ycolor','k');
+                    if ped == numPedestals
+                        set(ha_ped,'xticklabelmode','auto','xcolor','k');
+                    end
+                    
+                    hold(ha_ped(1),'on');
+                    hold(ha_ped(2),'on');
+                    hold(ha_ped(3),'on');
+                    
+                    set(ha_ped,'colororder',cols);
+                    
+                    %Plot actual datapoints
+                    ped_idx = min(cont,[],2)==cVals(ped);
+                    ped_c_diff = diff(cont(ped_idx,:),[],2);
+                    ped_r = resp(ped_idx);
+                    uC = unique(ped_c_diff);
+                    ph=[];
+                    for c = 1:length(uC)
+                        r = ped_r(ped_c_diff==uC(c));
+                        [ph(c,:),pci] = binofit(sum([r==1 r==2 r==3],1),length(r));
+                        for ch=1:3
+                            l(1)=line(ha_ped(ch),[1 1]*uC(c),pci(ch,:));
+                            %                                         l(2)=line(ha(ped),[uC(c)-0.03 uC(c)+0.03],[1 1]*pci(ch,1));
+                            %                                         l(3)=line(ha(ped),[uC(c)-0.03 uC(c)+0.03],[1 1]*pci(ch,2));
+                            set(l,'Color',cols(ch,:),'Linewidth',0.5);
+                            %                             l.Color = cols{ch};
+                            %                             l.LineWidth=1;
+                        end
+                    end
+                    set(ha(ped),'ColorOrderIndex',1);
+                    
+                    for ch=1:3
+                        plot(ha_ped(ch),uC,ph(:,ch),'.','markersize',15,'color',cols(ch,:));
+                    end
+                    
+                    %Plot predictions
+                    testCont = [linspace(max(abs(uC))+0.1,0,100)' zeros(100,1); zeros(100,1) linspace(0,max(abs(uC))+0.1,100)'] + cVals(ped);
+                    p_hat = obj.calculatePhat(obj.parameterFits,testCont);
+                    set(gca,'ColorOrderIndex',1);
+                    for ch=1:3
+                        plot(ha_ped(ch),diff(testCont,[],2),p_hat(:,ch),'linewidth',1,'color',cols(ch,:));
+                    end
+                    
+                    
+                    %                                 if ped == 1
+                    %                                     legend(ha_ped(3),{'L','R','NG'}); legend boxoff;
+                    %                                 end
+                    
+                    
+                    %                                 ylabel(['ped: ' num2str(cVals(ped))]);
+                    
+                    if ped==1
+                        title(ha_ped(1),'pLeft');
+                        title(ha_ped(2),'pRight');
+                        title(ha_ped(3),'pNoGo');
+                    end
+                    
+                    
+                    
+                end
+                
+                set(get(fig,'children'),'fontsize',6);
+                
+%                 keyboard;
             else
                 error('Model not fitted (non-crossvalidated) yet');
             end
@@ -870,7 +840,7 @@ classdef GLM
                 for cr = 1:length(cVals)
                     E = obj.getrow(obj.data,obj.data.stimulus(:,1) == cVals(cl) & obj.data.stimulus(:,2) == cVals(cr));
                     for i=1:3
-                        prop(cl,cr,i) = sum(double(E.response)==i)/length(E.response);
+                        prop(cl,cr,i) = sum(E.response==i)/length(E.response);
                     end
                     pd.propChooseLeft(cl,cr) = prop(cl,cr,1);
                     pd.propChooseRight(cl,cr) = prop(cl,cr,2);
@@ -888,8 +858,8 @@ classdef GLM
             f3 = figure; %set(f3, 'Position', [  -1896         507        1058         405]);
             
             colors = [        0    0.4470    0.7410;
-    0.8500    0.3250    0.0980;
-    0.9290    0.6940    0.1250];
+                0.8500    0.3250    0.0980;
+                0.9290    0.6940    0.1250];
             
             for ped = 1:length(cVals)-1
                 
@@ -897,16 +867,16 @@ classdef GLM
                 
                 for r = 1:3
                     plot(-(cVals(ped:end)-cVals(ped)), prop(ped:end,ped,r), 'o','Color',colors(r,:));
-
+                    
                     hold on;
                     plot((cVals(ped:end)-cVals(ped)), prop(ped,ped:end,r), 'o','Color',colors(r,:));
-
+                    
                     
                     
                     plot(-(cTestVals(cTestVals>=cVals(ped))-cVals(ped)), predictionsSelect{2}(r,selectContrast{1}(1,:)==cVals(ped)&selectContrast{1}(2,:)>=cVals(ped)),'Color',colors(r,:));
-
+                    
                     plot((cTestVals(cTestVals>=cVals(ped))-cVals(ped)), predictionsSelect{1}(r,selectContrast{2}(2,:)==cVals(ped)&selectContrast{2}(1,:)>=cVals(ped)),'Color',colors(r,:));
-
+                    
                 end
                 
                 title(['pedestal = ' num2str(cVals(ped))]);
@@ -914,7 +884,7 @@ classdef GLM
                 ylim([0 1]);
                 xlim([-1 1]);
                 set(gca,'box','off');
-%                 makepretty
+                %                 makepretty
             end
             set(gcf,'color','w');
         end
@@ -944,14 +914,14 @@ classdef GLM
                         prop_ci(c,:,:) = pci;
                         
                         prop(c,:) = p;
-                    end                                                            
+                    end
                     
                     if max(obj.data.response) == 2 %for 2AFC tasks
                         rMax = 2;
                     else
                         rMax = 3;
-                    end                    
-
+                    end
+                    
                     evalCon = unique(obj.data.stimulus,'rows');
                     evalC1d = evalCon(:,2) - evalCon(:,1);
                     [~,sortIdx]=sort(evalC1d);
@@ -963,18 +933,18 @@ classdef GLM
                     for c = 1:length(uniqueC1D)
                         for r = 1:rMax
                             plot(plotParams.ax, phat(c,r), prop(c,r), rSymbols{r}, 'Color', plotParams.Color)
-                            hold on;                            
+                            hold on;
                         end
                         for r = 1:rMax
                             plot(plotParams.ax, phat(c,r)*ones(1,2), squeeze(prop_ci(c,r,:)), 'Color', plotParams.Color)
                         end
                     end
                     plot(plotParams.ax, [0 1], [0 1], 'k--');
-
+                    
                     ylabel('actual probability');
                     xlabel('predicted probability');
                     legend({'left resp', 'right resp', 'nogo'}, 'Location', 'Best');
-
+                    
                     axis square
                     box off
                     
@@ -982,7 +952,7 @@ classdef GLM
                     fprintf(1, 'plotPredVsActual not yet implemented for 2D task\n')
             end
         end
-                    
+        
         function h = plotParams(obj)
             if size(obj.parameterFits,1)==1
                 bar(obj.parameterFits);
@@ -1005,14 +975,14 @@ classdef GLM
                 case 2
                     lapse = testParams(end);
             end
-
+            
             if isempty(obj.ZR) %if a AFC task then no ZR is defined, only pL vs pR
                 zl = obj.ZL(testParams,inputs);
                 pL = lapse + (1-2*lapse)*exp(zl)./(1+exp(zl));
                 pR = 1 - pL;
                 N = length(pL);
                 phat = [pL pR zeros(N,1)];
-            else 
+            else
                 zl = obj.ZL(testParams,inputs);
                 zr = obj.ZR(testParams,inputs);
                 pL = (1-lapse)*exp(zl)./(1+exp(zl)+exp(zr));
@@ -1022,9 +992,9 @@ classdef GLM
                 phat = [pL pR pNG];
             end
             
-%             if any(phat<0)
-%                 keyboard;
-%             end
+            %             if any(phat<0)
+            %                 keyboard;
+            %             end
         end
         
         function obj = addData(obj,type)
@@ -1098,7 +1068,7 @@ classdef GLM
             if isempty(obj.parameterFits)
                 error('Fit model first!');
             end
-                                   
+            
             c = obj.data.stimulus;
             H = obj.hessian(obj.parameterFits,c);
             
@@ -1112,7 +1082,7 @@ classdef GLM
             ax2=subplot(1,2,2);
             imagesc(corrcov(cov)); caxis([-1 1]); title('Correlation'); axis square;
             set(get(gcf,'children'),'XTickLabel',{'B_L','B_R','S_L','S_R'},'xtick',1:4,'yTickLabel',{'B_L','B_R','S_L','S_R'},'ytick',1:4);
-
+            
             cmap = [ones(100,1) linspace(0,1,100)' linspace(0,1,100)';
                 linspace(1,0,100)' linspace(1,0,100)' ones(100,1)];
             colormap(ax2,cmap); colorbar;
@@ -1126,7 +1096,7 @@ classdef GLM
             if isempty(obj.parameterFits)
                 error('Fit first');
             end
-           
+            
             %1) Same parameters but vary the distribution of contrasts
             if obj.ContrastDimensions == 1
                 n = obj.parameterFits(end-1);
@@ -1191,8 +1161,8 @@ classdef GLM
             subplot(3,1,2);
             pGO = 1- 1./(1+2*exp(Biases)); xlim([0 1]);
             plot(pGO,[varS,corrS],'LineWidth',2); xlabel('pGO');
-%             legend({'cv[B_L]','cv[B_R]','cv[S_L]','cv[S_R]'});
-
+            %             legend({'cv[B_L]','cv[B_R]','cv[S_L]','cv[S_R]'});
+            
             this = mean(fitted_p([1 3]));
             this = 1- 1./(1+2*exp(this));
             line([this,this],[-1 1]);
@@ -1213,7 +1183,7 @@ classdef GLM
             subplot(3,1,3);
             plot(Biases,[varS corrS],'LineWidth',2); xlabel(['bL . bR=' num2str(fitted_p(3))]);
             this = fitted_p(1);
-%             this = 1- 1./(1+2*exp(this));
+            %             this = 1- 1./(1+2*exp(this));
             line([this,this],[-1 1]);
         end
         
@@ -1223,7 +1193,7 @@ classdef GLM
             cont = obj.data.stimulus;
             resp = obj.data.response;
             resp_nes = resp; resp_nes(resp_nes==3)=0; resp_nes=resp_nes+1;
-
+            
             B_mnr = mnrfit(cont,resp);
             B_nes = mnrfit(cont,resp_nes,'model','hierarchical');
             
@@ -1238,7 +1208,7 @@ classdef GLM
             %Plot
             figure('color','w');
             labels = {'pL','pR','pNG'};
-%             cVals=log(cVals);
+            %             cVals=log(cVals);
             for r = 1:3
                 subplot(1,3,r);
                 [~,ax]=contour(cVals,cVals,reshape(P_mnr(:,r),size(cl)));
@@ -1247,15 +1217,15 @@ classdef GLM
                 ax.LineWidth=2;
                 ax.LineStyle=':';
                 
-                set(gca,'ydir','normal','box','off'); 
+                set(gca,'ydir','normal','box','off');
                 xlabel('CR'); ylabel('CL'); title(labels{r}); axis square; caxis([0 1]);
-%                 
-% %                 subplot(2,3,r+3);
-%                 imagesc(cVals,cVals,reshape(P_nes(:,r),size(cl)));
-%                 set(gca,'ydir','normal'); 
-%                 xlabel('CR'); ylabel('CL'); title(labels{r});axis square;  caxis([0 1]);
+                %
+                % %                 subplot(2,3,r+3);
+                %                 imagesc(cVals,cVals,reshape(P_nes(:,r),size(cl)));
+                %                 set(gca,'ydir','normal');
+                %                 xlabel('CR'); ylabel('CL'); title(labels{r});axis square;  caxis([0 1]);
             end
-%             keyboard;
+            %             keyboard;
         end
         
         function bootstrapFit(obj)
@@ -1280,13 +1250,12 @@ classdef GLM
         
     end
     
-
     
-    methods (Access= {?GLM})        
+    
+    methods (Access= {?GLM})
         function logLik = calculateLogLik(obj,testParams, inputs, responses)
             phat = obj.calculatePhat(testParams, inputs);
-            ph = phat(:,1).*(responses=='Left') + phat(:,2).*(responses=='Right') + phat(:,3).*(responses=='NoGo');
-            logLik = -sum(log2(ph));
+            logLik = -sum(log2( phat(sub2ind(size(phat), [1:length(responses)]', responses)) ));
         end
         function row = getrow(~,D,numrow)
             % Version 1.0 9/18/03
@@ -1311,7 +1280,7 @@ classdef GLM
         end
         
         function H = hessian(obj,params,contrasts)
-
+            
             %Use untransformed contrasts in ZL and ZR eqns
             zl=obj.ZL(params,contrasts);
             zr=obj.ZR(params,contrasts);

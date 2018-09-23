@@ -39,57 +39,57 @@ classdef deltaGLM_Armin
             obj.data = cell(1,numSubjects);
             
             for n = 1:numSubjects
-                name = files{n}(1:end-21);
+                name = strsplit(files{n},'_');
+                name = name{1};
                 obj.names{n} = [name ' ' types{n}];
                 s = load(fullfile(obj.baseDir,types{n},files{n}));
                 obj.expRefs{n} = cellfun(@(str)str(1:end-10),s.list(:),'uni',0);
                 
                 obj.data{n} = struct;
                 for b = 1:length(obj.expRefs{n})
-                    block = dat.loadBlock(obj.expRefs{n}{b});
-                    trials = block.trial;
-                    d = struct;
                     
-                    for t=1:block.numCompletedTrials
-                        d.stimulus(t,:) = trials(t).condition.visCueContrast';
-                        d.response(t,1) = trials(t).responseMadeID';
-                        d.repeatNum(t,1) = trials(t).condition.repeatNum;
-                        d.reward(t,1) = trials(t).feedbackType==1;
-                        d.session(t,1) = b;
-                        d.RT(t,1) = trials(t).responseMadeTime - trials(t).interactiveStartedTime;
+                    [dat,meta] = loadData(obj.expRefs{n}{b});
+                    block = load(meta.blockFile);
+                    trials = block.block.trial;
+
+                    dat.reward = dat.feedbackType==1;
+                    dat.session = ones(size(dat.response))*b;
+                    
+                    for t=1:block.block.numCompletedTrials
+                        
                         try
-                            d.rewardVolume(t,:) = trials(t).condition.rewardVolume;
+                            dat.rewardVolume(t,:) = trials(t).condition.rewardVolume;
                         catch
-                            d.rewardVolume(t,:) = [nan nan];
+                            dat.rewardVolume(t,:) = [nan nan];
                         end
                     end
                           
                     
                     switch(types{n})
                         case {'Dopamine', 'Arch'}
-                            d.perturb = d.rewardVolume(:,2)>0 & d.reward==1;
-                            DA_side = unique(d.response(d.perturb==1));
+                            dat.perturb = dat.rewardVolume(:,2)>0 & dat.reward==1;
+                            DA_side = unique(dat.response(dat.perturb==1));
                             if isempty(DA_side)
                                 DA_side = 0;
                             elseif length(DA_side) == 2
                                 DA_side = 3;
                             end
-                            d.StimulationSession = ones(size(d.response))*DA_side; %Find trials with DA on the right
+                            dat.StimulationSession = ones(size(dat.response))*DA_side; %Find trials with DA on the right
                             
                         case 'Water'
-                            d.perturb = d.rewardVolume(:,1).*d.reward;
-                            Water_side = unique(d.response(d.perturb==max(d.perturb)));
+                            dat.perturb = dat.rewardVolume(:,1).*dat.reward;
+                            Water_side = unique(dat.response(dat.perturb==max(dat.perturb)));
                             if isempty(Water_side)
                                 Water_side = 0;
                             elseif length(Water_side) == 2
                                 Water_side = 3;
                             end
-                            d.StimulationSession = ones(size(d.response))*Water_side; %Choice with higher reward
+                            dat.StimulationSession = ones(size(dat.response))*Water_side; %Choice with higher reward
                             
                             
                     end
 
-                    obj.data{n} = addstruct(obj.data{n},d);
+                    obj.data{n} = addstruct(obj.data{n},dat);
                                         
                     disp([num2str(b) '/' num2str(length(obj.expRefs{n}))]);
                 end
@@ -448,6 +448,53 @@ classdef deltaGLM_Armin
             
         end
         
+        function fitStan(obj)
+            %Load stan object to fit
+            obj = obj.setPerturbation('L/R');
+            
+            figure('name','Perturbation from Left condition'); axis; hold on;
+            line([-1 1]*10,[0 0]);
+            line([0 0],[-1 1]*10);
+
+            for subj = 1:length(obj.names)
+                name = obj.names{subj};
+                data = obj.data{subj};
+                data = getrow(data, ~isnan(data.perturbation));
+                
+                %Change data to stan-compatible format
+                dataToStan = struct('contrastLeft', data.stimulus(:,1),...
+                    'contrastRight', data.stimulus(:,2),...
+                    'choice', data.response,...
+                    'sessionID', data.session,...
+                    'subjectID', ones(size(data.response))*1,...
+                    'perturbation', int32(data.perturbation) );
+                
+                b = behavModel(dataToStan, 'bias_sens_perturbation');
+                b.getPosterior;
+%                 hx=plot(b.Posterior.bias_perturbation, b.Posterior.sens_perturbation, 'k.');
+                
+                m = mean([b.Posterior.bias_perturbation b.Posterior.sens_perturbation],1);
+                S = cov([b.Posterior.bias_perturbation b.Posterior.sens_perturbation]);
+                G = gmdistribution(m,S);
+                F = @(x,y) pdf(G,[x y]);
+                hx = ezcontour(F);
+                hx.LevelList = 0.05;
+                
+                if contains(name, 'Arch')
+                    col = [0 1 0];
+                elseif contains(name, 'Dopamine')
+                    col = [1 0 0];
+                elseif contains(name, 'Water')
+                    col = [0 0 1];
+                end
+                hx.LineColor=col;
+                drawnow;
+            end
+            xlabel('bias perturbation');
+            ylabel('sens perturbation');
+            title('');
+            set(gca,'xlim',[-1 1]*10,'ylim',[-1 1]*10);
+        end
         
         function plotFit_mega(obj)
             numSubjects = length(obj.names)-1;
